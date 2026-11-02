@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useApp } from '../state/store';
 import { uid } from '../audio/model/defaults';
-import type { ClipState } from '../audio/model/types';
+import type { ClipState, ProjectState } from '../audio/model/types';
 import { Button, IconButton } from './Primitives';
 
 type EditMode = 'move' | 'trim-start' | 'trim-end';
@@ -23,7 +23,7 @@ interface ClipGesture {
 const TRACK_HEADER_WIDTH = 166;
 const MIN_CLIP_SECONDS = 0.05;
 
-function sessionDuration(project: NonNullable<ReturnType<typeof useApp.getState>['project']>, fallback: number): number {
+function sessionDuration(project: ProjectState, fallback: number): number {
   return Math.max(
     16,
     fallback,
@@ -100,7 +100,13 @@ export function Timeline() {
       nextStart = snapTime(gesture.initialStart + delta);
     } else if (gesture.mode === 'trim-end') {
       const end = snapTime(gesture.initialStart + gesture.initialDuration + delta);
-      nextDuration = Math.max(MIN_CLIP_SECONDS, end - gesture.initialStart);
+      const sourceClip = project.tracks
+        .find((track) => track.id === gesture.trackId)
+        ?.clips.find((clip) => clip.id === gesture.clipId);
+      const sourceDuration = sourceClip
+        ? (assets.find((asset) => asset.id === sourceClip.assetId)?.duration ?? Infinity) - gesture.initialOffset
+        : Infinity;
+      nextDuration = Math.max(MIN_CLIP_SECONDS, Math.min(sourceDuration, end - gesture.initialStart));
     } else {
       const start = snapTime(gesture.initialStart + delta);
       const maxStart = gesture.initialStart + gesture.initialDuration - MIN_CLIP_SECONDS;
@@ -199,7 +205,23 @@ export function Timeline() {
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-ink-700 px-3 py-2">
         <div className="flex items-center gap-2">
           <span className="section-label text-ink-300">Arrangement timeline</span>
-          <span className="font-mono text-2xs text-ink-500">{project.tempo} BPM</span>
+          <label className="flex items-center gap-1 font-mono text-2xs text-ink-500">
+            Tempo
+            <input
+              aria-label="Project tempo in beats per minute"
+              type="number"
+              min="30"
+              max="300"
+              step="0.1"
+              value={project.tempo}
+              onChange={(event) => {
+                const nextTempo = Math.max(30, Math.min(300, Number(event.target.value) || 120));
+                useApp.getState().mutate((state) => { state.tempo = nextTempo; });
+              }}
+              className="w-14 rounded border border-ink-700 bg-ink-850 px-1 py-0.5 text-right text-2xs text-ink-100"
+            />
+            BPM
+          </label>
           <span className="font-mono text-2xs text-ink-600">{project.tracks.length} tracks</span>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
@@ -351,12 +373,12 @@ export function Timeline() {
                       <div
                         title="Trim clip start"
                         onPointerDown={(event) => startGesture(event, track.id, clip, 'trim-start')}
-                        className="absolute inset-y-0 left-0 z-10 w-2 cursor-ew-resize bg-white/20 opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100"
+                        className="absolute inset-y-0 left-0 z-10 w-2 cursor-ew-resize bg-white/30 opacity-40 transition-opacity hover:opacity-100 group-hover:opacity-100"
                       />
                       <div
                         title="Trim clip end"
                         onPointerDown={(event) => startGesture(event, track.id, clip, 'trim-end')}
-                        className="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize bg-white/20 opacity-0 transition-opacity hover:opacity-100 group-hover:opacity-100"
+                        className="absolute inset-y-0 right-0 z-10 w-2 cursor-ew-resize bg-white/30 opacity-40 transition-opacity hover:opacity-100 group-hover:opacity-100"
                       />
                       {isDragging && <div className="pointer-events-none absolute inset-0 border border-white/70 bg-white/5" />}
                     </div>
@@ -368,20 +390,7 @@ export function Timeline() {
                 >
                   <span className="absolute top-0 -translate-x-1/2 rounded-sm bg-signal-amber px-1 font-mono text-[8px] text-ink-950">PLAY</span>
                 </div>
-                <div
-                  className="absolute inset-0 z-0 cursor-crosshair"
-                  onDoubleClick={(event) => {
-                    const rect = event.currentTarget.getBoundingClientRect();
-                    const start = snapTime((event.clientX - rect.left) / pixelsPerSecond);
-                    useApp.getState().mutate((state) => {
-                      const target = state.tracks.find((item) => item.id === track.id);
-                      if (!target) return;
-                      const asset = state.tracks.flatMap((item) => item.clips).find((item) => item.assetId);
-                      if (asset) target.clips.push({ ...asset, id: uid('clip'), start });
-                    });
-                    useApp.getState().setToast('A copy of an existing clip was placed on this track.');
-                  }}
-                />
+
               </div>
             </div>
           ))}
