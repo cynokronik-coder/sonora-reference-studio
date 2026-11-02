@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../state/store';
 import type { ExportSettings } from '../state/store';
-import { Badge, Button, EmptyState, InfoRow, Panel, Select, Toggle } from '../ui/Primitives';
+import { Badge, Button, EmptyState, HelpTip, InfoRow, Panel, Select, Toggle } from '../ui/Primitives';
 import { formatBytes } from '../audio/dsp/util';
 import * as db from '../lib/db';
 import { verifyEncodedBlob } from '../state/store';
