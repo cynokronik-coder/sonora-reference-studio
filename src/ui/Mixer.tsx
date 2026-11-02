@@ -3,7 +3,7 @@ import type { BusState, TrackState } from '../audio/model/types';
 import { useApp } from '../state/store';
 import { assistantSuggestions } from '../state/store';
 import { clamp, formatTime, gainToDb } from '../audio/dsp/util';
-import { Badge, Button, IconButton, ParamSlider, Select } from './Primitives';
+import { Badge, Button, HelpTip, IconButton, ParamSlider, Select } from './Primitives';
 import { LevelMeter, useMeters } from './viz';
 
 export function TransportBar() {
@@ -83,6 +83,7 @@ export function TransportBar() {
 
       <div className="flex items-center gap-2">
         <span className="text-2xs text-ink-500">monitor</span>
+        <HelpTip title="Monitor level">This changes only the listening volume in your browser. It does not change track gain, the mix or the exported file.</HelpTip>
         <input
           type="range"
           min={-30}
