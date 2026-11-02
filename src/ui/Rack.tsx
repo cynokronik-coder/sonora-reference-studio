@@ -4,7 +4,7 @@ import { PROCESSOR_DEFINITIONS, getDefinition, formatParam } from '../audio/dsp/
 import type { ParamSpec, ProcessorCategory } from '../audio/dsp/types';
 import { useApp } from '../state/store';
 import type { ChainScope } from '../audio/model/project';
-import { Badge, Button, IconButton, Modal, ParamSlider, Select, Toggle } from './Primitives';
+import { Badge, Button, HelpTip, IconButton, Modal, ParamSlider, Select, Toggle } from './Primitives';
 import { EQCurve, GainReductionMeter } from './viz';
 import { clamp } from '../audio/dsp/util';
 
@@ -55,7 +55,7 @@ export function Rack({
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between gap-2 border-b border-ink-700 px-3 py-2">
         <div>
-          <div className="section-label">Processing chain</div>
+          <div className="flex items-center gap-2"><div className="section-label">Processing chain</div><HelpTip title="What is a processing chain?">Audio flows through processors in order. Each processor changes the signal before it reaches the next one. Drag processors to reorder them, bypass one to compare, or select it to edit its settings.</HelpTip></div>
           <div className="mt-0.5 text-2xs text-ink-500">
             {processors.filter((p) => p.enabled).length} active · {processors.length} total
           </div>
@@ -135,7 +135,7 @@ export function Rack({
               {isSelected && (
                 <div className="border-t border-ink-700 bg-ink-900/60 p-2.5">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                    <p className="max-w-[70%] text-2xs leading-relaxed text-ink-400">{def.description}</p>
+                    <div className="flex min-w-0 items-start gap-2"><p className="max-w-[70%] text-2xs leading-relaxed text-ink-400">{def.description}</p><HelpTip title={def.name}>{def.description} Start with small adjustments, bypass the processor to compare, and keep the change only if it improves the result.</HelpTip></div>
                     <div className="flex gap-1">
                       <IconButton title="Duplicate" onClick={() => useApp.getState().duplicateProcessor(scope, trackId, node.id)}>
                         dup
