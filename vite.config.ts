@@ -9,6 +9,12 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     allowedHosts: ['.style.dev'],
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: false,
+      },
+    },
   },
   preview: { host: '0.0.0.0', port: 3000 },
   build: {
