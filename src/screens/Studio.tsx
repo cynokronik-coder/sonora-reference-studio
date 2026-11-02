@@ -184,7 +184,10 @@ export default function Studio() {
 
         <main className="flex min-w-0 flex-1 flex-col">
           <div className="min-h-[330px] shrink-0 border-b border-ink-700">
-            <Timeline />
+            <Timeline onSelectTrack={(trackId) => {
+              selectTrack(trackId);
+              setFocus({ scope: 'track', id: trackId });
+            }} />
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">
