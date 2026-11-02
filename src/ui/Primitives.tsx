@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { clamp } from '../audio/dsp/util';
 
 export function Panel({
@@ -466,7 +466,7 @@ export function HelpTip({
   label?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const id = useRef(`help-${Math.random().toString(36).slice(2, 9)}`).current;
+  const id = useId();
   return (
     <span className="relative inline-flex align-middle">
       <button
