@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../state/store';
-import { AUDIO_ACCEPT, Badge, Button, EmptyState, InfoRow, Panel, ParamSlider, Select, Toggle, useFilePicker } from '../ui/Primitives';
+import { AUDIO_ACCEPT, Badge, Button, EmptyState, HelpTip, InfoRow, Panel, ParamSlider, Select, Toggle, useFilePicker } from '../ui/Primitives';
 import { BandChart, BandBars, Waveform } from '../ui/viz';
 import { MATCH_CATEGORIES, type CategorySource } from '../audio/analysis/match';
 import type { MatchSettings } from '../audio/model/types';
@@ -77,7 +77,13 @@ export default function ReferenceMatch() {
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="section-label">Reference Match Studio</p>
-          <h1 className="mt-1 text-xl text-ink-100">Match measurable characteristics, not waveforms.</h1>
+          <div className="mt-1 flex items-center gap-2">
+            <h1 className="text-xl font-semibold tracking-tight text-ink-100">Reference Match Studio</h1>
+            <HelpTip title="What is reference matching?" steps={['Upload the song you want to improve.', 'Add a professionally released song as a sonic reference.', 'Choose which sound qualities matter to you.', 'Generate a processing chain, listen and adjust it.']}>
+              The engine measures frequency balance, loudness, dynamics and stereo behaviour. It creates editable processing suggestions; it does not copy the audio or guarantee an identical sound.
+            </HelpTip>
+          </div>
+          <p className="mt-1 text-xs text-ink-400">Move your mix toward a sound you love, while keeping every creative decision in your hands.</p>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-400">
             Every suggestion is derived from measured band energy, loudness, dynamics and stereo behaviour. Nothing is
             copied from the reference audio itself, and every generated processor remains editable.
@@ -206,7 +212,7 @@ export default function ReferenceMatch() {
       </div>
 
       {comparison.length > 0 && (
-        <Panel title="Measured differences" subtitle="Reference minus target. Positive means the reference is higher.">
+        <Panel title="Measured differences" subtitle="Reference minus target. Positive means the reference is higher." right={<HelpTip title="How to read these measurements">The values are measured from your uploaded audio. A positive difference means the reference has a higher measured value than your target. A difference is not automatically a problem: use your ears and the arrangement as context.</HelpTip>}>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {comparison.map((row) => (
               <div key={row.label} className="rounded border border-ink-700 bg-ink-850/50 p-2">
@@ -231,7 +237,7 @@ export default function ReferenceMatch() {
           <div className="space-y-3">
             <div className="rounded border border-accent/20 bg-accent/5 p-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-xs text-ink-100">Global intensity</span>
+                <span className="flex items-center gap-2 text-xs text-ink-100">Global intensity <HelpTip title="Match intensity">This scales the strength of the suggested corrections. Start around 25–50%, listen, then increase only if the changes genuinely improve your mix.</HelpTip></span>
                 <span className="font-mono text-xs text-accent">{project.match.intensity}%</span>
               </div>
               <input
@@ -321,7 +327,7 @@ export default function ReferenceMatch() {
           </div>
         </Panel>
 
-        <Panel title="Tonal comparison" subtitle="Relative band levels. Loudness-independent, so quiet and loud masters compare fairly.">
+        <Panel title="Tonal comparison" subtitle="Relative band levels. Loudness-independent, so quiet and loud masters compare fairly." right={<HelpTip title="What is tonal balance?">This chart shows how energy is distributed across frequency bands. More bass or treble is not automatically better. Compare broad trends, then listen for muddiness, harshness, missing body or excessive brightness.</HelpTip>}>
           {preview ? (
             <>
               <BandChart bands={preview.before} compare={referenceReport?.spectrum.bands.map((b) => b.relativeDb)} label="Target" compareLabel="Reference" height={170} />
@@ -381,6 +387,7 @@ export default function ReferenceMatch() {
                     <span className="text-xs text-ink-100">{proposal.processorName}</span>
                     <Badge tone="neutral">{proposal.category}</Badge>
                     <span className="font-mono text-2xs text-ink-500">confidence {Math.round(proposal.confidence * 100)}%</span>
+                    <HelpTip title="About confidence">Confidence estimates how strongly the measured data supports this suggestion. It is a guidance signal, not a guarantee of sound quality.</HelpTip>
                   </div>
                   <p className="mt-1 text-2xs leading-relaxed text-ink-300">{proposal.reason}</p>
                   <p className="mt-1 text-2xs leading-relaxed text-ink-500">Expected: {proposal.expected}</p>
