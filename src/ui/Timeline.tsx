@@ -3,6 +3,7 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useApp } from '../state/store';
 import { uid } from '../audio/model/defaults';
 import type { ClipState, ProjectState } from '../audio/model/types';
+import { moveClipTo, snapTimelineTime, trimClipEnd, trimClipStart } from '../audio/model/timeline';
 import { Button, IconButton } from './Primitives';
 
 type EditMode = 'move' | 'trim-start' | 'trim-end';
@@ -61,9 +62,35 @@ export function Timeline() {
 
   if (!project) return null;
 
-  const snapTime = (seconds: number) => {
-    if (!snapEnabled) return Math.max(0, seconds);
-    return Math.max(0, Math.round(seconds / gridSeconds) * gridSeconds);
+  const snapTime = (seconds: number) => snapTimelineTime(seconds, gridSeconds, snapEnabled);
+
+  const refreshTransportDuration = () => {
+    const state = useApp.getState();
+    const nextDuration = Math.max(
+      0,
+      ...((state.project?.tracks ?? []).flatMap((track) => track.clips.map((clip) => clip.start + clip.duration))),
+    );
+    useApp.setState((current) => ({
+      transport: {
+        ...current.transport,
+        duration: nextDuration,
+        loopEnd: current.transport.loopEnabled ? Math.min(current.transport.loopEnd, nextDuration) : current.transport.loopEnd,
+      },
+    }));
+  };
+
+  const updateSelectedClip = (patch: Partial<Pick<ClipState, 'gainDb' | 'fadeIn' | 'fadeOut'>>) => {
+    if (!selectedClip) return;
+    const trackId = selectedClip.track.id;
+    const clipId = selectedClip.clip.id;
+    useApp.getState().mutate((state) => {
+      const track = state.tracks.find((item) => item.id === trackId);
+      const clip = track?.clips.find((item) => item.id === clipId);
+      if (!clip) return;
+      Object.assign(clip, patch);
+      clip.fadeIn = Math.max(0, Math.min(clip.duration, clip.fadeIn));
+      clip.fadeOut = Math.max(0, Math.min(clip.duration, clip.fadeOut));
+    }, { coalesce: 'timeline-clip:' + clipId });
   };
 
   const startGesture = (event: ReactPointerEvent<HTMLDivElement>, trackId: string, clip: ClipState, mode: EditMode) => {
@@ -96,24 +123,38 @@ export function Timeline() {
     let nextDuration = gesture.initialDuration;
     let nextOffset = gesture.initialOffset;
 
+    const clipTiming = {
+      start: gesture.initialStart,
+      duration: gesture.initialDuration,
+      offset: gesture.initialOffset,
+    };
     if (gesture.mode === 'move') {
-      nextStart = snapTime(gesture.initialStart + delta);
+      nextStart = moveClipTo(clipTiming, gesture.initialStart + delta, gridSeconds, snapEnabled).start;
     } else if (gesture.mode === 'trim-end') {
-      const end = snapTime(gesture.initialStart + gesture.initialDuration + delta);
       const sourceClip = project.tracks
         .find((track) => track.id === gesture.trackId)
         ?.clips.find((clip) => clip.id === gesture.clipId);
       const sourceDuration = sourceClip
-        ? (assets.find((asset) => asset.id === sourceClip.assetId)?.duration ?? Infinity) - gesture.initialOffset
+        ? assets.find((asset) => asset.id === sourceClip.assetId)?.duration ?? Infinity
         : Infinity;
-      nextDuration = Math.max(MIN_CLIP_SECONDS, Math.min(sourceDuration, end - gesture.initialStart));
+      const trimmed = trimClipEnd(
+        clipTiming,
+        gesture.initialStart + gesture.initialDuration + delta,
+        sourceDuration,
+        gridSeconds,
+        snapEnabled,
+      );
+      nextDuration = trimmed.duration;
     } else {
-      const start = snapTime(gesture.initialStart + delta);
-      const maxStart = gesture.initialStart + gesture.initialDuration - MIN_CLIP_SECONDS;
-      nextStart = Math.min(maxStart, start);
-      const shift = nextStart - gesture.initialStart;
-      nextDuration = Math.max(MIN_CLIP_SECONDS, gesture.initialDuration - shift);
-      nextOffset = Math.max(0, gesture.initialOffset + shift);
+      const trimmed = trimClipStart(
+        clipTiming,
+        gesture.initialStart + delta,
+        gridSeconds,
+        snapEnabled,
+      );
+      nextStart = trimmed.start;
+      nextDuration = trimmed.duration;
+      nextOffset = trimmed.offset;
     }
     setGesture({ ...gesture, nextStart, nextDuration, nextOffset });
   };
@@ -134,6 +175,7 @@ export function Timeline() {
         clip.duration = finalGesture.nextDuration;
         clip.offset = finalGesture.nextOffset;
       });
+      refreshTransportDuration();
     }
     setGesture(null);
   };
@@ -170,6 +212,7 @@ export function Timeline() {
       targetTrack.clips.splice(index, 1, { ...clip, duration: leftDuration, fadeOut: 0 }, right);
       setSelectedClipId(right.id);
     });
+    refreshTransportDuration();
     useApp.getState().setToast('Clip split at the playhead.');
   };
 
@@ -182,6 +225,7 @@ export function Timeline() {
       if (track) track.clips = track.clips.filter((clip) => clip.id !== clipId);
     });
     setSelectedClipId(null);
+    refreshTransportDuration();
     useApp.getState().setToast('Clip deleted.');
   };
 
@@ -197,6 +241,7 @@ export function Timeline() {
       if (track) track.clips.push(copy);
     });
     setSelectedClipId(copy.id);
+    refreshTransportDuration();
     useApp.getState().setToast('Clip duplicated after the original.');
   };
 
@@ -253,6 +298,16 @@ export function Timeline() {
               className="w-20"
             />
           </label>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              const availableWidth = Math.max(320, (contentRef.current?.clientWidth ?? 640) - TRACK_HEADER_WIDTH);
+              setPixelsPerSecond(Math.max(24, Math.min(180, availableWidth / Math.max(1, duration))));
+            }}
+          >
+            Fit
+          </Button>
           <Button size="sm" onClick={() => useApp.getState().addTrack('audio', 'Audio ' + (project.tracks.length + 1))}>+ Track</Button>
           <Button size="sm" variant="ghost" disabled={!selectedClip} onClick={duplicateSelected}>Duplicate</Button>
           <Button size="sm" variant="ghost" disabled={!selectedClip} onClick={splitSelected}>Split</Button>
@@ -404,10 +459,55 @@ export function Timeline() {
       </div>
 
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-ink-700 px-3 py-1.5">
-        <div className="font-mono text-2xs text-ink-500">
-          {selectedClip
-            ? selectedClip.track.name + ' · ' + selectedClip.clip.start.toFixed(2) + 's · ' + selectedClip.clip.duration.toFixed(2) + 's'
-            : selectedTrack ? selectedTrack.name + ' selected' : 'Select a clip to edit'}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="font-mono text-2xs text-ink-500">
+            {selectedClip
+              ? selectedClip.track.name + ' · ' + selectedClip.clip.start.toFixed(2) + 's · ' + selectedClip.clip.duration.toFixed(2) + 's'
+              : selectedTrack ? selectedTrack.name + ' selected' : 'Select a clip to edit'}
+          </div>
+          {selectedClip && (
+            <>
+              <label className="flex items-center gap-1 text-2xs text-ink-500">
+                Gain
+                <input
+                  type="number"
+                  min="-60"
+                  max="24"
+                  step="0.5"
+                  value={selectedClip.clip.gainDb}
+                  onChange={(event) => updateSelectedClip({ gainDb: Math.max(-60, Math.min(24, Number(event.target.value) || 0)) })}
+                  className="w-14 rounded border border-ink-700 bg-ink-850 px-1 py-0.5 text-right font-mono text-2xs text-ink-100"
+                />
+                dB
+              </label>
+              <label className="flex items-center gap-1 text-2xs text-ink-500">
+                Fade in
+                <input
+                  type="number"
+                  min="0"
+                  max={selectedClip.clip.duration}
+                  step="0.05"
+                  value={selectedClip.clip.fadeIn}
+                  onChange={(event) => updateSelectedClip({ fadeIn: Math.max(0, Math.min(selectedClip.clip.duration, Number(event.target.value) || 0)) })}
+                  className="w-14 rounded border border-ink-700 bg-ink-850 px-1 py-0.5 text-right font-mono text-2xs text-ink-100"
+                />
+                s
+              </label>
+              <label className="flex items-center gap-1 text-2xs text-ink-500">
+                Fade out
+                <input
+                  type="number"
+                  min="0"
+                  max={selectedClip.clip.duration}
+                  step="0.05"
+                  value={selectedClip.clip.fadeOut}
+                  onChange={(event) => updateSelectedClip({ fadeOut: Math.max(0, Math.min(selectedClip.clip.duration, Number(event.target.value) || 0)) })}
+                  className="w-14 rounded border border-ink-700 bg-ink-850 px-1 py-0.5 text-right font-mono text-2xs text-ink-100"
+                />
+                s
+              </label>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2">
           {gesture && <span className="font-mono text-2xs text-accent">Editing clip…</span>}
