@@ -45,9 +45,10 @@ export function createSpectrumAccum(sampleRate: number): SpectrumAccum {
 }
 
 /**
- * Accumulate a mono mix's power spectrum. Frames are Hann-windowed and
- * overlap by 50%. Analysis runs in a worker; the frame loop yields to the event
- * loop through the caller's progress callback.
+ * Accumulate stereo power without downmixing first. A simple L/R mono sum can
+ * cancel out-of-phase material and falsely report missing frequency energy.
+ * Each channel is windowed and transformed independently; their powers are
+ * averaged. Frames overlap by 50%.
  */
 export function accumulateSpectrum(
   accum: SpectrumAccum,
@@ -60,18 +61,25 @@ export function accumulateSpectrum(
   const n = Math.min(L.length, R.length, endSample ?? Infinity);
   const fft = new FFT(FFT_SIZE);
   const window = hannWindow(FFT_SIZE);
-  const re = new Float64Array(FFT_SIZE);
-  const im = new Float64Array(FFT_SIZE);
+  const reL = new Float64Array(FFT_SIZE);
+  const imL = new Float64Array(FFT_SIZE);
+  const reR = new Float64Array(FFT_SIZE);
+  const imR = new Float64Array(FFT_SIZE);
   const hop = FFT_SIZE / 2;
   let frames = 0;
   for (let start = startSample; start + FFT_SIZE <= n; start += hop) {
     for (let i = 0; i < FFT_SIZE; i++) {
-      re[i] = ((L[start + i] + R[start + i]) * 0.5) * window[i];
-      im[i] = 0;
+      reL[i] = L[start + i] * window[i];
+      reR[i] = R[start + i] * window[i];
+      imL[i] = 0;
+      imR[i] = 0;
     }
-    fft.forward(re, im);
+    fft.forward(reL, imL);
+    fft.forward(reR, imR);
     for (let k = 0; k <= FFT_SIZE / 2; k++) {
-      accum.power[k] += re[k] * re[k] + im[k] * im[k];
+      const leftPower = reL[k] * reL[k] + imL[k] * imL[k];
+      const rightPower = reR[k] * reR[k] + imR[k] * imR[k];
+      accum.power[k] += (leftPower + rightPower) * 0.5;
     }
     frames++;
     if (onProgress && (frames & 0xff) === 0) onProgress((start - startSample) / Math.max(1, n - startSample));
@@ -157,8 +165,10 @@ export function finalizeSpectrum(accum: SpectrumAccum): SpectrumReport {
     : 0;
 
   // Energy extremes.
-  const lowEnergy = bands.filter((b) => b.center <= 120).reduce((a, b) => a + b.db, 0) / 5;
-  const highEnergy = bands.filter((b) => b.center >= 6000).reduce((a, b) => a + b.db, 0) / 4;
+  const lowBands = bands.filter((b) => b.center <= 120);
+  const highBands = bands.filter((b) => b.center >= 6000);
+  const lowEnergy = lowBands.reduce((a, b) => a + b.db, 0) / Math.max(1, lowBands.length);
+  const highEnergy = highBands.reduce((a, b) => a + b.db, 0) / Math.max(1, highBands.length);
 
   // Resonance / buildup detection: band level above a 1/3-octave median envelope.
   const smoothed = bands.map((_, i) => {
