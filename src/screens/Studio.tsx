@@ -12,7 +12,7 @@ type Focus = { scope: 'master' | 'track' | 'bus'; id: string | null };
 
 export default function Studio() {
   const project = useApp((s) => s.project);
-  const { assetBuffers, selectedTrackId, selectTrack, importFiles, updateTrack, removeTrack, addTrack } = useApp();
+  const { selectedTrackId, selectTrack, importFiles, updateTrack, removeTrack, addTrack } = useApp();
   const picker = useFilePicker();
   const [focus, setFocus] = useState<Focus>({ scope: 'master', id: null });
   const [rightTab, setRightTab] = useState<'rack' | 'assistant'>('rack');
