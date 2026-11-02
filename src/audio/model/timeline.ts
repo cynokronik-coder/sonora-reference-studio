@@ -58,7 +58,7 @@ export function trimClipEnd(
 ): ClipTiming {
   const minimumEnd = clip.start + MIN_CLIP_DURATION;
   const availableSourceDuration = Math.max(MIN_CLIP_DURATION, sourceDuration - clip.offset);
-  const maximumEnd = clip.start + Math.min(clip.duration + Math.max(0, sourceDuration - clip.offset - clip.duration), availableSourceDuration);
+  const maximumEnd = clip.start + availableSourceDuration;
   const snapped = snapTimelineTime(requestedEnd, stepSeconds, snapEnabled);
   const end = Math.min(maximumEnd, Math.max(minimumEnd, snapped));
   return {
