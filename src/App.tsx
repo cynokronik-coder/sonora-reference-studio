@@ -9,7 +9,7 @@ import Presets from './screens/Presets';
 import Analysis from './screens/Analysis';
 import Export from './screens/Export';
 import Settings from './screens/Settings';
-import { Button, EmptyState, Panel, ProgressBar } from './ui/Primitives';
+import { Button, EmptyState, HelpTip, Panel, ProgressBar } from './ui/Primitives';
 import { realtimeHost } from './audio/engine/realtime';
 
 const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boolean }[] = [
@@ -74,19 +74,21 @@ export default function App() {
   const blocked = active?.requiresProject && !project;
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-ink-950 text-ink-100">
-      <aside className="hidden w-[212px] shrink-0 flex-col border-r border-ink-700 bg-ink-900/70 lg:flex">
-        <div className="flex items-center gap-2 border-b border-ink-700 px-3 py-3">
-          <div className="flex h-7 w-7 items-center justify-center rounded border border-accent/30 bg-accent/10">
-            <span className="font-mono text-sm text-accent">≋</span>
+    <div className="relative flex h-screen w-full overflow-hidden bg-[#080a0d] text-ink-100">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_70%_0%,rgba(200,241,105,.055),transparent_36%),radial-gradient(ellipse_at_5%_100%,rgba(90,209,230,.035),transparent_30%)]" />
+      <aside className="relative z-10 hidden w-[232px] shrink-0 flex-col border-r border-white/[.07] bg-[#0b0e12]/95 lg:flex">
+        <div className="flex items-center gap-3 border-b border-white/[.07] px-4 py-4">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-accent/30 bg-gradient-to-br from-accent/20 to-signal-cyan/10 shadow-[0_0_28px_rgba(200,241,105,.08)]">
+            <span className="font-mono text-lg text-accent">≋</span>
           </div>
-          <div>
-            <div className="text-xs font-medium tracking-tight text-ink-100">SONORA</div>
-            <div className="font-mono text-2xs uppercase tracking-widest text-ink-500">reference studio</div>
+          <div className="min-w-0">
+            <div className="text-sm font-semibold tracking-[.16em] text-white">SONORA</div>
+            <div className="font-mono text-[9px] uppercase tracking-[.2em] text-ink-500">Reference Studio</div>
           </div>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto p-1.5">
+        <div className="px-4 pb-1 pt-4 font-mono text-[9px] uppercase tracking-[.2em] text-ink-600">Workspace</div>
+        <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
           {NAV.map((item) => {
             const disabled = item.requiresProject && !project;
             return (
@@ -95,23 +97,25 @@ export default function App() {
                 type="button"
                 disabled={disabled}
                 onClick={() => setScreen(item.screen)}
-                className={`focus-ring mb-0.5 flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+                className={`focus-ring mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-35 ${
                   screen === item.screen
-                    ? 'bg-ink-800 text-accent'
-                    : 'text-ink-400 hover:bg-ink-850 hover:text-ink-200'
+                    ? 'border border-accent/20 bg-gradient-to-r from-accent/10 to-transparent text-accent shadow-[inset_2px_0_0_rgba(200,241,105,.85)]'
+                    : 'border border-transparent text-ink-400 hover:border-white/[.05] hover:bg-white/[.035] hover:text-ink-100'
                 }`}
               >
-                <span className="w-4 text-center font-mono text-2xs">{item.glyph}</span>
-                <span className="flex-1 truncate">{item.label}</span>
-                {screen === item.screen && <span className="h-1 w-1 rounded-full bg-accent" />}
+                <span className={`flex h-7 w-7 items-center justify-center rounded-lg border font-mono text-sm ${
+                  screen === item.screen ? 'border-accent/20 bg-accent/10 text-accent' : 'border-white/[.06] bg-white/[.025] text-ink-400'
+                }`}>{item.glyph}</span>
+                <span className="flex-1 truncate font-medium">{item.label}</span>
+                {screen === item.screen && <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_10px_rgba(200,241,105,.7)]" />}
               </button>
             );
           })}
         </nav>
 
-        <div className="border-t border-ink-700 p-2">
+        <div className="border-t border-white/[.07] p-3">
           {project ? (
-            <div className="mb-2 rounded border border-ink-700 bg-ink-850/60 p-2">
+            <div className="mb-3 rounded-xl border border-white/[.07] bg-white/[.025] p-3">
               <div className="truncate text-2xs text-ink-200" title={project.name}>{project.name}</div>
               <div className="mt-0.5 font-mono text-2xs text-ink-500">
                 {project.sampleRate} Hz · {project.tracks.length} trk
@@ -120,30 +124,33 @@ export default function App() {
           ) : (
             <div className="mb-2 text-2xs leading-relaxed text-ink-500">No project open.</div>
           )}
-          <div className="flex rounded border border-ink-700 p-0.5">
+          <div className="flex rounded-xl border border-white/[.08] bg-black/20 p-1">
             {(['beginner', 'advanced'] as const).map((option) => (
               <button
                 key={option}
                 type="button"
                 onClick={() => setMode(option)}
-                className={`flex-1 rounded px-1 py-0.5 text-2xs capitalize ${mode === option ? 'bg-ink-700 text-ink-100' : 'text-ink-500'}`}
+                className={`flex-1 rounded-lg px-2 py-1.5 text-2xs capitalize transition-colors ${mode === option ? 'bg-ink-700 text-white shadow' : 'text-ink-500 hover:text-ink-200'}`}
               >
                 {option === 'advanced' ? 'engineer' : option}
               </button>
             ))}
           </div>
-          <div className="mt-2 flex items-center justify-between font-mono text-2xs text-ink-600">
-            <span>{realtimeHost.isReady ? 'engine ready' : 'engine idle'}</span>
+          <div className="mt-3 flex items-center justify-between font-mono text-[9px] uppercase tracking-wider text-ink-600">
+            <span className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 rounded-full ${realtimeHost.isReady ? 'bg-accent' : 'bg-ink-600'}`} />{realtimeHost.isReady ? 'Engine ready' : 'Engine idle'}</span>
             <span>v0.1</span>
           </div>
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-11 shrink-0 items-center justify-between gap-2 border-b border-ink-700 bg-ink-900/50 px-3">
+        <header className="relative z-10 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/[.07] bg-[#0b0e12]/85 px-4 backdrop-blur-xl">
           <div className="flex min-w-0 items-center gap-2">
             <span className="lg:hidden font-mono text-accent">≋</span>
-            <span className="truncate text-xs text-ink-200">{TITLES[screen]}</span>
+            <div className="min-w-0">
+              <span className="block truncate text-xs font-semibold text-white">{TITLES[screen]}</span>
+              <span className="hidden truncate text-[9px] uppercase tracking-[.14em] text-ink-600 sm:block">{screen === 'dashboard' ? 'Your creative workspace' : 'Production environment'}</span>
+            </div>
             {project && screen !== 'dashboard' && (
               <>
                 <span className="text-ink-700">/</span>
@@ -165,8 +172,11 @@ export default function App() {
             </div>
             <button type="button" onClick={undo} title="Undo" className="focus-ring rounded border border-ink-700 px-1.5 py-1 text-2xs text-ink-300 hover:text-ink-100">↶</button>
             <button type="button" onClick={redo} title="Redo" className="focus-ring rounded border border-ink-700 px-1.5 py-1 text-2xs text-ink-300 hover:text-ink-100">↷</button>
+            <HelpTip title="Quick guide" steps={['Import your song to create or open a project.', 'Open Reference Match and add a professional release you like.', 'Generate a chain, then edit or bypass every suggested processor.', 'Use the Mixing Studio timeline to arrange clips and the Mastering workspace to verify the final render.']}>
+              Sonora is designed to be usable without engineering experience. Start with the guided workflow; advanced controls stay available when you need them.
+            </HelpTip>
             <Button size="sm" variant="ghost" onClick={() => setScreen('projects')}>Projects</Button>
-            {project && <Button size="sm" variant="primary" onClick={() => setScreen('reference')}>Match</Button>}
+            {project && <Button size="sm" variant="primary" onClick={() => setScreen('reference')}>Start matching ↗</Button>}}
           </div>
         </header>
 
@@ -177,7 +187,7 @@ export default function App() {
           </div>
         )}
 
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <main className="relative z-0 min-h-0 flex-1 overflow-y-auto">
           {blocked ? (
             <div className="p-5">
               <Panel>
