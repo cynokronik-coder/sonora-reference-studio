@@ -8,14 +8,16 @@ import { Badge, Button, HelpTip, IconButton, ParamSlider, Select } from './Primi
 import { LevelMeter, useMeters } from './viz';
 
 export function TransportBar() {
-  const { transport, togglePlay, stop, seek, setLoop, undo, redo, monitorDb, setMonitorDb, project, lastSavedAt } = useApp();
+  const { transport, togglePlay, stop, setLoop, undo, redo, monitorDb, setMonitorDb, project, lastSavedAt } = useApp();
   const [loopStart, setLoopStart] = useState(transport.loopStart);
   const [loopEnd, setLoopEnd] = useState(transport.loopEnd);
+  const [toolsOpen, setToolsOpen] = useState(false);
   useEffect(() => setLoopStart(transport.loopStart), [transport.loopStart]);
   useEffect(() => setLoopEnd(transport.loopEnd), [transport.loopEnd]);
   const duration = transport.duration || 0;
+
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-y border-ink-700 bg-ink-900/80 px-3 py-2">
+    <div className="relative z-20 flex flex-wrap items-center gap-2 border-b border-ink-700 bg-ink-900/90 px-3 py-2">
       <div className="flex items-center gap-1">
         <button
           type="button"
@@ -25,89 +27,95 @@ export function TransportBar() {
         >
           {transport.playing ? '❚❚' : '▶'}
         </button>
-        <IconButton title="Stop and return to start" onClick={stop}>
-          ■
-        </IconButton>
+        <IconButton title="Stop and return to start" onClick={stop}>■</IconButton>
         <div className="ml-2 font-mono text-xs tabular-nums text-ink-100">
           {formatTime(transport.position)}
           <span className="text-ink-500"> / {formatTime(duration)}</span>
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5">
-        <IconButton active={transport.loopEnabled} title="Toggle loop" onClick={() => setLoop(!transport.loopEnabled)}>
-          loop
-        </IconButton>
-        <label className="flex items-center gap-1 text-2xs text-ink-500">
-          in
-          <input
-            className="w-14 rounded border border-ink-700 bg-ink-900 px-1 py-0.5 font-mono text-2xs text-ink-200"
-            value={loopStart.toFixed(2)}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              if (Number.isFinite(v)) setLoopStart(clamp(v, 0, loopEnd));
-            }}
-            onBlur={() => setLoop(transport.loopEnabled, loopStart, loopEnd)}
-          />
-        </label>
-        <label className="flex items-center gap-1 text-2xs text-ink-500">
-          out
-          <input
-            className="w-14 rounded border border-ink-700 bg-ink-900 px-1 py-0.5 font-mono text-2xs text-ink-200"
-            value={loopEnd.toFixed(2)}
-            onChange={(e) => {
-              const v = Number(e.target.value);
-              if (Number.isFinite(v)) setLoopEnd(clamp(v, loopStart, duration));
-            }}
-            onBlur={() => setLoop(transport.loopEnabled, loopStart, loopEnd)}
-          />
-        </label>
-        <IconButton
-          title="Set loop in at playhead"
-          onClick={() => {
-            setLoopStart(transport.position);
-            setLoop(transport.loopEnabled, transport.position, loopEnd);
-          }}
-        >
-          [in
-        </IconButton>
-        <IconButton
-          title="Set loop out at playhead"
-          onClick={() => {
-            setLoopEnd(transport.position);
-            setLoop(transport.loopEnabled, loopStart, transport.position);
-          }}
-        >
-          out]
-        </IconButton>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <span className="text-2xs text-ink-500">monitor</span>
-        <HelpTip title="Monitor level">This changes only the listening volume in your browser. It does not change track gain, the mix or the exported file.</HelpTip>
-        <input
-          type="range"
-          min={-30}
-          max={12}
-          step={0.5}
-          value={monitorDb}
-          onChange={(e) => setMonitorDb(Number(e.target.value))}
-          className="w-24"
-          title="Monitor level (does not affect export)"
-        />
-        <span className="w-9 font-mono text-2xs text-ink-300">{monitorDb.toFixed(1)}</span>
-      </div>
-
-      <div className="ml-auto flex items-center gap-1">
-        <IconButton title="Undo (Ctrl/Cmd+Z)" onClick={undo}>
-          ↶
-        </IconButton>
-        <IconButton title="Redo (Ctrl/Cmd+Shift+Z)" onClick={redo}>
-          ↷
-        </IconButton>
-        <span className="ml-1 font-mono text-2xs text-ink-500">
-          {lastSavedAt ? `saved ${new Date(lastSavedAt).toLocaleTimeString()}` : project?.autosave ? 'autosave on' : 'unsaved'}
+      <div className="ml-auto flex items-center gap-1.5">
+        <IconButton title="Undo (Ctrl/Cmd+Z)" onClick={undo}>↶</IconButton>
+        <IconButton title="Redo (Ctrl/Cmd+Shift+Z)" onClick={redo}>↷</IconButton>
+        <span className="hidden font-mono text-2xs text-ink-500 sm:inline">
+          {lastSavedAt ? 'saved ' + new Date(lastSavedAt).toLocaleTimeString() : project?.autosave ? 'autosave on' : 'unsaved'}
         </span>
+        <div className="relative">
+          <Button size="sm" variant={toolsOpen ? 'secondary' : 'ghost'} onClick={() => setToolsOpen((open) => !open)}>
+            Tools {toolsOpen ? '↑' : '↓'}
+          </Button>
+          {toolsOpen && (
+            <div className="absolute right-0 top-full z-50 mt-2 w-[min(340px,calc(100vw-24px))] rounded-xl border border-ink-600 bg-[#11151b] p-3 text-left shadow-2xl shadow-black/60">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-ink-100">Playback tools</p>
+                <button type="button" onClick={() => setToolsOpen(false)} className="rounded px-1 text-ink-500 hover:text-ink-100" aria-label="Close playback tools">×</button>
+              </div>
+              <div className="mt-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-2xs font-medium text-ink-300">Loop playback</span>
+                  <IconButton active={transport.loopEnabled} title="Toggle loop" onClick={() => setLoop(!transport.loopEnabled)}> {transport.loopEnabled ? 'On' : 'Off'} </IconButton>
+                </div>
+                <div className="mt-2 grid grid-cols-2 gap-2">
+                  <label className="text-2xs text-ink-500">
+                    In point
+                    <input
+                      aria-label="Loop in point"
+                      className="mt-1 w-full rounded border border-ink-700 bg-ink-900 px-2 py-1.5 font-mono text-xs text-ink-100"
+                      value={loopStart.toFixed(2)}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (Number.isFinite(value)) setLoopStart(clamp(value, 0, loopEnd));
+                      }}
+                      onBlur={() => setLoop(transport.loopEnabled, loopStart, loopEnd)}
+                    />
+                  </label>
+                  <label className="text-2xs text-ink-500">
+                    Out point
+                    <input
+                      aria-label="Loop out point"
+                      className="mt-1 w-full rounded border border-ink-700 bg-ink-900 px-2 py-1.5 font-mono text-xs text-ink-100"
+                      value={loopEnd.toFixed(2)}
+                      onChange={(event) => {
+                        const value = Number(event.target.value);
+                        if (Number.isFinite(value)) setLoopEnd(clamp(value, loopStart, duration));
+                      }}
+                      onBlur={() => setLoop(transport.loopEnabled, loopStart, loopEnd)}
+                    />
+                  </label>
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" variant="ghost" onClick={() => {
+                    setLoopStart(transport.position);
+                    setLoop(transport.loopEnabled, transport.position, loopEnd);
+                  }}>Set In at Playhead</Button>
+                  <Button size="sm" variant="ghost" onClick={() => {
+                    setLoopEnd(transport.position);
+                    setLoop(transport.loopEnabled, loopStart, transport.position);
+                  }}>Set Out at Playhead</Button>
+                </div>
+              </div>
+              <div className="mt-3 border-t border-ink-700 pt-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-2xs font-medium text-ink-300">Monitor level</p>
+                    <p className="mt-0.5 text-2xs text-ink-500">Listening volume only — does not affect the mix or export.</p>
+                  </div>
+                  <span className="font-mono text-2xs text-ink-200">{monitorDb.toFixed(1)} dB</span>
+                </div>
+                <input
+                  aria-label="Monitor level"
+                  type="range"
+                  min={-30}
+                  max={12}
+                  step={0.5}
+                  value={monitorDb}
+                  onChange={(event) => setMonitorDb(Number(event.target.value))}
+                  className="mt-3 w-full"
+                />
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
