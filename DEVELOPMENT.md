@@ -50,7 +50,7 @@ src/
     io/             decoding, WAV/AIFF encoding and parsing
     model/          project types, defaults, lookup helpers
     presets/        built-in library
-    ai/             deterministic assistant
+    ai/             Responses API client, context, proposal validation and offline assistant
   state/store.ts    application state and orchestration
   lib/              IndexedDB, peak computation
   screens/          one component per primary workspace
@@ -96,5 +96,6 @@ Autosave is debounced; `Save now` forces a write. Undo history is in memory and 
   files.
 - The realtime host and offline worker both use copies of PCM; transferring the main-thread buffers would break analysis
   and waveform rendering.
-- The assistant is deterministic. Any future LLM integration must validate against the processor registry and must never
-  produce measurements.
+- The assistant supports an optional server-side OpenAI Responses API integration and a deterministic offline fallback.
+  Every generated operation is validated against the live processor registry. The model receives computed measurements,
+  never raw PCM, and must never invent analysis values.
