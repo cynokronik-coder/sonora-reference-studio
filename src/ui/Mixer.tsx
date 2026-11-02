@@ -448,7 +448,7 @@ export function AssistantPanel() {
             </div>
             <div className="rounded-lg border border-ink-700 bg-ink-900/60 p-2.5">
               <div className="mb-2 flex items-center gap-2">
-                <icon className="text-accent">✦</icon>
+                <span aria-hidden="true" className="text-accent">✦</span>
                 <span className="text-2xs font-medium text-ink-200">Try asking</span>
               </div>
               <div className="flex flex-wrap gap-1.5">
