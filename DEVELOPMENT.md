@@ -10,13 +10,34 @@
 
 ```bash
 npm install
-npm run dev        # Vite dev server on 0.0.0.0:3000
+npm run dev        # Vite on :3000 plus the local AI API on 127.0.0.1:8787
+npm run dev:ui     # Vite only (AI API unavailable)
+npm run dev:api    # Local AI API only
+npm start          # Serve dist/ and the API after a production build
 npm test           # vitest (DSP/analysis/containers)
 npm run build      # tsc -b + vite build
 npm run typecheck  # explicit typecheck
 ```
 
-No environment variables are required. No service keys are used by this build.
+## Optional AI assistant setup
+
+The rule-based assistant works offline. To enable the real OpenAI-powered assistant locally:
+
+1. Copy `.env.example` to `.env.local`.
+2. Add your API key to `OPENAI_API_KEY`.
+3. Keep the key server-side. Do not use a `VITE_...` variable and never commit `.env.local`.
+4. Optionally change `SONORA_AI_MODEL` to a model available to your OpenAI API project.
+5. Run `npm run dev` and open the Vite app on port 3000.
+
+The browser calls the same-origin `/api` proxy. The Node server binds to localhost by default and holds the API key. `GET /api/health` reports whether a key is configured, without returning it.
+
+The AI receives a compact project snapshot: track and processor metadata, available DSP parameter ranges, and computed analysis summaries. It does not receive raw PCM audio. When measurements are missing, it can request the browser's existing local analysis pipeline.
+
+AI processor changes are returned as proposals. The browser validates processor types, parameter keys, IDs and value ranges against the live DSP registry. The user must explicitly accept a proposal before project state changes. If the backend is unavailable or no key is configured, the deterministic offline assistant remains available.
+
+**Deployment note:** this first backend is intended for local development and private testing. It binds to loopback by default. Do not expose it on a public network or deploy it as a shared service until authentication, per-user quotas, persistent rate limiting and abuse monitoring are added. The API key must remain server-side.
+
+No service key is required for the offline assistant.
 
 ## Layout
 
