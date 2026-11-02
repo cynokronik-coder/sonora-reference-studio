@@ -30,27 +30,32 @@ The suite uses synthetic signals only — no fixtures with unknown provenance.
 Run `npm run build` for a typecheck of the entire app plus production bundling. The build emits separate chunks for the
 AudioWorklet, the offline render worker and the analysis worker.
 
+## Timeline checks
+
+The timeline editing primitives have focused unit coverage for grid snapping, moving clips, source-offset preservation when trimming the start, source-boundary protection when trimming the end, and minimum clip length.
+
 ## Browser checklist (not runnable in the cloud VM)
 
 The development environment used to build this has no browser. Before trusting a release, verify manually:
 
-1. **Playback** — import a WAV, press play. Audio comes from the worklet. Toggle an EQ band and hear the change.
-2. **Realtime stability** — move a gain/frequency slider quickly; no clicks or dropouts. Use Chrome's performance panel if
+1. **Timeline editing** — import a WAV, move its clip, trim both edges, change fades and clip gain, split at the playhead, duplicate and delete. Confirm edits survive reload and undo/redo.
+2. **Playback** — import a WAV, press play. Audio comes from the worklet. Toggle an EQ band and hear the change.
+3. **Realtime stability** — move a gain/frequency slider quickly; no clicks or dropouts. Use Chrome's performance panel if
    artifacts appear.
-3. **Analysis** — import a reference; the progress overlay reaches 100% and the metrics appear. Compare against a known
+4. **Analysis** — import a reference; the progress overlay reaches 100% and the metrics appear. Compare against a known
    LUFS measurement of the same file.
-4. **Reference match** — generate a chain, apply it, render and measure. The measured LUFS should land near the predicted
+5. **Reference match** — generate a chain, apply it, render and measure. The measured LUFS should land near the predicted
    value and the true peak should respect the ceiling.
-5. **A/B** — capture slots, recall them, confirm processing changes and that loudness-matched listening compensates level
+6. **A/B** — capture slots, recall them, confirm processing changes and that loudness-matched listening compensates level
    only.
-6. **Export** — render WAV 24-bit and 96 kHz, download, reopen in another tool. Verify duration, channel count, sample
+7. **Export** — render WAV 24-bit and 96 kHz, download, reopen in another tool. Verify duration, channel count, sample
    rate and that it is not silent or clipped. Use Verify inside the app to decode the stored file and re-measure.
-7. **Persistence** — reload the page and reopen the project. Chains, parameters, clips, analyses and exports should
+8. **Persistence** — reload the page and reopen the project. Chains, parameters, clips, analyses and exports should
    restore. Original files remain downloadable? (assets are re-decoded; exports are re-downloadable).
-8. **Errors** — try an unsupported file, a corrupt file, and a very large file. Failures should surface as messages, not
+9. **Errors** — try an unsupported file, a corrupt file, and a very large file. Failures should surface as messages, not
    silent no-ops.
-9. **Mono compatibility** — check the correlation/mono score and audition in mono via an external monitor chain.
-10. **Beginner mode** — advanced parameters hide; every remaining control still affects audio.
+10. **Mono compatibility** — check the correlation/mono score and audition in mono via an external monitor chain.
+11. **Beginner mode** — advanced parameters hide; every remaining control still affects audio.
 
 ## Known unverified risk areas
 
