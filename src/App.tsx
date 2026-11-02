@@ -9,6 +9,7 @@ import Presets from './screens/Presets';
 import Analysis from './screens/Analysis';
 import Export from './screens/Export';
 import Settings from './screens/Settings';
+import Learn from './screens/Learn';
 import { Button, EmptyState, HelpTip, Panel, ProgressBar } from './ui/Primitives';
 import { realtimeHost } from './audio/engine/realtime';
 
@@ -21,6 +22,7 @@ const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boo
   { screen: 'presets', label: 'Preset Library', glyph: '♪', requiresProject: true },
   { screen: 'analysis', label: 'Audio Analysis', glyph: '∿', requiresProject: true },
   { screen: 'export', label: 'Export Center', glyph: '⤓', requiresProject: true },
+  { screen: 'learn', label: 'Learn & Help', glyph: '✳' },
   { screen: 'settings', label: 'Settings', glyph: '⚙' },
 ];
 
@@ -34,6 +36,7 @@ const TITLES: Record<Screen, string> = {
   analysis: 'Audio Analysis',
   export: 'Export Center',
   settings: 'Settings',
+  learn: 'Learn & Help',
 };
 
 export default function App() {
@@ -214,6 +217,8 @@ export default function App() {
             <Analysis />
           ) : screen === 'export' ? (
             <Export />
+          ) : screen === 'learn' ? (
+            <Learn />
           ) : (
             <Settings />
           )}
