@@ -179,7 +179,7 @@ export default function App() {
               Sonora is designed to be usable without engineering experience. Start with the guided workflow; advanced controls stay available when you need them.
             </HelpTip>
             <Button size="sm" variant="ghost" onClick={() => setScreen('projects')}>Projects</Button>
-            {project && <Button size="sm" variant="primary" onClick={() => setScreen('reference')}>Start matching ↗</Button>}}
+            {project && <Button size="sm" variant="primary" onClick={() => setScreen('reference')}>Start matching ↗</Button>}
           </div>
         </header>
 
