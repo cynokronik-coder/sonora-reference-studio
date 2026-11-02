@@ -5,6 +5,9 @@ import { encodeAiff, encodeWav, type WavBitDepth } from '../audio/io/wav';
 import { analyzeLoudness } from '../audio/analysis/loudness';
 import { generateMatchPlan, planToNodes, type MatchPlan } from '../audio/analysis/match';
 import { interpretCommand, suggestionsFor, type AssistantProposal } from '../audio/ai/assistant';
+import { requestSonoraAi } from '../audio/ai/client';
+import { buildAssistantContext } from '../audio/ai/context';
+import { createValidatedAiProposal } from '../audio/ai/proposals';
 import { realtimeHost } from '../audio/engine/realtime';
 import type { EngineAsset } from '../audio/engine/renderer';
 import { createProcessorNode, createProject as newProject, createTrack, createClip, createBus, defaultMatchSettings, uid } from '../audio/model/defaults';
@@ -65,7 +68,7 @@ export interface ABSlot {
 }
 
 export interface BusyState {
-  kind: 'import' | 'load' | 'analyze' | 'render' | 'match' | 'decode';
+  kind: 'import' | 'load' | 'analyze' | 'render' | 'match' | 'decode' | 'assistant';
   label: string;
   progress: number;
   cancel?: () => void;
@@ -194,7 +197,7 @@ interface AppState {
   verifyMaster: () => Promise<void>;
 
   setAssistantScope: (scope: 'master' | 'track') => void;
-  sendAssistantMessage: (text: string) => void;
+  sendAssistantMessage: (text: string) => Promise<void>;
   applyAssistantProposal: () => void;
   rejectAssistantProposal: () => void;
   toggleAssistant: () => void;
@@ -971,43 +974,202 @@ export const useApp = create<AppState>((set, get) => ({
 
   setAssistantScope: (scope) => set({ assistantScope: scope, assistantProposal: null }),
 
-  sendAssistantMessage: (text) => {
-    const { project, selectedTrackId, assistantScope, assistantProposal } = get();
-    if (!project) return;
-    const track = findTrack(project, selectedTrackId);
-    const scope = assistantScope === 'track' && track ? 'track' : 'master';
-    const processors = scope === 'master' ? project.master.processors : track?.processors ?? [];
-    const proposal = interpretCommand(
-      text,
-      {
-        scope,
-        trackId: track?.id,
-        trackName: track?.name,
-        trackKind: track?.kind,
-        processors,
-        hasReference: project.referenceAssetIds.length > 0,
-        multiTrack: project.tracks.filter((t) => t.clips.length > 0 && t.kind !== 'reference').length > 1,
-      },
-      assistantProposal,
-    );
-    const messages: ChatMessage[] = [
-      ...get().chat,
-      { id: uid('msg'), role: 'user', text },
-      {
+  sendAssistantMessage: async (text) => {
+    const initial = get();
+    if (!initial.project || !text.trim()) return;
+
+    const userMessage: ChatMessage = { id: uid('msg'), role: 'user', text: text.trim() };
+    const priorMessages = initial.chat.slice(-14);
+    const conversation = [
+      ...priorMessages.map((message) => ({ role: message.role, content: message.text })),
+      { role: 'user', content: text.trim() },
+    ];
+    set({
+      chat: [...initial.chat, userMessage],
+      busy: { kind: 'assistant', label: 'Sonora AI is thinking', progress: 0.08 },
+      toast: null,
+    });
+
+    const makeContext = () => {
+      const state = get();
+      if (!state.project) throw new Error('The project was closed while the assistant was working.');
+      return buildAssistantContext({
+        project: state.project,
+        assets: state.assets,
+        analyses: state.analyses,
+        mode: state.mode,
+        scope: state.assistantScope,
+        selectedTrackId: state.selectedTrackId,
+        matchPlan: state.matchPlan,
+        lastRenderStats: state.lastRenderStats,
+      });
+    };
+
+    const offlineReply = (reason: string) => {
+      const state = get();
+      const project = state.project;
+      if (!project) return;
+      const track = findTrack(project, state.selectedTrackId);
+      const scope = state.assistantScope === 'track' && track ? 'track' : 'master';
+      const processors = scope === 'master' ? project.master.processors : track?.processors ?? [];
+      const proposal = interpretCommand(
+        text,
+        {
+          scope,
+          trackId: track?.id,
+          trackName: track?.name,
+          trackKind: track?.kind,
+          processors,
+          hasReference: project.referenceAssetIds.length > 0,
+          multiTrack: project.tracks.filter((item) => item.clips.length > 0 && item.kind !== 'reference').length > 1,
+        },
+        state.assistantProposal,
+      );
+      const assistantMessage: ChatMessage = {
         id: uid('msg'),
         role: 'assistant',
-        text: proposal.message,
-        detail: proposal.explanation,
+        text: `Offline assistant used. ${reason} ${proposal.message}`,
+        detail: [...proposal.explanation, 'The offline assistant recognizes a limited set of mixing commands. Configure the server-side AI key to enable natural-language reasoning.'],
         proposalId: proposal.operations.length ? proposal.id : undefined,
-      },
-    ];
-    set({ chat: messages, assistantProposal: proposal.operations.length ? proposal : proposal.requiresReference ? proposal : null });
+      };
+      set((current) => ({
+        chat: [...current.chat, assistantMessage],
+        assistantProposal: proposal.operations.length ? proposal : proposal.requiresReference ? proposal : null,
+        busy: null,
+      }));
+    };
+
+    try {
+      let input: unknown[] = conversation;
+      let response = await requestSonoraAi(input, makeContext());
+      let finalText = '';
+      let proposalCreated = false;
+      let analysisRequests = 0;
+
+      for (let cycle = 0; cycle < 4; cycle++) {
+        const calls = response.output.filter((item) => item.type === 'function_call');
+        if (!calls.length) {
+          finalText = response.outputText;
+          break;
+        }
+
+        set({ busy: { kind: 'assistant', label: 'Checking Sonora audio tools', progress: 0.2 + cycle * 0.15 } });
+        const outputs: Record<string, unknown>[] = [];
+        const analysisCalls = calls.filter((call) => call.name === 'request_audio_analysis');
+        const proposalCalls = calls.filter((call) => call.name === 'propose_processor_changes');
+
+        for (const call of analysisCalls) {
+          let output: Record<string, unknown>;
+          try {
+            const args = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : call.arguments;
+            const assetId = typeof args?.assetId === 'string' ? args.assetId : '';
+            const state = get();
+            const asset = state.assets.find((item) => item.id === assetId);
+            if (!asset) throw new Error('That asset is not part of the current project.');
+            let report = state.analyses[assetId];
+            if (!report) {
+              if (++analysisRequests > 3) throw new Error('The assistant may request analysis for at most three assets per turn.');
+              report = await get().analyzeAsset(assetId) ?? undefined;
+            }
+            if (!report) throw new Error('Sonora could not produce an analysis report for that audio.');
+            output = {
+              ok: true,
+              assetId,
+              assetName: asset.name,
+              integratedLufs: report.loudness.integratedLufs,
+              truePeakDbtp: report.loudness.truePeakDb,
+              message: 'Local audio analysis completed. The refreshed project context contains the full measured report.',
+            };
+          } catch (error) {
+            output = { ok: false, error: error instanceof Error ? error.message : 'Audio analysis failed.' };
+          }
+          outputs.push({
+            type: 'function_call_output',
+            call_id: call.call_id,
+            output: JSON.stringify(output),
+          });
+        }
+
+        // If analysis was requested in this response, force a fresh reasoning pass
+        // before accepting any simultaneously returned proposal.
+        if (analysisCalls.length > 0) {
+          for (const call of proposalCalls) {
+            outputs.push({
+              type: 'function_call_output',
+              call_id: call.call_id,
+              output: JSON.stringify({ ok: false, message: 'Audio analysis was just requested. Re-evaluate the refreshed analysis context before creating a proposal.' }),
+            });
+          }
+        } else {
+          for (const call of proposalCalls) {
+            let output: Record<string, unknown>;
+            try {
+              const args = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : call.arguments;
+              const currentProject = get().project;
+              if (!currentProject) throw new Error('No project is open.');
+              const proposal = createValidatedAiProposal(args, currentProject);
+              set({ assistantProposal: proposal });
+              proposalCreated = true;
+              output = {
+                ok: true,
+                proposalId: proposal.id,
+                operationCount: proposal.operations.length,
+                message: 'A validated preview proposal is now waiting for user approval. No project changes have been applied.',
+              };
+            } catch (error) {
+              output = { ok: false, error: error instanceof Error ? error.message : 'The proposal failed validation.' };
+            }
+            outputs.push({
+              type: 'function_call_output',
+              call_id: call.call_id,
+              output: JSON.stringify(output),
+            });
+          }
+        }
+
+        const handledCalls = analysisCalls.length + proposalCalls.length;
+        const unknownCalls = calls.filter((call) =>
+          call.name !== 'request_audio_analysis' && call.name !== 'propose_processor_changes',
+        );
+        for (const call of unknownCalls) {
+          outputs.push({
+            type: 'function_call_output',
+            call_id: call.call_id,
+            output: JSON.stringify({ ok: false, error: 'This tool is not available in Sonora.' }),
+          });
+        }
+
+        if (outputs.length === 0 || handledCalls === 0 && unknownCalls.length === 0) {
+          finalText = response.outputText;
+          break;
+        }
+        input = [...input, ...response.output, ...outputs];
+        response = await requestSonoraAi(input, makeContext());
+        if (cycle === 3) finalText = response.outputText;
+      }
+
+      if (!finalText.trim()) {
+        finalText = proposalCreated
+          ? 'I prepared a validated processing preview. Review the proposed operations below before accepting them.'
+          : 'I checked the available project context. Please tell me which part of the sound you would like to improve.';
+      }
+      const assistantMessage: ChatMessage = {
+        id: uid('msg'),
+        role: 'assistant',
+        text: finalText,
+        detail: proposalCreated ? ['A processing preview is ready. Nothing has changed until you accept it.'] : undefined,
+        proposalId: get().assistantProposal?.id,
+      };
+      set((state) => ({ chat: [...state.chat, assistantMessage], busy: null }));
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'The AI service is unavailable.';
+      offlineReply(`AI backend unavailable (${reason}).`);
+    }
   },
 
   applyAssistantProposal: () => {
     const proposal = get().assistantProposal;
     if (!proposal) return;
-    const scope = proposal.operations[0]?.scope ?? 'master';
     const scaleValue = (base: Record<string, number> | undefined, params: Record<string, number>, factor: number): Record<string, number> => {
       if (!base || factor === 1) return params;
       const merged = { ...params };
@@ -1021,27 +1183,30 @@ export const useApp = create<AppState>((set, get) => ({
       return merged;
     };
     get().mutate((project) => {
-      const chain = chainFor(project, scope, proposal.operations[0]?.trackId);
-      if (!chain) return;
       const idMap = new Map<string, string>();
+      const operationKey = (op: AssistantProposal['operations'][number]) =>
+        `${op.scope}:${op.trackId ?? 'master'}:${op.processorId ?? ''}`;
       for (const op of proposal.operations) {
+        const chain = chainFor(project, op.scope, op.trackId ?? null);
+        if (!chain) continue;
+        const key = operationKey(op);
         if (op.kind === 'add') {
           const params = scaleValue(op.base, op.params ?? {}, proposal.scale ?? 1);
           const node = createProcessorNode(op.processorType ?? 'eq', params);
           node.note = op.note;
-          idMap.set(op.processorId ?? '', node.id);
+          idMap.set(key, node.id);
           chain.push(node);
         } else if (op.kind === 'update') {
-          const realId = idMap.get(op.processorId ?? '') ?? op.processorId;
-          const node = chain.find((p) => p.id === realId);
+          const realId = idMap.get(key) ?? op.processorId;
+          const node = chain.find((processor) => processor.id === realId);
           if (node) node.params = { ...node.params, ...scaleValue(op.base, op.params ?? {}, proposal.scale ?? 1) };
         } else if (op.kind === 'remove') {
-          const realId = idMap.get(op.processorId ?? '') ?? op.processorId;
-          const index = chain.findIndex((p) => p.id === realId);
+          const realId = idMap.get(key) ?? op.processorId;
+          const index = chain.findIndex((processor) => processor.id === realId);
           if (index >= 0) chain.splice(index, 1);
         } else if (op.kind === 'bypass' || op.kind === 'enable') {
-          const realId = idMap.get(op.processorId ?? '') ?? op.processorId;
-          const node = chain.find((p) => p.id === realId);
+          const realId = idMap.get(key) ?? op.processorId;
+          const node = chain.find((processor) => processor.id === realId);
           if (node) node.enabled = op.kind === 'enable';
         }
       }
@@ -1054,7 +1219,7 @@ export const useApp = create<AppState>((set, get) => ({
           role: 'assistant',
           text: proposal.operations.length
             ? `Applied ${proposal.operations.length} change${proposal.operations.length > 1 ? 's' : ''}. Use undo if it is not what you wanted.`
-            : 'Nothing was applied. The suggestion needed a reference plan or a processor that does not exist yet.',
+            : 'Nothing was applied.',
         },
       ],
       assistantProposal: null,
