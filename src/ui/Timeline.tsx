@@ -32,7 +32,7 @@ function sessionDuration(project: ProjectState, fallback: number): number {
   );
 }
 
-export function Timeline() {
+export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) => void }) {
   const project = useApp((state) => state.project);
   const assets = useApp((state) => state.assets);
   const buffers = useApp((state) => state.assetBuffers);
@@ -46,6 +46,9 @@ export function Timeline() {
   const [grid, setGrid] = useState<'bar' | 'beat' | 'half' | 'quarter'>('beat');
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [gesture, setGesture] = useState<ClipGesture | null>(null);
+  const [clipGainDraft, setClipGainDraft] = useState('');
+  const [clipFadeInDraft, setClipFadeInDraft] = useState('');
+  const [clipFadeOutDraft, setClipFadeOutDraft] = useState('');
   const contentRef = useRef<HTMLDivElement>(null);
 
   const duration = project ? sessionDuration(project, transportDuration) : 16;
@@ -64,6 +67,28 @@ export function Timeline() {
   useEffect(() => {
     setTempoDraft(String(tempo));
   }, [tempo]);
+
+  useEffect(() => {
+    if (!selectedClip) {
+      setClipGainDraft('');
+      setClipFadeInDraft('');
+      setClipFadeOutDraft('');
+      return;
+    }
+    setClipGainDraft(String(selectedClip.clip.gainDb));
+    setClipFadeInDraft(String(selectedClip.clip.fadeIn));
+    setClipFadeOutDraft(String(selectedClip.clip.fadeOut));
+  }, [
+    selectedClip?.clip.id,
+    selectedClip?.clip.gainDb,
+    selectedClip?.clip.fadeIn,
+    selectedClip?.clip.fadeOut,
+  ]);
+
+  const activateTrack = (trackId: string) => {
+    if (onSelectTrack) onSelectTrack(trackId);
+    else useApp.getState().selectTrack(trackId);
+  };
 
   if (!project) return null;
 
@@ -105,7 +130,7 @@ export function Timeline() {
     const target = event.currentTarget;
     target.setPointerCapture(event.pointerId);
     setSelectedClipId(clip.id);
-    useApp.getState().selectTrack(trackId);
+    activateTrack(trackId);
     setGesture({
       clipId: clip.id,
       trackId,
@@ -173,14 +198,34 @@ export function Timeline() {
       Math.abs(finalGesture.nextOffset - finalGesture.initialOffset) > 0.0001
     ) {
       useApp.getState().mutate((state) => {
-        const track = state.tracks.find((item) => item.id === finalGesture.trackId);
-        const clip = track?.clips.find((item) => item.id === finalGesture.clipId);
-        if (!clip) return;
+        const sourceTrack = state.tracks.find((item) => item.id === finalGesture.trackId);
+        const clipIndex = sourceTrack?.clips.findIndex((item) => item.id === finalGesture.clipId) ?? -1;
+        if (!sourceTrack || clipIndex < 0) return;
+        const clip = sourceTrack.clips[clipIndex];
         clip.start = finalGesture.nextStart;
         clip.duration = finalGesture.nextDuration;
         clip.offset = finalGesture.nextOffset;
+        const hoveredTrack = document
+          .elementFromPoint(event.clientX, event.clientY)
+          ?.closest('[data-timeline-track]') as HTMLElement | null;
+        const destinationTrackId = finalGesture.mode === 'move'
+          ? hoveredTrack?.dataset.timelineTrack
+          : undefined;
+        if (destinationTrackId && destinationTrackId !== sourceTrack.id) {
+          const destinationTrack = state.tracks.find((item) => item.id === destinationTrackId);
+          if (destinationTrack) {
+            sourceTrack.clips.splice(clipIndex, 1);
+            destinationTrack.clips.push(clip);
+          }
+        }
       });
       refreshTransportDuration();
+    }
+    if (finalGesture.mode === 'move') {
+      const hoveredTrack = document
+        .elementFromPoint(event.clientX, event.clientY)
+        ?.closest('[data-timeline-track]') as HTMLElement | null;
+      if (hoveredTrack?.dataset.timelineTrack) activateTrack(hoveredTrack.dataset.timelineTrack);
     }
     setGesture(null);
   };
@@ -188,7 +233,7 @@ export function Timeline() {
   const seekFromRuler = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    const seconds = snapTime((event.clientX - rect.left) / pixelsPerSecond);
+    const seconds = Math.max(0, (event.clientX - rect.left) / pixelsPerSecond);
     useApp.getState().seek(Math.min(duration, seconds));
   };
 
@@ -321,7 +366,16 @@ export function Timeline() {
           >
             Fit
           </Button>
-          <Button size="sm" onClick={() => useApp.getState().addTrack('audio', 'Audio ' + (project.tracks.length + 1))}>+ Track</Button>
+          <Button
+            size="sm"
+            onClick={() => {
+              useApp.getState().addTrack('audio', 'Audio ' + (project.tracks.length + 1));
+              const nextTrack = useApp.getState().project?.tracks.at(-1);
+              if (nextTrack) activateTrack(nextTrack.id);
+            }}
+          >
+            + Track
+          </Button>
           <Button size="sm" variant="ghost" disabled={!selectedClip} onClick={duplicateSelected}>Duplicate</Button>
           <Button size="sm" variant="ghost" disabled={!selectedClip} onClick={splitSelected}>Split</Button>
           <Button size="sm" variant="danger" disabled={!selectedClip} onClick={deleteSelected}>Delete</Button>
@@ -363,6 +417,7 @@ export function Timeline() {
           {project.tracks.map((track) => (
             <div
               key={track.id}
+              data-timeline-track={track.id}
               className="grid min-h-[72px] border-b border-ink-800"
               style={{ gridTemplateColumns: TRACK_HEADER_WIDTH + 'px ' + contentWidth + 'px' }}
             >
@@ -372,7 +427,7 @@ export function Timeline() {
                   (selectedTrackId === track.id ? 'bg-ink-800' : 'bg-ink-900/95')
                 }
               >
-                <button type="button" onClick={() => useApp.getState().selectTrack(track.id)} className="flex min-w-0 items-center gap-1.5 text-left">
+                <button type="button" onClick={() => activateTrack(track.id)} className="flex min-w-0 items-center gap-1.5 text-left">
                   <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: track.color }} />
                   <span className="truncate text-2xs text-ink-100">{track.name}</span>
                 </button>
@@ -411,7 +466,7 @@ export function Timeline() {
                       onPointerDown={(event) => startGesture(event, track.id, clip, 'move')}
                       onClick={() => {
                         setSelectedClipId(clip.id);
-                        useApp.getState().selectTrack(track.id);
+                        activateTrack(track.id);
                       }}
                       className={
                         'group absolute top-2 h-[56px] select-none overflow-hidden rounded border ' +
@@ -487,8 +542,12 @@ export function Timeline() {
                   min="-60"
                   max="24"
                   step="0.5"
-                  value={selectedClip.clip.gainDb}
-                  onChange={(event) => updateSelectedClip({ gainDb: Math.max(-60, Math.min(24, Number(event.target.value) || 0)) })}
+                  value={clipGainDraft}
+                  onChange={(event) => setClipGainDraft(event.target.value)}
+                  onBlur={() => {
+                    const value = clipGainDraft.trim() ? Number(clipGainDraft) : 0;
+                    updateSelectedClip({ gainDb: Math.max(-60, Math.min(24, Number.isFinite(value) ? value : 0)) });
+                  }}
                   className="w-14 rounded border border-ink-700 bg-ink-850 px-1 py-0.5 text-right font-mono text-2xs text-ink-100"
                 />
                 dB
@@ -500,8 +559,12 @@ export function Timeline() {
                   min="0"
                   max={selectedClip.clip.duration}
                   step="0.05"
-                  value={selectedClip.clip.fadeIn}
-                  onChange={(event) => updateSelectedClip({ fadeIn: Math.max(0, Math.min(selectedClip.clip.duration, Number(event.target.value) || 0)) })}
+                  value={clipFadeInDraft}
+                  onChange={(event) => setClipFadeInDraft(event.target.value)}
+                  onBlur={() => {
+                    const value = clipFadeInDraft.trim() ? Number(clipFadeInDraft) : 0;
+                    updateSelectedClip({ fadeIn: Math.max(0, Math.min(selectedClip.clip.duration, Number.isFinite(value) ? value : 0)) });
+                  }}
                   className="w-14 rounded border border-ink-700 bg-ink-850 px-1 py-0.5 text-right font-mono text-2xs text-ink-100"
                 />
                 s
@@ -513,8 +576,12 @@ export function Timeline() {
                   min="0"
                   max={selectedClip.clip.duration}
                   step="0.05"
-                  value={selectedClip.clip.fadeOut}
-                  onChange={(event) => updateSelectedClip({ fadeOut: Math.max(0, Math.min(selectedClip.clip.duration, Number(event.target.value) || 0)) })}
+                  value={clipFadeOutDraft}
+                  onChange={(event) => setClipFadeOutDraft(event.target.value)}
+                  onBlur={() => {
+                    const value = clipFadeOutDraft.trim() ? Number(clipFadeOutDraft) : 0;
+                    updateSelectedClip({ fadeOut: Math.max(0, Math.min(selectedClip.clip.duration, Number.isFinite(value) ? value : 0)) });
+                  }}
                   className="w-14 rounded border border-ink-700 bg-ink-850 px-1 py-0.5 text-right font-mono text-2xs text-ink-100"
                 />
                 s
