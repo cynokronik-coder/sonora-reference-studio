@@ -1,6 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp, type Screen } from './state/store';
 import Dashboard from './screens/Dashboard';
+import Landing from './screens/Landing';
 import Projects from './screens/Projects';
 import Studio from './screens/Studio';
 import ReferenceMatch from './screens/ReferenceMatch';
@@ -41,10 +42,28 @@ const TITLES: Record<Screen, string> = {
 
 export default function App() {
   const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError } = useApp();
+  const [showLanding, setShowLanding] = useState(() => window.location.hash !== '#studio');
+
+  const enterStudio = () => {
+    window.location.hash = 'studio';
+    setShowLanding(false);
+  };
+
+  const openLanding = () => {
+    window.location.hash = '';
+    setShowLanding(true);
+  };
 
   useEffect(() => {
+    const syncFromHash = () => setShowLanding(window.location.hash !== '#studio');
+    window.addEventListener('hashchange', syncFromHash);
+    return () => window.removeEventListener('hashchange', syncFromHash);
+  }, []);
+
+  useEffect(() => {
+    if (showLanding) return;
     void init();
-  }, [init]);
+  }, [init, showLanding]);
 
   useEffect(() => {
     if (!toast) return;
@@ -53,6 +72,7 @@ export default function App() {
   }, [toast, setToast]);
 
   useEffect(() => {
+    if (showLanding) return;
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
@@ -71,7 +91,9 @@ export default function App() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [undo, redo, saveNow]);
+  }, [undo, redo, saveNow, showLanding]);
+
+  if (showLanding) return <Landing onEnterStudio={enterStudio} />;
 
   const active = NAV.find((item) => item.screen === screen);
   const blocked = active?.requiresProject && !project;
@@ -178,6 +200,7 @@ export default function App() {
             <HelpTip title="Quick guide" steps={['Import your song to create or open a project.', 'Open Reference Match and add a professional release you like.', 'Generate a chain, then edit or bypass every suggested processor.', 'Use the Mixing Studio timeline to arrange clips and the Mastering workspace to verify the final render.']}>
               Sonora is designed to be usable without engineering experience. Start with the guided workflow; advanced controls stay available when you need them.
             </HelpTip>
+            <Button size="sm" variant="ghost" onClick={openLanding}>About Sonora</Button>
             <Button size="sm" variant="ghost" onClick={() => setScreen('projects')}>Projects</Button>
             {project && <Button size="sm" variant="primary" onClick={() => setScreen('reference')}>Start matching ↗</Button>}
           </div>
