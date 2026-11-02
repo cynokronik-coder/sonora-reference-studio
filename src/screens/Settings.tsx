@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../state/store';
 import { Badge, Button, InfoRow, Panel, Select, Toggle } from '../ui/Primitives';
+import { getSonoraAiStatus, type SonoraAiStatus } from '../audio/ai/client';
 import { realtimeHost } from '../audio/engine/realtime';
 
 const NOT_IMPLEMENTED = [
@@ -9,13 +10,25 @@ const NOT_IMPLEMENTED = [
   ['Batch mastering', 'The export pipeline is single-project. A queue is not implemented.'],
   ['Collaboration, comments, sharing', 'No accounts or multi-user storage exist in this local build.'],
   ['DAW session import', 'Only WAV/AIFF/FLAC/MP3/AAC/OGG imports and individual stems are supported.'],
-  ['External LLM assistant', 'The assistant is deterministic and offline. No API key is required or accepted in this build.'],
   ['Hardware inserts', 'Not possible in a browser engine.'],
 ];
 
 export default function Settings() {
   const { project, mode, setMode, mutate, clearAllData, engineError, projects, assets, exports, analyses, saveNow } = useApp();
   const [confirmClear, setConfirmClear] = useState(false);
+  const [aiStatus, setAiStatus] = useState<SonoraAiStatus | null>(null);
+  const [aiStatusError, setAiStatusError] = useState<string | null>(null);
+
+  const refreshAiStatus = () => {
+    void getSonoraAiStatus()
+      .then((status) => { setAiStatus(status); setAiStatusError(null); })
+      .catch((error) => setAiStatusError(error instanceof Error ? error.message : 'AI server unavailable.'));
+  };
+
+  useState(() => {
+    refreshAiStatus();
+    return undefined;
+  });
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4">
       <header>
@@ -23,6 +36,24 @@ export default function Settings() {
         <h1 className="mt-1 text-xl text-ink-100">Settings</h1>
         <p className="mt-1 text-xs text-ink-400">Local-first workspace. Audio never leaves this browser unless you export it.</p>
       </header>
+
+      <Panel title="Sonora AI assistant" right={<Badge tone={aiStatus?.configured ? 'accent' : 'neutral'}>{aiStatus?.configured ? 'connected' : 'offline fallback'}</Badge>}>
+        <div className="space-y-2">
+          <InfoRow label="Provider" value={aiStatus?.configured ? aiStatus.provider : 'Built-in offline assistant'} />
+          <InfoRow label="Model" value={aiStatus?.configured ? aiStatus.model : 'Not configured'} />
+          {aiStatusError && <p className="text-2xs text-signal-amber">{aiStatusError}</p>}
+          {aiStatus?.configured ? (
+            <p className="text-2xs leading-relaxed text-ink-400">
+              The connected assistant can reason over project metadata and measured analysis, request local analysis when needed, and prepare validated processor changes. It never receives raw PCM audio.
+            </p>
+          ) : (
+            <div className="rounded-lg border border-ink-700 bg-ink-850/60 p-3 text-2xs leading-relaxed text-ink-400">
+              To enable connected AI, copy <span className="font-mono text-ink-200">.env.example</span> to <span className="font-mono text-ink-200">.env.local</span>, add your key as <span className="font-mono text-ink-200">OPENAI_API_KEY</span>, and restart <span className="font-mono text-ink-200">npm run dev</span>. Keep the key on the server; never add it to a VITE variable or commit it.
+            </div>
+          )}
+          <Button size="sm" variant="ghost" onClick={refreshAiStatus}>Refresh AI connection</Button>
+        </div>
+      </Panel>
 
       <div className="grid gap-3 lg:grid-cols-2">
         <Panel title="Interface">
