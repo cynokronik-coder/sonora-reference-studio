@@ -1081,7 +1081,7 @@ export const useApp = create<AppState>((set, get) => ({
             const state = get();
             const asset = state.assets.find((item) => item.id === assetId);
             if (!asset) throw new Error('That asset is not part of the current project.');
-            let report = state.analyses[assetId];
+            let report: AnalysisReport | undefined = state.analyses[assetId];
             if (!report) {
               if (++analysisRequests > 3) throw new Error('The assistant may request analysis for at most three assets per turn.');
               report = await get().analyzeAsset(assetId) ?? undefined;
