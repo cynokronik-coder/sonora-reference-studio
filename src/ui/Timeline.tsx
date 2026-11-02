@@ -4,7 +4,7 @@ import { useApp } from '../state/store';
 import { uid } from '../audio/model/defaults';
 import type { ClipState, ProjectState } from '../audio/model/types';
 import { moveClipTo, snapTimelineTime, trimClipEnd, trimClipStart } from '../audio/model/timeline';
-import { Button, IconButton } from './Primitives';
+import { Button, HelpTip, IconButton } from './Primitives';
 
 type EditMode = 'move' | 'trim-start' | 'trim-end';
 interface ClipGesture {
@@ -295,6 +295,9 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
       <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-ink-700 px-3 py-2">
         <div className="flex items-center gap-2">
           <span className="section-label text-ink-300">Arrangement timeline</span>
+          <HelpTip title="How to use the timeline" steps={['Drag a clip to move it in time. Drag it onto another track to move it there.', 'Drag either edge to trim the clip. Trimming the start preserves the source audio offset.', 'Use the ruler to move the playhead, then press Split to cut at that position.', 'Select a clip to edit its gain and fade lengths. Use the grid and snap controls for rhythmic placement.']}>
+            The timeline is where you arrange recordings and stems. Edits are non-destructive and can be undone.
+          </HelpTip>
           <label className="flex items-center gap-1 font-mono text-2xs text-ink-500">
             Tempo
             <input
@@ -336,6 +339,7 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
               <option value="quarter">1/4 beat</option>
             </select>
           </label>
+          <HelpTip title="Snap to grid">When enabled, clip moves and trims align to the selected bar or beat division. Turn it off for free timing.</HelpTip>
           <IconButton active={snapEnabled} title="Toggle snap to grid" onClick={() => setSnapEnabled((value) => !value)}>
             Snap {snapEnabled ? 'on' : 'off'}
           </IconButton>
