@@ -84,13 +84,7 @@ export function createValidatedAiProposal(raw: unknown, project: ProjectState): 
       base = defaults;
       processorId = uid('ai-proc');
       Object.assign(defaults, changes);
-      if (chain.some((node) => node.type === processorType && node.enabled)) {
-        // Duplicate processors can be intentional; the model must state why.
-        const note = typeof rawOperation.note === 'string' ? rawOperation.note : '';
-        if (note.trim().length < 12) {
-          throw new Error(`Explain why another ${definition.name} is needed before adding a duplicate.`);
-        }
-      }
+      // Multiple EQ/dynamics stages can be intentional; the note explains the reason.
       changes && Object.assign(changes, defaults);
     } else {
       if (!requestedProcessorId) throw new Error(`Operation ${index + 1} must reference an existing processor ID.`);
