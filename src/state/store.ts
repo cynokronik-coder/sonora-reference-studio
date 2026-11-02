@@ -258,6 +258,21 @@ function syncEngine(project: ProjectState, buffers: Record<string, AssetBuffer>)
   }, 45);
 }
 
+function parseAssistantToolArguments(value: unknown): Record<string, unknown> {
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      throw new Error('The AI returned invalid tool arguments.');
+    }
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error('The AI returned invalid tool arguments.');
+  }
+  return parsed as Record<string, unknown>;
+}
+
 function emptyProject(): ProjectState {
   const project = newProject('Untitled project', 48000);
   return project;
@@ -1061,8 +1076,8 @@ export const useApp = create<AppState>((set, get) => ({
         for (const call of analysisCalls) {
           let output: Record<string, unknown>;
           try {
-            const args = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : call.arguments;
-            const assetId = typeof args?.assetId === 'string' ? args.assetId : '';
+            const args = parseAssistantToolArguments(call.arguments);
+            const assetId = typeof args.assetId === 'string' ? args.assetId : '';
             const state = get();
             const asset = state.assets.find((item) => item.id === assetId);
             if (!asset) throw new Error('That asset is not part of the current project.');
@@ -1104,7 +1119,7 @@ export const useApp = create<AppState>((set, get) => ({
           for (const call of proposalCalls) {
             let output: Record<string, unknown>;
             try {
-              const args = typeof call.arguments === 'string' ? JSON.parse(call.arguments) : call.arguments;
+              const args = parseAssistantToolArguments(call.arguments);
               const currentProject = get().project;
               if (!currentProject) throw new Error('No project is open.');
               const proposal = createValidatedAiProposal(args, currentProject);
