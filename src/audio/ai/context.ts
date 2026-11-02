@@ -1,7 +1,7 @@
-import type { AnalysisReport } from './analysis/analyze';
-import type { MatchPlan } from './analysis/match';
-import { PROCESSOR_DEFINITIONS } from './dsp/registry';
-import type { AudioAssetMeta, ProjectState } from './model/types';
+import type { AnalysisReport } from '../analysis/analyze';
+import type { MatchPlan } from '../analysis/match';
+import { PROCESSOR_DEFINITIONS } from '../dsp/registry';
+import type { AudioAssetMeta, ProjectState } from '../model/types';
 
 interface AssistantContextOptions {
   project: ProjectState;
