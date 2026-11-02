@@ -452,4 +452,66 @@ export function useFilePicker(): { open: (accept: string, multiple: boolean, onF
   };
 }
 
+
+/** Contextual help: a compact explanation that opens exactly where the user needs it. */
+export function HelpTip({
+  title,
+  children,
+  steps,
+  label = 'Explain this',
+}: {
+  title: string;
+  children: ReactNode;
+  steps?: string[];
+  label?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const id = useRef(`help-${Math.random().toString(36).slice(2, 9)}`).current;
+  return (
+    <span className="relative inline-flex align-middle">
+      <button
+        type="button"
+        aria-label={label}
+        aria-expanded={open}
+        aria-controls={id}
+        onClick={() => setOpen((value) => !value)}
+        className="focus-ring inline-flex h-5 w-5 items-center justify-center rounded-full border border-ink-600 bg-ink-850 text-[10px] font-semibold text-ink-300 transition-colors hover:border-accent/50 hover:text-accent"
+      >
+        ?
+      </button>
+      {open && (
+        <span
+          id={id}
+          role="dialog"
+          aria-label={title}
+          className="absolute right-0 top-7 z-50 block w-[min(300px,85vw)] rounded-xl border border-ink-600 bg-[#11151b] p-3 text-left shadow-2xl shadow-black/60"
+        >
+          <span className="flex items-start justify-between gap-3">
+            <span className="text-xs font-semibold text-ink-100">{title}</span>
+            <button
+              type="button"
+              aria-label="Close explanation"
+              onClick={() => setOpen(false)}
+              className="rounded px-1 text-ink-500 hover:text-ink-100"
+            >
+              ×
+            </button>
+          </span>
+          <span className="mt-2 block text-2xs leading-relaxed text-ink-300">{children}</span>
+          {steps && steps.length > 0 && (
+            <span className="mt-2 block space-y-1.5 border-t border-ink-700 pt-2">
+              {steps.map((step, index) => (
+                <span key={step} className="flex gap-2 text-2xs leading-relaxed text-ink-400">
+                  <span className="font-mono text-accent">{String(index + 1).padStart(2, '0')}</span>
+                  <span>{step}</span>
+                </span>
+              ))}
+            </span>
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
 export const AUDIO_ACCEPT = '.wav,.aif,.aiff,.flac,.mp3,.m4a,.aac,.ogg,.oga,audio/*';
