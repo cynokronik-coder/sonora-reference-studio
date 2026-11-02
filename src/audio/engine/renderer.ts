@@ -290,7 +290,7 @@ export class ProjectRenderer {
       const sampleFrom = Math.round((from - startSec) * this.sr);
       const sampleTo = Math.min(n, Math.round((to - startSec) * this.sr));
       const gain = dbToGain(clip.gainDb);
-      const srcOffset = clip.offset * (asset.sampleRate / this.sr);
+      const srcOffset = clip.offset * asset.sampleRate;
       for (let i = sampleFrom; i < sampleTo; i++) {
         const timelineTime = startSec + i / this.sr;
         const local = timelineTime - clipStart;
@@ -299,7 +299,7 @@ export class ProjectRenderer {
         if (clip.fadeOut > 0 && clip.duration - local < clip.fadeOut) {
           fade = Math.min(fade, (clip.duration - local) / clip.fadeOut);
         }
-        const srcIndex = Math.floor((srcOffset + local * (asset.sampleRate / this.sr)) * 1);
+        const srcIndex = Math.floor(srcOffset + local * asset.sampleRate);
         if (srcIndex < 0 || srcIndex >= asset.length) continue;
         L[i] += asset.L[srcIndex] * gain * fade;
         R[i] += asset.R[srcIndex] * gain * fade;

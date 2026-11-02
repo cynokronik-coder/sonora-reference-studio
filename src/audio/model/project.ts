@@ -31,7 +31,13 @@ export function trackHasSolo(project: ProjectState): boolean {
 }
 
 export function allAssetIds(project: ProjectState): string[] {
-  return [...project.targetAssetIds, ...project.referenceAssetIds];
+  return [
+    ...new Set([
+      ...project.targetAssetIds,
+      ...project.referenceAssetIds,
+      ...project.tracks.flatMap((track) => track.clips.map((clip) => clip.assetId)),
+    ]),
+  ];
 }
 
 export function trackAssetIds(track: TrackState): string[] {

@@ -79,8 +79,9 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         break;
       }
       case 'play': {
-        const from = typeof message.position === 'number' ? message.position : this.position;
-        this.position = Math.max(0, Math.round(from));
+        const fromSeconds =
+          typeof message.position === 'number' ? message.position : this.position / sampleRate;
+        this.position = Math.max(0, Math.round(fromSeconds * sampleRate));
         this.renderer.reset();
         this.playing = true;
         break;
