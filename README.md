@@ -35,6 +35,12 @@ No API keys, accounts or external services are required. Everything runs in the 
 
 ## What is actually implemented
 
+### Arrangement timeline
+- Multitrack arrangement view with tempo-based bar/beat ruler and adjustable zoom.
+- Snap-to-grid controls (bar, beat, half-beat and quarter-beat), fit-to-session zoom and a seekable playhead.
+- Select, move, trim, split, duplicate and delete clips; edit clip gain and fade-in/fade-out lengths.
+- Waveform previews, per-track mute/solo and project-persisted clip edits with undo/redo.
+
 ### Audio I/O and projects
 - Multichannel-aware import of WAV, AIFF, FLAC, MP3, AAC/M4A and OGG via the browser decoder.
 - Header parsing for WAV, AIFF and FLAC to display truthful sample rate, bit depth and channel count.
@@ -45,9 +51,9 @@ No API keys, accounts or external services are required. Everything runs in the 
 - Non-destructive clips: start, offset, gain, fades, split, delete.
 
 ### Measurement (no invented numbers)
-- ITU-R BS.1770-4 integrated, momentary and short-term loudness, with absolute/relative gating.
+- ITU-R BS.1770-4 integrated, momentary and short-term loudness, with absolute/relative gating and independent per-channel K-weighting filter state.
 - Loudness range (EBU Tech 3342 style), sample peak, 4x-oversampled true peak, RMS, crest factor, PLR.
-- 31-band 1/3-octave spectrum, centroid, 85% roll-off, spectral tilt, flatness, resonance and buildup detection.
+- 31-band 1/3-octave stereo power spectrum, centroid, 85% roll-off, spectral tilt, flatness, resonance and buildup detection.
 - Stereo width (side/mid), correlation, L/R balance, per-band width/correlation, mono-compatibility scoring.
 - Tempo from spectral-flux autocorrelation, onset density, punch score, and estimated section boundaries/labels.
 
