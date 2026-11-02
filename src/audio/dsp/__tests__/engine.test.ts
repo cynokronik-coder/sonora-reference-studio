@@ -9,6 +9,7 @@ import { MultibandCompressor } from '../processors/multiband';
 import { createDefaultParams, PROCESSOR_DEFINITIONS } from '../registry';
 import { Lr4Crossover } from '../crossover';
 import { analyzeLoudness } from '../../analysis/loudness';
+import { accumulateSpectrum, createSpectrumAccum, finalizeSpectrum } from '../../analysis/spectrum';
 import { analyzeStereo } from '../../analysis/stereo';
 import { analyzeRhythm } from '../../analysis/rhythm';
 import { encodeWav, parseWavHeader, parseAiffHeader, encodeAiff, detectHeader } from '../../io/wav';
@@ -221,6 +222,38 @@ describe('analysis', () => {
     expect(report.integratedLufs).toBeLessThan(-18.5);
     expect(report.truePeakDb).toBeGreaterThanOrEqual(report.samplePeakDb - 0.2);
     expect(report.samplePeakDb).toBeCloseTo(-20, 0);
+  });
+
+  it('keeps K-weighting state independent between stereo channels', () => {
+    const { L, R } = stereoBuffer(
+      3,
+      (t) => 0.18 * Math.sin(2 * Math.PI * 997 * t),
+      (t) => 0.035 * Math.sin(2 * Math.PI * 310 * t + 0.3),
+    );
+    const normal = analyzeLoudness(L, R, SR);
+    const swapped = analyzeLoudness(R, L, SR);
+    expect(normal.integratedLufs).toBeCloseTo(swapped.integratedLufs, 5);
+    expect(normal.truePeakDb).toBeCloseTo(swapped.truePeakDb, 5);
+  });
+
+  it('does not lose spectral energy when stereo channels are out of phase', () => {
+    const correlated = stereoBuffer(1, (t) => 0.2 * Math.sin(2 * Math.PI * 1000 * t));
+    const inverted = stereoBuffer(
+      1,
+      (t) => 0.2 * Math.sin(2 * Math.PI * 1000 * t),
+      (t) => -0.2 * Math.sin(2 * Math.PI * 1000 * t),
+    );
+    const measure = (L: Float32Array, R: Float32Array) => {
+      const accum = createSpectrumAccum(SR);
+      accumulateSpectrum(accum, L, R);
+      return finalizeSpectrum(accum);
+    };
+    const a = measure(correlated.L, correlated.R);
+    const b = measure(inverted.L, inverted.R);
+    const bandA = a.bands.find((band) => band.center === 1000)!;
+    const bandB = b.bands.find((band) => band.center === 1000)!;
+    expect(Number.isFinite(bandB.db)).toBe(true);
+    expect(bandB.db).toBeCloseTo(bandA.db, 3);
   });
 
   it('detects correlated and anti-correlated stereo', () => {
