@@ -1,0 +1,160 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --grid: rgba(255, 255, 255, 0.035);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #07080a;
+  color: #dde3ea;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+::selection {
+  background: rgba(200, 241, 105, 0.25);
+}
+
+/* Thin, dark scrollbars that match the console aesthetic. */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: #0b0c0f;
+}
+::-webkit-scrollbar-thumb {
+  background: #2b313a;
+  border-radius: 6px;
+  border: 2px solid #0b0c0f;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a424d;
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: 3px;
+  background: #2b313a;
+  border-radius: 2px;
+}
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 13px;
+  width: 13px;
+  margin-top: -5px;
+  border-radius: 999px;
+  background: #dde3ea;
+  border: 2px solid #0b0c0f;
+  box-shadow: 0 0 0 1px #3a424d;
+  transition: background 120ms ease;
+}
+input[type='range']:hover::-webkit-slider-thumb {
+  background: #c8f169;
+}
+input[type='range']::-moz-range-track {
+  height: 3px;
+  background: #2b313a;
+  border-radius: 2px;
+}
+input[type='range']::-moz-range-thumb {
+  height: 11px;
+  width: 11px;
+  border-radius: 999px;
+  background: #dde3ea;
+  border: 2px solid #0b0c0f;
+}
+input[type='range']:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 3px rgba(200, 241, 105, 0.25);
+}
+
+.num-input {
+  -moz-appearance: textfield;
+}
+.num-input::-webkit-outer-spin-button,
+.num-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.panel {
+  background: linear-gradient(180deg, rgba(21, 24, 29, 0.92), rgba(11, 12, 15, 0.92));
+  border: 1px solid #20252c;
+  border-radius: 8px;
+}
+
+.hairline {
+  border-color: #20252c;
+}
+
+.section-label {
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 9.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #5a6472;
+}
+
+.wave-grid {
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 100% 25%, 80px 100%;
+}
+
+.grain {
+  background-image: radial-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 4px 4px;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.focus-ring:focus-visible {
+  outline: 1px solid #c8f169;
+  outline-offset: 2px;
+}
+
+@keyframes pulse-soft {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+.pulse-soft {
+  animation: pulse-soft 1.8s ease-in-out infinite;
+}
