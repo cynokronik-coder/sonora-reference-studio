@@ -337,9 +337,9 @@ export default function Learn() {
             </Panel>
             <Panel title="Quick tools">
               <div className="space-y-2">
-                <Button block onClick={() => openWorkspace('studio')}>Open Mixing Studio</Button>
-                <Button block onClick={() => openWorkspace('reference')}>Open Reference Match</Button>
-                <Button block onClick={() => openWorkspace('mastering')}>Open Mastering</Button>
+                <Button onClick={() => openWorkspace('studio')}>Open Mixing Studio</Button>
+                <Button onClick={() => openWorkspace('reference')}>Open Reference Match</Button>
+                <Button onClick={() => openWorkspace('mastering')}>Open Mastering</Button>
               </div>
             </Panel>
             <Panel title="Remember">
