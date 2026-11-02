@@ -34,6 +34,7 @@ export type Screen =
   | 'presets'
   | 'analysis'
   | 'export'
+  | 'learn'
   | 'settings';
 
 export type Mode = 'beginner' | 'advanced';
