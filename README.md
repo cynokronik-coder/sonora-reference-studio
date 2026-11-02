@@ -135,7 +135,7 @@ decoding and the visual UI have not been exercised end-to-end. The DSP they call
 - **No accounts or collaboration.** The app is local-first: projects and audio live in this browser. There is no
   server-side user table, sharing, comments or access-control layer in this build. See
   [ARCHITECTURE.md](ARCHITECTURE.md) for the proposed deployment model.
-- **No external LLM control.** The assistant is deterministic and offline by design.
+- **No external DAW or plugin control.** The assistant can propose changes only to Sonora's own supported processors; connected AI is optional and all proposals require user approval.
 - **No batch processing, DAW session import or hardware inserts.**
 - **Dynamic range cannot be expanded upward.** If the source is already over-compressed, the matcher reports this rather
   than claiming an expander can restore lost transients.
