@@ -43,6 +43,7 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
   const [pixelsPerSecond, setPixelsPerSecond] = useState(76);
   const [tempoDraft, setTempoDraft] = useState(String(tempo));
   const [snapEnabled, setSnapEnabled] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [grid, setGrid] = useState<'bar' | 'beat' | 'half' | 'quarter'>('beat');
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
   const [gesture, setGesture] = useState<ClipGesture | null>(null);
@@ -292,92 +293,92 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
 
   return (
     <section className="flex min-h-[330px] min-w-0 flex-1 flex-col bg-ink-950">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-ink-700 px-3 py-2">
-        <div className="flex items-center gap-2">
-          <span className="section-label text-ink-300">Arrangement timeline</span>
-          <HelpTip title="How to use the timeline" steps={['Drag a clip to move it in time. Drag it onto another track to move it there.', 'Drag either edge to trim the clip. Trimming the start preserves the source audio offset.', 'Use the ruler to move the playhead, then press Split to cut at that position.', 'Select a clip to edit its gain and fade lengths. Use the grid and snap controls for rhythmic placement.']}>
-            The timeline is where you arrange recordings and stems. Edits are non-destructive and can be undone.
-          </HelpTip>
-          <label className="flex items-center gap-1 font-mono text-2xs text-ink-500">
-            Tempo
-            <input
-              aria-label="Project tempo in beats per minute"
-              type="number"
-              min="30"
-              max="300"
-              step="0.1"
-              value={tempoDraft}
-              onChange={(event) => setTempoDraft(event.target.value)}
-              onBlur={() => {
-                const parsed = Number(tempoDraft);
-                const nextTempo = tempoDraft.trim() && Number.isFinite(parsed)
-                  ? Math.max(30, Math.min(300, parsed))
-                  : project.tempo;
-                setTempoDraft(String(nextTempo));
-                useApp.getState().mutate((state) => { state.tempo = nextTempo; });
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter') event.currentTarget.blur();
-              }}
-              className="w-14 rounded border border-ink-700 bg-ink-850 px-1 py-0.5 text-right text-2xs text-ink-100"
-            />
-            BPM
-          </label>
-          <span className="font-mono text-2xs text-ink-600">{project.tracks.length} tracks</span>
-        </div>
-        <div className="flex flex-wrap items-center gap-1.5">
-          <label className="flex items-center gap-1 text-2xs text-ink-500">
-            Grid
-            <select
-              value={grid}
-              onChange={(event) => setGrid(event.target.value as typeof grid)}
-              className="rounded border border-ink-700 bg-ink-850 px-1.5 py-1 text-2xs text-ink-200"
-            >
-              <option value="bar">Bar</option>
-              <option value="beat">Beat</option>
-              <option value="half">1/2 beat</option>
-              <option value="quarter">1/4 beat</option>
-            </select>
-          </label>
-          <HelpTip title="Snap to grid">When enabled, clip moves and trims align to the selected bar or beat division. Turn it off for free timing.</HelpTip>
-          <IconButton active={snapEnabled} title="Toggle snap to grid" onClick={() => setSnapEnabled((value) => !value)}>
-            Snap {snapEnabled ? 'on' : 'off'}
-          </IconButton>
-          <label className="flex items-center gap-1 text-2xs text-ink-500">
-            Zoom
-            <input
-              aria-label="Timeline zoom"
-              type="range"
-              min="24"
-              max="180"
-              value={pixelsPerSecond}
-              onChange={(event) => setPixelsPerSecond(Number(event.target.value))}
-              className="w-20"
-            />
-          </label>
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={() => {
-              const availableWidth = Math.max(320, (contentRef.current?.clientWidth ?? 640) - TRACK_HEADER_WIDTH);
-              setPixelsPerSecond(Math.max(24, Math.min(180, availableWidth / Math.max(1, duration))));
-            }}
-          >
-            Fit
-          </Button>
-          <Button
-            size="sm"
-            onClick={() => {
-              useApp.getState().addTrack('audio', 'Audio ' + (project.tracks.length + 1));
-              const nextTrack = useApp.getState().project?.tracks.at(-1);
-              if (nextTrack) activateTrack(nextTrack.id);
-            }}
-          >
-            + Track
-          </Button>
-          <Button size="sm" variant="ghost" disabled={!selectedClip} onClick={duplicateSelected}>Duplicate</Button>
-          <Button size="sm" variant="ghost" disabled={!selectedClip} onClick={splitSelected}>Split</Button>
-          <Button size="sm" variant="danger" disabled={!selectedClip} onClick={deleteSelected}>Delete</Button>
+      <div className="relative z-20 shrink-0 border-b border-ink-700 px-3 py-2">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="section-label text-ink-300">Arrangement</span>
+            <HelpTip title="Edit your arrangement" steps={['Drag a clip to move it in time or onto another track.', 'Drag a clip edge to trim it.', 'Select a clip to edit gain and fades below the timeline.', 'Use the playhead and Split tool to divide a clip.']}>
+              The arrangement is non-destructive. You can move, trim, split and duplicate clips without changing the original audio file.
+            </HelpTip>
+            <span className="hidden font-mono text-2xs text-ink-600 sm:inline">{project.tracks.length} tracks · {selectedClip ? '1 clip selected' : 'No clip selected'}</span>
+          </div>
+          <div className="relative">
+            <Button size="sm" variant={toolsOpen ? 'secondary' : 'ghost'} onClick={() => setToolsOpen((open) => !open)}>
+              Timeline tools {toolsOpen ? '↑' : '↓'}
+            </Button>
+            {toolsOpen && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-[min(390px,calc(100vw-24px))] rounded-xl border border-ink-600 bg-[#11151b] p-3 shadow-2xl shadow-black/60">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold text-ink-100">Arrangement tools</p>
+                  <button type="button" onClick={() => setToolsOpen(false)} aria-label="Close timeline tools" className="rounded px-1 text-ink-500 hover:text-ink-100">×</button>
+                </div>
+                <div className="mt-3 grid grid-cols-2 gap-3">
+                  <label className="text-2xs text-ink-500">
+                    Tempo
+                    <span className="mt-1 flex items-center gap-1 rounded border border-ink-700 bg-ink-900 px-2 py-1">
+                      <input
+                        aria-label="Project tempo in beats per minute"
+                        type="number"
+                        min="30"
+                        max="300"
+                        step="0.1"
+                        value={tempoDraft}
+                        onChange={(event) => setTempoDraft(event.target.value)}
+                        onBlur={() => {
+                          const parsed = Number(tempoDraft);
+                          const nextTempo = tempoDraft.trim() && Number.isFinite(parsed) ? Math.max(30, Math.min(300, parsed)) : project.tempo;
+                          setTempoDraft(String(nextTempo));
+                          useApp.getState().mutate((state) => { state.tempo = nextTempo; });
+                        }}
+                        onKeyDown={(event) => { if (event.key === 'Enter') event.currentTarget.blur(); }}
+                        className="w-full bg-transparent text-right text-xs text-ink-100 outline-none"
+                      />
+                      <span>BPM</span>
+                    </span>
+                  </label>
+                  <label className="text-2xs text-ink-500">
+                    Snap grid
+                    <select
+                      value={grid}
+                      onChange={(event) => setGrid(event.target.value as typeof grid)}
+                      className="mt-1 w-full rounded border border-ink-700 bg-ink-900 px-2 py-1.5 text-xs text-ink-100"
+                    >
+                      <option value="bar">Bar</option>
+                      <option value="beat">Beat</option>
+                      <option value="half">Half beat</option>
+                      <option value="quarter">Quarter beat</option>
+                    </select>
+                  </label>
+                  <div className="flex items-center justify-between rounded-lg border border-ink-700 bg-ink-900/70 px-2 py-2">
+                    <div>
+                      <p className="text-2xs text-ink-200">Snap to grid</p>
+                      <p className="text-[9px] text-ink-600">Align edits to the grid</p>
+                    </div>
+                    <IconButton active={snapEnabled} title="Toggle snap to grid" onClick={() => setSnapEnabled((value) => !value)}>{snapEnabled ? 'On' : 'Off'}</IconButton>
+                  </div>
+                  <label className="rounded-lg border border-ink-700 bg-ink-900/70 px-2 py-2 text-2xs text-ink-500">
+                    Zoom
+                    <input aria-label="Timeline zoom" type="range" min="24" max="180" value={pixelsPerSecond} onChange={(event) => setPixelsPerSecond(Number(event.target.value))} className="mt-2 w-full" />
+                  </label>
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-ink-700 pt-3">
+                  <Button size="sm" variant="ghost" onClick={() => {
+                    const availableWidth = Math.max(320, (contentRef.current?.clientWidth ?? 640) - TRACK_HEADER_WIDTH);
+                    setPixelsPerSecond(Math.max(24, Math.min(180, availableWidth / Math.max(1, duration))));
+                  }}>Fit timeline</Button>
+                  <Button size="sm" onClick={() => {
+                    useApp.getState().addTrack('audio', 'Audio ' + (project.tracks.length + 1));
+                    const nextTrack = useApp.getState().project?.tracks.at(-1);
+                    if (nextTrack) activateTrack(nextTrack.id);
+                    setToolsOpen(false);
+                  }}>＋ Track</Button>
+                  <Button size="sm" variant="ghost" disabled={!selectedClip} onClick={() => { duplicateSelected(); setToolsOpen(false); }}>Duplicate</Button>
+                  <Button size="sm" variant="ghost" disabled={!selectedClip} onClick={() => { splitSelected(); setToolsOpen(false); }}>Split</Button>
+                  <Button size="sm" variant="danger" disabled={!selectedClip} onClick={() => { deleteSelected(); setToolsOpen(false); }}>Delete</Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
