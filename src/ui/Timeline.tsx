@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useApp } from '../state/store';
 import { uid } from '../audio/model/defaults';
@@ -41,6 +41,7 @@ export function Timeline() {
   const transportDuration = useApp((state) => state.transport.duration);
   const tempo = useApp((state) => state.project?.tempo ?? 120);
   const [pixelsPerSecond, setPixelsPerSecond] = useState(76);
+  const [tempoDraft, setTempoDraft] = useState(String(tempo));
   const [snapEnabled, setSnapEnabled] = useState(true);
   const [grid, setGrid] = useState<'bar' | 'beat' | 'half' | 'quarter'>('beat');
   const [selectedClipId, setSelectedClipId] = useState<string | null>(null);
@@ -59,6 +60,10 @@ export function Timeline() {
   const selectedClip = project?.tracks.flatMap((track) => track.clips.map((clip) => ({ track, clip })))
     .find((item) => item.clip.id === selectedClipId);
   const referenceNames = useMemo(() => new Map(assets.map((asset) => [asset.id, asset.name])), [assets]);
+
+  useEffect(() => {
+    setTempoDraft(String(tempo));
+  }, [tempo]);
 
   if (!project) return null;
 
@@ -258,10 +263,18 @@ export function Timeline() {
               min="30"
               max="300"
               step="0.1"
-              value={project.tempo}
-              onChange={(event) => {
-                const nextTempo = Math.max(30, Math.min(300, Number(event.target.value) || 120));
+              value={tempoDraft}
+              onChange={(event) => setTempoDraft(event.target.value)}
+              onBlur={() => {
+                const parsed = Number(tempoDraft);
+                const nextTempo = tempoDraft.trim() && Number.isFinite(parsed)
+                  ? Math.max(30, Math.min(300, parsed))
+                  : project.tempo;
+                setTempoDraft(String(nextTempo));
                 useApp.getState().mutate((state) => { state.tempo = nextTempo; });
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') event.currentTarget.blur();
               }}
               className="w-14 rounded border border-ink-700 bg-ink-850 px-1 py-0.5 text-right text-2xs text-ink-100"
             />
