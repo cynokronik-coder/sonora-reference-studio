@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../state/store';
-import { Badge, Button, InfoRow, Panel, ParamSlider, Select, Toggle } from '../ui/Primitives';
+import { Badge, Button, HelpTip, InfoRow, Panel, ParamSlider, Select, Toggle } from '../ui/Primitives';
 import { Rack } from '../ui/Rack';
 import { GainReductionMeter, LevelMeter, LoudnessChart, useMeters } from '../ui/viz';
 import { TransportBar } from '../ui/Mixer';
@@ -30,7 +30,10 @@ export default function Mastering() {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-ink-700 px-4 py-2">
         <div className="flex items-center gap-2">
-          <h1 className="text-sm text-ink-100">Mastering</h1>
+          <h1 className="text-sm font-semibold text-ink-100">Mastering</h1>
+          <HelpTip title="What happens during mastering?" steps={['Balance the overall tone.', 'Control peaks and dynamics.', 'Check loudness against your delivery goal.', 'Render and measure the finished audio.']}>
+            Mastering processes the complete mix. It cannot independently fix a vocal or instrument inside a stereo file; use stems and the Mixing Studio when individual elements need changes.
+          </HelpTip>
           <Badge tone="accent">{master.processors.length} processors</Badge>
           <Badge>target {targetLufs.toFixed(1)} LUFS / {targetTp.toFixed(1)} dBTP</Badge>
         </div>
@@ -48,7 +51,7 @@ export default function Mastering() {
       <div className="flex min-h-0 flex-1">
         <main className="min-w-0 flex-1 overflow-y-auto">
           <div className="grid gap-3 p-3 lg:grid-cols-[1fr_320px]">
-            <Panel title="Master metering" subtitle="Peak and gain reduction come from the engine. Loudness is measured from an offline render.">
+            <Panel title="Master metering" subtitle="Peak and gain reduction come from the engine. Loudness is measured from an offline render." right={<HelpTip title="Understanding the meters">Peak shows the signal level. Gain reduction shows how much a dynamics processor is turning the signal down. LUFS describes perceived loudness; dBTP measures estimated reconstructed peaks.</HelpTip>}>
               <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
                 <div className="flex gap-2">
                   <div className="text-center">
@@ -92,7 +95,7 @@ export default function Mastering() {
             </Panel>
 
             <div className="space-y-3">
-              <Panel title="Delivery target">
+              <Panel title="Delivery target" right={<HelpTip title="Choosing a delivery target">These are starting points, not compulsory loudness rules. Follow the current requirements of your distributor or platform, and preserve dynamics when they are part of your sound.</HelpTip>}>
                 <Select
                   label="Starting point"
                   value={targetPreset}
@@ -113,7 +116,7 @@ export default function Mastering() {
                 </p>
               </Panel>
 
-              <Panel title="A/B comparison">
+              <Panel title="A/B comparison" right={<HelpTip title="Why match listening volume?">A louder master can seem better even when it is more distorted. Loudness-matched listening compensates monitor volume only; it does not alter the exported audio.</HelpTip>}>
                 <div className="grid grid-cols-2 gap-1.5">
                   {['A', 'B', 'C', 'D'].map((label) => {
                     const slot = abSlots.find((s) => s.label === label);
