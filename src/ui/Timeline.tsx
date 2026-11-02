@@ -192,11 +192,17 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
   const onPointerUp = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!gesture || gesture.pointerId !== event.pointerId) return;
     const finalGesture = gesture;
-    if (
+    const hoveredTrack = finalGesture.mode === 'move'
+      ? document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-timeline-track]') as HTMLElement | null
+      : null;
+    const destinationTrackId = hoveredTrack?.dataset.timelineTrack;
+    const movesToAnotherTrack = Boolean(destinationTrackId && destinationTrackId !== finalGesture.trackId);
+    const changesClipTiming =
       Math.abs(finalGesture.nextStart - finalGesture.initialStart) > 0.0001 ||
       Math.abs(finalGesture.nextDuration - finalGesture.initialDuration) > 0.0001 ||
-      Math.abs(finalGesture.nextOffset - finalGesture.initialOffset) > 0.0001
-    ) {
+      Math.abs(finalGesture.nextOffset - finalGesture.initialOffset) > 0.0001;
+
+    if (changesClipTiming || movesToAnotherTrack) {
       useApp.getState().mutate((state) => {
         const sourceTrack = state.tracks.find((item) => item.id === finalGesture.trackId);
         const clipIndex = sourceTrack?.clips.findIndex((item) => item.id === finalGesture.clipId) ?? -1;
@@ -205,12 +211,6 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
         clip.start = finalGesture.nextStart;
         clip.duration = finalGesture.nextDuration;
         clip.offset = finalGesture.nextOffset;
-        const hoveredTrack = document
-          .elementFromPoint(event.clientX, event.clientY)
-          ?.closest('[data-timeline-track]') as HTMLElement | null;
-        const destinationTrackId = finalGesture.mode === 'move'
-          ? hoveredTrack?.dataset.timelineTrack
-          : undefined;
         if (destinationTrackId && destinationTrackId !== sourceTrack.id) {
           const destinationTrack = state.tracks.find((item) => item.id === destinationTrackId);
           if (destinationTrack) {
@@ -221,12 +221,7 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
       });
       refreshTransportDuration();
     }
-    if (finalGesture.mode === 'move') {
-      const hoveredTrack = document
-        .elementFromPoint(event.clientX, event.clientY)
-        ?.closest('[data-timeline-track]') as HTMLElement | null;
-      if (hoveredTrack?.dataset.timelineTrack) activateTrack(hoveredTrack.dataset.timelineTrack);
-    }
+    if (destinationTrackId) activateTrack(destinationTrackId);
     setGesture(null);
   };
 
