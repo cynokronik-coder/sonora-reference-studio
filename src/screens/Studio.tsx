@@ -1,13 +1,12 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../state/store';
-import { AUDIO_ACCEPT, Badge, Button, EmptyState, IconButton, Panel, Select, useFilePicker } from '../ui/Primitives';
+import { AUDIO_ACCEPT, Badge, Button, EmptyState, IconButton, Panel, useFilePicker } from '../ui/Primitives';
 import { Mixer, TransportBar, AssistantPanel } from '../ui/Mixer';
 import { Rack } from '../ui/Rack';
-import { Waveform, useMeters } from '../ui/viz';
+import { useMeters } from '../ui/viz';
 import { findTrack } from '../audio/model/project';
-import { uid } from '../audio/model/defaults';
-import type { ClipState, TrackKind } from '../audio/model/types';
-import { formatTime } from '../audio/dsp/util';
+import type { TrackKind } from '../audio/model/types';
+import { Timeline } from '../ui/Timeline';
 
 type Focus = { scope: 'master' | 'track' | 'bus'; id: string | null };
 
@@ -18,9 +17,7 @@ export default function Studio() {
   const [focus, setFocus] = useState<Focus>({ scope: 'master', id: null });
   const [rightTab, setRightTab] = useState<'rack' | 'assistant'>('rack');
   const meters = useMeters();
-  const position = useApp((s) => s.transport.position);
   const selectedProcessorId = useApp((s) => s.selectedProcessorId);
-  const selected = project ? findTrack(project, selectedTrackId) : undefined;
   const [newTrackKind, setNewTrackKind] = useState<TrackKind>('vocal');
 
   const effectiveFocus: Focus = useMemo(() => {
@@ -57,8 +54,6 @@ export default function Studio() {
         ? project.buses.find((b) => b.id === effectiveFocus.id)?.name ?? 'Bus'
         : focusTrack?.name ?? 'Track';
 
-  const duration = Math.max(0, ...project.tracks.flatMap((t) => t.clips.map((c) => c.start + c.duration)));
-  const selectedPeaks = selected?.clips[0] ? assetBuffers[selected.clips[0].assetId]?.peaks ?? null : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -188,80 +183,8 @@ export default function Studio() {
         </aside>
 
         <main className="flex min-w-0 flex-1 flex-col">
-          <div className="border-b border-ink-700 p-3">
-            {selected ? (
-              <>
-                <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-ink-100">{selected.name}</span>
-                    <Badge>{selected.kind}</Badge>
-                    <span className="font-mono text-2xs text-ink-500">{formatTime(duration)} session</span>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        const clip = selected.clips[0];
-                        const report = clip ? useApp.getState().analyses[clip.assetId] : null;
-                        if (report && clip) {
-                          useApp.getState().selectAsset(clip.assetId);
-                          useApp.getState().setScreen('analysis');
-                        } else if (clip) {
-                          useApp.getState().selectAsset(clip.assetId);
-                          void useApp.getState().analyzeAsset(clip.assetId);
-                        } else {
-                          useApp.getState().setToast('This track has no audio clip yet.');
-                        }
-                      }}
-                    >
-                      Analyse
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        const clip = selected.clips[0];
-                        if (!clip) return;
-                        const buffer = assetBuffers[clip.assetId];
-                        if (!buffer) return;
-                        let peak = 0;
-                        for (let i = 0; i < buffer.L.length; i++) {
-                          peak = Math.max(peak, Math.abs(buffer.L[i]), Math.abs(buffer.R[i]));
-                        }
-                        if (peak < 1e-9) return;
-                        useApp.getState().mutate((p) => {
-                          const track = p.tracks.find((t) => t.id === selected.id);
-                          const target = track?.clips.find((c) => c.id === clip.id);
-                          if (target) target.gainDb = -20 * Math.log10(peak);
-                        });
-                        useApp.setState({ toast: 'Clip gain normalised to 0 dBFS peak.' });
-                      }}
-                    >
-                      Normalise clip
-                    </Button>
-                  </div>
-                </div>
-                <Waveform
-                  peaks={selectedPeaks}
-                  duration={Math.max(selected.clips[0]?.duration ?? 0, 0.01)}
-                  position={position}
-                  onSeek={(seconds) => useApp.getState().seek(seconds)}
-                  height={110}
-                  color={selected.color}
-                />
-                <div className="mt-2 grid gap-1">
-                  {selected.clips.map((clip) => (
-                    <ClipRow key={clip.id} trackId={selected.id} clip={clip} />
-                  ))}
-                </div>
-              </>
-            ) : (
-              <div className="py-8 text-center">
-                <p className="text-xs text-ink-300">Select a track to see its timeline.</p>
-                <p className="mt-1 text-2xs text-ink-500">Import a song or stems to start.</p>
-              </div>
-            )}
+          <div className="min-h-[330px] shrink-0 border-b border-ink-700">
+            <Timeline />
           </div>
 
           <div className="min-h-0 flex-1 overflow-auto">
@@ -320,101 +243,3 @@ export default function Studio() {
   );
 }
 
-function ClipRow({ trackId, clip }: { trackId: string; clip: ClipState }) {
-  const project = useApp((s) => s.project)!;
-  const buffer = useApp((s) => s.assetBuffers[clip.assetId]);
-  const asset = useApp((s) => s.assets).find((a) => a.id === clip.assetId);
-  const update = (patch: Partial<ClipState>) => {
-    useApp.getState().mutate((p) => {
-      const track = p.tracks.find((t) => t.id === trackId);
-      const target = track?.clips.find((c) => c.id === clip.id);
-      if (target) Object.assign(target, patch);
-    });
-  };
-  const split = () => {
-    const time = useApp.getState().transport.position;
-    if (time <= clip.start + 0.05 || time >= clip.start + clip.duration - 0.05) return;
-    useApp.getState().mutate((p) => {
-      const track = p.tracks.find((t) => t.id === trackId);
-      if (!track) return;
-      const index = track.clips.findIndex((c) => c.id === clip.id);
-      if (index < 0) return;
-      const left = { ...clip, duration: time - clip.start, fadeOut: 0 };
-      const right = {
-        ...clip,
-        id: uid('clip'),
-        start: time,
-        offset: clip.offset + (time - clip.start),
-        duration: clip.duration - (time - clip.start),
-        fadeIn: 0,
-      };
-      track.clips.splice(index, 1, left, right);
-    });
-    useApp.setState({ toast: 'Clip split at playhead.' });
-    void project;
-  };
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded border border-ink-700 bg-ink-850/60 px-2 py-1.5">
-      <span className="min-w-0 flex-1 truncate text-2xs text-ink-200">{asset?.name ?? 'Missing asset'}</span>
-      <label className="flex items-center gap-1 text-2xs text-ink-500">
-        start
-        <input
-          type="number"
-          className="w-14 rounded border border-ink-700 bg-ink-900 px-1 font-mono text-2xs text-ink-200"
-          value={clip.start.toFixed(2)}
-          step={0.1}
-          onChange={(e) => update({ start: Math.max(0, Number(e.target.value)) })}
-        />
-      </label>
-      <label className="flex items-center gap-1 text-2xs text-ink-500">
-        len
-        <input
-          type="number"
-          className="w-14 rounded border border-ink-700 bg-ink-900 px-1 font-mono text-2xs text-ink-200"
-          value={clip.duration.toFixed(2)}
-          step={0.1}
-          onChange={(e) => update({ duration: Math.max(0.05, Number(e.target.value)) })}
-        />
-      </label>
-      <label className="flex items-center gap-1 text-2xs text-ink-500">
-        fade in
-        <input
-          type="number"
-          className="w-12 rounded border border-ink-700 bg-ink-900 px-1 font-mono text-2xs text-ink-200"
-          value={clip.fadeIn.toFixed(2)}
-          step={0.05}
-          onChange={(e) => update({ fadeIn: Math.max(0, Math.min(clip.duration, Number(e.target.value))) })}
-        />
-      </label>
-      <label className="flex items-center gap-1 text-2xs text-ink-500">
-        fade out
-        <input
-          type="number"
-          className="w-12 rounded border border-ink-700 bg-ink-900 px-1 font-mono text-2xs text-ink-200"
-          value={clip.fadeOut.toFixed(2)}
-          step={0.05}
-          onChange={(e) => update({ fadeOut: Math.max(0, Math.min(clip.duration, Number(e.target.value))) })}
-        />
-      </label>
-      <IconButton title="Split at playhead" onClick={split}>
-        split
-      </IconButton>
-      <IconButton
-        title="Delete clip"
-        onClick={() =>
-          useApp.getState().mutate((p) => {
-            const track = p.tracks.find((t) => t.id === trackId);
-            if (track) track.clips = track.clips.filter((c) => c.id !== clip.id);
-          })
-        }
-        className="!text-signal-red"
-      >
-        del
-      </IconButton>
-      {!buffer && <span className="text-2xs text-signal-amber">audio not loaded</span>}
-      {void project}
-    </div>
-  );
-}
-
-void Select;
