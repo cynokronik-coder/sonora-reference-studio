@@ -45,22 +45,24 @@ export function analyzeLoudness(
     };
   }
 
-  const sheen = (() => {
-    const bq = new Biquad();
-    bq.configure('highshelf', 1681.974450955533, 3.999843853973347, 0.7071752369554196, sampleRate);
-    return bq;
-  })();
-  const rlb = (() => {
-    const bq = new Biquad();
-    bq.configure('highpass', 38.13547087602444, 0, 0.5003270373238773, sampleRate);
-    return bq;
-  })();
+  // BS.1770 K-weighting must have independent filter histories per channel.
+  // Sharing a biquad between L and R interleaves their state and contaminates
+  // each channel's output, especially when the stereo channels differ.
+  const makeKWeighting = () => {
+    const shelf = new Biquad();
+    shelf.configure('highshelf', 1681.974450955533, 3.999843853973347, 0.7071752369554196, sampleRate);
+    const rlb = new Biquad();
+    rlb.configure('highpass', 38.13547087602444, 0, 0.5003270373238773, sampleRate);
+    return { shelf, rlb };
+  };
+  const leftWeighting = makeKWeighting();
+  const rightWeighting = makeKWeighting();
 
   const filteredL = new Float32Array(n);
   const filteredR = new Float32Array(n);
   for (let i = 0; i < n; i++) {
-    filteredL[i] = rlb.process(sheen.process(L[i]));
-    filteredR[i] = rlb.process(sheen.process(R[i]));
+    filteredL[i] = leftWeighting.rlb.process(leftWeighting.shelf.process(L[i]));
+    filteredR[i] = rightWeighting.rlb.process(rightWeighting.shelf.process(R[i]));
     if (onProgress && (i & 0xfffff) === 0) onProgress(i / n);
   }
 
