@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../state/store';
 import { Badge, Button, InfoRow, Panel, Select, Toggle } from '../ui/Primitives';
 import { getSonoraAiStatus, type SonoraAiStatus } from '../audio/ai/client';
@@ -25,10 +25,9 @@ export default function Settings() {
       .catch((error) => setAiStatusError(error instanceof Error ? error.message : 'AI server unavailable.'));
   };
 
-  useState(() => {
+  useEffect(() => {
     refreshAiStatus();
-    return undefined;
-  });
+  }, []);
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-4">
       <header>
