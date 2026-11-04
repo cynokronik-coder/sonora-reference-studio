@@ -124,11 +124,7 @@ export default function Studio() {
         </section>
 
         {assistantOpen && (
-          <aside className="hidden w-[330px] shrink-0 flex-col border-l border-violet-300/10 bg-[#0e0c19] xl:flex">
-            <div className="flex items-center justify-between border-b border-violet-300/10 px-3 py-3">
-              <div><p className="text-xs font-semibold text-white">✦ SONORA AI</p><p className="mt-0.5 text-[10px] text-slate-500">Your mixing assistant</p></div>
-              <span className="flex items-center gap-1.5 text-[10px] text-lime-300"><span className="h-1.5 w-1.5 rounded-full bg-lime-300" /> Ready</span>
-            </div>
+          <aside className="hidden w-[350px] shrink-0 flex-col border-l border-violet-300/10 bg-[#0e0c19] xl:flex">
             <div className="min-h-0 flex-1"><AssistantPanel /></div>
           </aside>
         )}
