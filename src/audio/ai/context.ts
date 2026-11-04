@@ -22,7 +22,7 @@ interface AssistantContextOptions {
 }
 
 function processorSummary(processors: ProjectState['master']['processors']) {
-  return processors.map((processor) => ({
+  return processors.map((processor: any) => ({
     id: processor.id,
     type: processor.type,
     enabled: processor.enabled,

@@ -10,3 +10,4 @@ dist/
 *.log
 .vite/
 coverage/
+/freebuff-sites-build/
