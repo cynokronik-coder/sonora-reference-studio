@@ -1084,7 +1084,8 @@ export const useApp = create<AppState>((set, get) => ({
             let report: AnalysisReport | undefined = state.analyses[assetId];
             if (!report) {
               if (++analysisRequests > 3) throw new Error('The assistant may request analysis for at most three assets per turn.');
-              report = await get().analyzeAsset(assetId) ?? undefined;
+              const analyzed = await get().analyzeAsset(assetId);
+              report = analyzed ?? undefined;
             }
             if (!report) throw new Error('Sonora could not produce an analysis report for that audio.');
             output = {
