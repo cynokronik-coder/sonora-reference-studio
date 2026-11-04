@@ -85,6 +85,8 @@ export default function Studio() {
         </div>
       </header>
 
+      <TransportBar />
+
       <div className="flex min-h-0 flex-1">
         <aside className="hidden w-[154px] shrink-0 flex-col border-r border-violet-300/10 bg-[#0d0b18] p-3 sm:flex">
           <p className="mb-2 px-2 text-[9px] font-semibold uppercase tracking-[.2em] text-slate-600">Workspace</p>
@@ -132,7 +134,6 @@ export default function Studio() {
         )}
       </div>
 
-      <div className="shrink-0 border-t border-violet-300/10 bg-[#0d0b18]"><TransportBar /></div>
 
       <Modal open={tracksOpen} onClose={() => setTracksOpen(false)} title="Session tracks" wide>
         <div className="grid gap-4 md:grid-cols-[1fr_260px]">
