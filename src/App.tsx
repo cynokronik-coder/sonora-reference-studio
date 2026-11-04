@@ -101,7 +101,7 @@ export default function App() {
   return (
     <div className="relative flex h-screen w-full overflow-hidden bg-[#080a0d] text-ink-100">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_70%_0%,rgba(200,241,105,.055),transparent_36%),radial-gradient(ellipse_at_5%_100%,rgba(90,209,230,.035),transparent_30%)]" />
-      <aside className="relative z-10 hidden w-[232px] shrink-0 flex-col border-r border-white/[.07] bg-[#0b0e12]/95 lg:flex">
+      <aside className={screen === 'studio' ? 'hidden' : 'relative z-10 hidden w-[232px] shrink-0 flex-col border-r border-white/[.07] bg-[#0b0e12]/95 lg:flex'}>
         <div className="flex items-center gap-3 border-b border-white/[.07] px-4 py-4">
           <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-accent/30 bg-gradient-to-br from-accent/20 to-signal-cyan/10 shadow-[0_0_28px_rgba(200,241,105,.08)]">
             <span className="font-mono text-lg text-accent">≋</span>
@@ -169,7 +169,7 @@ export default function App() {
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="relative z-10 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/[.07] bg-[#0b0e12]/85 px-4 backdrop-blur-xl">
+        <header className={screen === 'studio' ? 'hidden' : 'relative z-10 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/[.07] bg-[#0b0e12]/85 px-4 backdrop-blur-xl'}>
           <div className="flex min-w-0 items-center gap-2">
             <span className="lg:hidden font-mono text-accent">≋</span>
             <div className="min-w-0">
