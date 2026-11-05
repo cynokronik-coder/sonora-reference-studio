@@ -11,7 +11,9 @@ import Analysis from './screens/Analysis';
 import Export from './screens/Export';
 import Settings from './screens/Settings';
 import Learn from './screens/Learn';
-import { Button, EmptyState, HelpTip, Panel, ProgressBar } from './ui/Primitives';
+import { Button, EmptyState, Panel, ProgressBar } from './ui/Primitives';
+import TopNavigation from './ui/TopNavigation';
+import { GuidedTour } from './ui/GuidedTour';
 import { realtimeHost } from './audio/engine/realtime';
 
 const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boolean }[] = [
@@ -27,22 +29,12 @@ const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boo
   { screen: 'settings', label: 'Settings', glyph: '⚙' },
 ];
 
-const TITLES: Record<Screen, string> = {
-  dashboard: 'Dashboard',
-  projects: 'Projects',
-  studio: 'Mixing Studio',
-  reference: 'Reference Match Studio',
-  mastering: 'Mastering Studio',
-  presets: 'Preset Library',
-  analysis: 'Audio Analysis',
-  export: 'Export Center',
-  settings: 'Settings',
-  learn: 'Learn & Help',
-};
+
 
 export default function App() {
   const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError, storageError } = useApp();
   const [showLanding, setShowLanding] = useState(() => window.location.hash !== '#studio');
+  const [tourOpen, setTourOpen] = useState(false);
 
   const enterStudio = () => {
     window.location.hash = 'studio';
@@ -104,112 +96,24 @@ export default function App() {
   const blocked = active?.requiresProject && !project;
 
   return (
-    <div className="relative flex h-screen w-full overflow-hidden bg-[#080a0d] text-ink-100">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_70%_0%,rgba(200,241,105,.055),transparent_36%),radial-gradient(ellipse_at_5%_100%,rgba(90,209,230,.035),transparent_30%)]" />
-      <aside className={screen === 'studio' ? 'hidden' : 'relative z-10 hidden w-[232px] shrink-0 flex-col border-r border-white/[.07] bg-[#0b0e12]/95 lg:flex'}>
-        <div className="flex items-center gap-3 border-b border-white/[.07] px-4 py-4">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-accent/30 bg-gradient-to-br from-accent/20 to-signal-cyan/10 shadow-[0_0_28px_rgba(200,241,105,.08)]">
-            <span className="font-mono text-lg text-accent">≋</span>
-          </div>
-          <div className="min-w-0">
-            <div className="text-sm font-semibold tracking-[.16em] text-white">SONORA</div>
-            <div className="font-mono text-[9px] uppercase tracking-[.2em] text-ink-500">Reference Studio</div>
-          </div>
-        </div>
+    <div className="relative flex h-screen w-full overflow-hidden bg-sonora-canvas p-2 text-ink-100 sm:p-3 lg:p-4">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_82%_0%,rgba(117,69,234,.12),transparent_35%),radial-gradient(ellipse_at_50%_100%,rgba(137,87,255,.065),transparent_40%)]" />
 
-        <div className="px-4 pb-1 pt-4 font-mono text-[9px] uppercase tracking-[.2em] text-ink-600">Workspace</div>
-        <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-          {NAV.map((item) => {
-            const disabled = item.requiresProject && !project;
-            return (
-              <button
-                key={item.screen}
-                type="button"
-                disabled={disabled}
-                onClick={() => setScreen(item.screen)}
-                className={`focus-ring mb-1 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-xs transition-all disabled:cursor-not-allowed disabled:opacity-35 ${
-                  screen === item.screen
-                    ? 'border border-accent/20 bg-gradient-to-r from-accent/10 to-transparent text-accent shadow-[inset_2px_0_0_rgba(200,241,105,.85)]'
-                    : 'border border-transparent text-ink-400 hover:border-white/[.05] hover:bg-white/[.035] hover:text-ink-100'
-                }`}
-              >
-                <span className={`flex h-7 w-7 items-center justify-center rounded-lg border font-mono text-sm ${
-                  screen === item.screen ? 'border-accent/20 bg-accent/10 text-accent' : 'border-white/[.06] bg-white/[.025] text-ink-400'
-                }`}>{item.glyph}</span>
-                <span className="flex-1 truncate font-medium">{item.label}</span>
-                {screen === item.screen && <span className="h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_10px_rgba(200,241,105,.7)]" />}
-              </button>
-            );
-          })}
-        </nav>
 
-        <div className="border-t border-white/[.07] p-3">
-          {project ? (
-            <div className="mb-3 rounded-xl border border-white/[.07] bg-white/[.025] p-3">
-              <div className="truncate text-2xs text-ink-200" title={project.name}>{project.name}</div>
-              <div className="mt-0.5 font-mono text-2xs text-ink-500">
-                {project.sampleRate} Hz · {project.tracks.length} trk
-              </div>
-            </div>
-          ) : (
-            <div className="mb-2 text-2xs leading-relaxed text-ink-500">No project open.</div>
-          )}
-          <div className="flex rounded-xl border border-white/[.08] bg-black/20 p-1">
-            {(['beginner', 'advanced'] as const).map((option) => (
-              <button
-                key={option}
-                type="button"
-                onClick={() => setMode(option)}
-                className={`flex-1 rounded-lg px-2 py-1.5 text-2xs capitalize transition-colors ${mode === option ? 'bg-ink-700 text-white shadow' : 'text-ink-500 hover:text-ink-200'}`}
-              >
-                {option === 'advanced' ? 'engineer' : option}
-              </button>
-            ))}
-          </div>
-          <div className="mt-3 flex items-center justify-between font-mono text-[9px] uppercase tracking-wider text-ink-600">
-            <span className="flex items-center gap-1.5"><span className={`h-1.5 w-1.5 rounded-full ${realtimeHost.isReady ? 'bg-accent' : 'bg-ink-600'}`} />{realtimeHost.isReady ? 'Engine ready' : 'Engine idle'}</span>
-            <span>v0.1</span>
-          </div>
-        </div>
-      </aside>
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-white/[.12] bg-[#0D0D1B]/80 shadow-[0_24px_80px_rgba(0,0,0,.48)]">
+        <TopNavigation
+          screen={screen}
+          projectName={project?.name}
+          projectOpen={Boolean(project)}
+          mode={mode}
+          onModeChange={setMode}
+          onNavigate={setScreen}
+          onUndo={undo}
+          onRedo={redo}
+          onOpenLanding={openLanding}
+          onStartTour={() => setTourOpen(true)}
+        />
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className={screen === 'studio' ? 'hidden' : 'relative z-10 flex h-14 shrink-0 items-center justify-between gap-2 border-b border-white/[.07] bg-[#0b0e12]/85 px-4 backdrop-blur-xl'}>
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="lg:hidden font-mono text-accent">≋</span>
-            <div className="min-w-0">
-              <span className="block truncate text-xs font-semibold text-white">{TITLES[screen]}</span>
-              <span className="hidden truncate text-[9px] uppercase tracking-[.14em] text-ink-600 sm:block">{screen === 'dashboard' ? 'Your creative workspace' : 'Production environment'}</span>
-            </div>
-            {project && screen !== 'dashboard' && (
-              <>
-                <span className="text-ink-700">/</span>
-                <span className="hidden truncate text-2xs text-ink-500 sm:block">{project.name}</span>
-              </>
-            )}
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="lg:hidden">
-              <select
-                value={screen}
-                onChange={(e) => setScreen(e.target.value as Screen)}
-                className="max-w-[140px] rounded border border-ink-700 bg-ink-850 px-1 py-1 text-2xs text-ink-200"
-              >
-                {NAV.filter((item) => !item.requiresProject || project).map((item) => (
-                  <option key={item.screen} value={item.screen}>{item.label}</option>
-                ))}
-              </select>
-            </div>
-            <button type="button" onClick={undo} title="Undo" className="focus-ring rounded border border-ink-700 px-1.5 py-1 text-2xs text-ink-300 hover:text-ink-100">↶</button>
-            <button type="button" onClick={redo} title="Redo" className="focus-ring rounded border border-ink-700 px-1.5 py-1 text-2xs text-ink-300 hover:text-ink-100">↷</button>
-            <HelpTip title="Quick guide" steps={['Import your song to create or open a project.', 'Open Reference Match and add a professional release you like.', 'Generate a chain, then edit or bypass every suggested processor.', 'Use the Mixing Studio timeline to arrange clips and the Mastering workspace to verify the final render.']}>
-              Sonora is designed to be usable without engineering experience. Start with the guided workflow; advanced controls stay available when you need them.
-            </HelpTip>
-            <Button size="sm" variant="ghost" onClick={openLanding}>About Sonora</Button>
-            <Button size="sm" variant="ghost" onClick={() => setScreen('projects')}>Projects</Button>
-            {project && <Button size="sm" variant="primary" onClick={() => setScreen('reference')}>Start matching ↗</Button>}
-          </div>
-        </header>
 
         {storageError && (
           <div className="flex items-center justify-between gap-2 border-b border-amber-300/30 bg-amber-300/10 px-3 py-1.5 text-2xs text-amber-200">
@@ -225,7 +129,7 @@ export default function App() {
           </div>
         )}
 
-        <main className="relative z-0 min-h-0 flex-1 overflow-y-auto">
+        <main className="relative z-0 min-h-0 flex-1 overflow-y-auto rounded-b-[22px]">
           {blocked ? (
             <div className="p-5">
               <Panel>
@@ -241,7 +145,7 @@ export default function App() {
           ) : screen === 'projects' ? (
             <Projects />
           ) : screen === 'studio' ? (
-            <Studio />
+            <Studio onStartTour={() => setTourOpen(true)} />
           ) : screen === 'reference' ? (
             <ReferenceMatch />
           ) : screen === 'mastering' ? (
@@ -261,7 +165,7 @@ export default function App() {
       </div>
 
       {busy && (
-        <div className="fixed bottom-4 right-4 z-40 w-72 rounded border border-ink-600 bg-ink-850 p-3 shadow-panel">
+        <div className="fixed bottom-4 right-4 z-40 w-72 rounded-xl border border-white/[.10] bg-[#151426]/95 p-3 shadow-floating backdrop-blur-xl">
           <div className="mb-2 flex items-center justify-between gap-2">
             <span className="text-2xs text-ink-200">{busy.label}</span>
             <span className="font-mono text-2xs text-ink-500">{Math.round(busy.progress * 100)}%</span>
@@ -278,8 +182,10 @@ export default function App() {
         </div>
       )}
 
+      <GuidedTour open={tourOpen} screen={screen} onClose={() => setTourOpen(false)} />
+
       {toast && (
-        <div className="fixed bottom-4 left-1/2 z-50 max-w-xl -translate-x-1/2 rounded border border-ink-600 bg-ink-850 px-3 py-2 text-xs text-ink-100 shadow-panel">
+        <div className="fixed bottom-4 left-1/2 z-50 max-w-xl -translate-x-1/2 rounded-xl border border-white/[.10] bg-[#151426]/95 px-4 py-2.5 text-xs text-ink-100 shadow-floating backdrop-blur-xl">
           {toast}
           <button type="button" className="ml-3 text-ink-500 hover:text-ink-100" onClick={() => setToast(null)}>×</button>
         </div>

@@ -16,14 +16,14 @@ export default function Analysis() {
   const bands = useMemo(() => report?.spectrum.bands ?? [], [report]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4">
+    <div className="mx-auto max-w-[1500px] space-y-5 p-5 sm:p-6 lg:p-7">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="section-label">Measurement</p>
-          <div className="mt-1 flex items-center gap-2"><h1 className="text-xl font-semibold text-ink-100">Audio analysis</h1><HelpTip title="Why analyze audio?">Analysis measures the actual uploaded file so the Reference Match engine can compare it with another song. Measurements are useful clues; they do not replace listening or musical judgement.</HelpTip></div>
+          <div className="mt-1 flex items-center gap-2"><h1 className="text-2xl font-semibold text-ink-100">Audio analysis</h1><HelpTip title="Why analyze audio?">Analysis measures the actual uploaded file so the Reference Match engine can compare it with another song. Measurements are useful clues; they do not replace listening or musical judgement.</HelpTip></div>
           <p className="mt-1 text-xs text-ink-400">Real measurements from the decoded audio, computed in a background worker.</p>
         </div>
-        <div className="flex items-end gap-2">
+        <div data-tour="analysis-select" className="flex items-end gap-2">
           <Select
             label="Asset"
             value={asset?.id ?? ''}
@@ -41,7 +41,7 @@ export default function Analysis() {
 
       {asset && (
         <div className="grid gap-3 lg:grid-cols-[1.4fr_1fr]">
-          <Panel title={asset.name} subtitle={`${formatTime(asset.duration)} · ${asset.sampleRate} Hz source · ${asset.channels} channel${asset.channels > 1 ? 's' : ''} · ${formatBytes(asset.fileSize)}`} right={<div className="flex items-center gap-2"><HelpTip title="LUFS, dBTP and crest factor">LUFS is a measure of perceived loudness. dBTP estimates the highest reconstructed peak. Crest factor compares peak level with average energy and gives a rough view of transient contrast.</HelpTip><Badge tone={report ? 'accent' : 'warn'}>{report ? 'measured' : 'not analysed'}</Badge></div>}>
+          <Panel dataTour="analysis-report" title={asset.name} subtitle={`${formatTime(asset.duration)} · ${asset.sampleRate} Hz source · ${asset.channels} channel${asset.channels > 1 ? 's' : ''} · ${formatBytes(asset.fileSize)}`} right={<div className="flex items-center gap-2"><HelpTip title="LUFS, dBTP and crest factor">LUFS is a measure of perceived loudness. dBTP estimates the highest reconstructed peak. Crest factor compares peak level with average energy and gives a rough view of transient contrast.</HelpTip><Badge tone={report ? 'accent' : 'warn'}>{report ? 'measured' : 'not analysed'}</Badge></div>}>
             <Waveform peaks={buffer?.peaks ?? null} duration={asset.duration} position={0} height={90} faded={!report} />
             {!report && (
               <div className="mt-3 flex items-center justify-between gap-2">

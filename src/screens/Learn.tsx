@@ -207,7 +207,7 @@ export default function Learn() {
   };
 
   return (
-    <div className="mx-auto max-w-[1450px] space-y-5 p-4 sm:p-6">
+    <div data-tour="learn-content" className="mx-auto max-w-[1550px] space-y-6 p-5 sm:p-7 lg:p-8">
       <header className="relative overflow-hidden rounded-2xl border border-ink-700 bg-gradient-to-br from-[#172027] via-[#10151b] to-[#0b0e12] p-5 sm:p-7">
         <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
         <div className="relative flex flex-wrap items-start justify-between gap-4">
@@ -243,7 +243,7 @@ export default function Learn() {
         <section className="space-y-3">
           <div>
             <div className="section-label">Curated library</div>
-            <h2 className="mt-1 text-lg font-semibold text-ink-100">Trusted tools and learning resources</h2>
+            <h2 className="mt-1 text-xl font-semibold text-ink-100">Trusted tools and learning resources</h2>
             <p className="mt-1 text-xs text-ink-500">External resources open on their own websites. Product and platform recommendations can change, so check current details before relying on them.</p>
           </div>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
