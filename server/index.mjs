@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 import { createReadStream, existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve, extname, sep } from 'node:path';
 
@@ -441,6 +442,24 @@ function jsonResponse(response, status, body) {
   response.end(JSON.stringify(body));
 }
 
+function readRaw(request, maxBytes = MAX_BODY_BYTES) {
+  return new Promise((resolveBody, reject) => {
+    let size = 0;
+    const chunks = [];
+    request.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        reject(Object.assign(new Error('Request is too large.'), { statusCode: 413 }));
+        request.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    request.on('end', () => resolveBody(Buffer.concat(chunks)));
+    request.on('error', reject);
+  });
+}
+
 function readJson(request) {
   return new Promise((resolveBody, reject) => {
     let size = 0;
@@ -506,6 +525,7 @@ async function handleAssistant(request, response) {
     return jsonResponse(response, 429, { error: 'Too many AI requests. Please wait a moment and try again.' });
   }
 
+  const user = SUPABASE_CONFIGURED ? await requireSupabaseUser(request) : null;
   const body = await readJson(request);
   const input = safeInput(body.input);
   const context = body.context && typeof body.context === 'object' ? body.context : {};
@@ -513,6 +533,30 @@ async function handleAssistant(request, response) {
   if (contextText.length > 180_000) {
     return jsonResponse(response, 413, { error: 'Project context is too large. Analyze fewer assets or start a new project.' });
   }
+
+  const requestId = typeof body.requestId === 'string' && /^[a-zA-Z0-9_-]{8,160}$/.test(body.requestId)
+    ? body.requestId
+    : randomUUID();
+  if (user) {
+    const reservation = await supabaseRpc('reserve_ai_credit', {
+      p_user_id: user.id,
+      p_operation: 'assistant_request',
+      p_request_id: requestId,
+    });
+    if (!reservation?.ok) {
+      return jsonResponse(response, 402, {
+        error: 'Your monthly AI allowance has been used. Upgrade your Sonora plan or wait for the next allowance period.',
+        credits: reservation || null,
+      });
+    }
+  }
+
+  const releaseReservation = async () => {
+    if (user) {
+      try { await supabaseRpc('release_ai_credit', { p_request_id: requestId }); }
+      catch (error) { console.error('Could not release Sonora AI credit reservation:', error); }
+    }
+  };
 
   const instructions = `${BASE_INSTRUCTIONS}
 
@@ -539,6 +583,7 @@ ${contextText}`;
       signal: AbortSignal.timeout(45_000),
     });
   } catch (error) {
+    await releaseReservation();
     return jsonResponse(response, 502, {
       error: error instanceof Error ? error.message : 'Could not reach the AI provider.',
     });
@@ -546,8 +591,18 @@ ${contextText}`;
 
   const result = await upstream.json().catch(() => ({}));
   if (!upstream.ok) {
+    await releaseReservation();
     const message = result?.error?.message || `AI provider returned HTTP ${upstream.status}.`;
     return jsonResponse(response, upstream.status === 429 ? 429 : 502, { error: message });
+  }
+
+  if (user) {
+    try {
+      await supabaseRpc('capture_ai_credit', { p_request_id: requestId });
+    } catch (error) {
+      console.error('Sonora AI response succeeded but credit capture failed:', error);
+      return jsonResponse(response, 503, { error: 'The AI response completed, but Sonora could not confirm credit usage. Please refresh your account before retrying.' });
+    }
   }
 
   const output = Array.isArray(result.output) ? result.output : [];
@@ -603,7 +658,37 @@ const server = createServer(async (request, response) => {
       configured: Boolean(process.env.OPENAI_API_KEY),
       model: MODEL,
       provider: 'OpenAI Responses API',
+      authRequired: SUPABASE_CONFIGURED,
     });
+  }
+  if (request.method === 'GET' && url.pathname === '/api/billing/status') {
+    return jsonResponse(response, 200, {
+      authConfigured: SUPABASE_CONFIGURED,
+      billingConfigured: SUPABASE_CONFIGURED && STRIPE_CONFIGURED && allStripePricesConfigured(),
+      configuredPlans: Object.fromEntries(Object.entries(PRICE_IDS).map(([plan, prices]) => [
+        plan,
+        { monthly: Boolean(prices.month), yearly: Boolean(prices.year) },
+      ])),
+    });
+  }
+  if (request.method === 'GET' && url.pathname === '/api/billing/entitlements') {
+    try { return await getBillingEntitlements(request, response); }
+    catch (error) { return jsonResponse(response, error?.statusCode || 500, { error: error instanceof Error ? error.message : 'Could not load membership.' }); }
+  }
+  if (request.method === 'POST' && url.pathname === '/api/billing/checkout') {
+    try { return await createCheckoutSession(request, response); }
+    catch (error) { return jsonResponse(response, error?.statusCode || 500, { error: error instanceof Error ? error.message : 'Could not create checkout.' }); }
+  }
+  if (request.method === 'POST' && url.pathname === '/api/billing/portal') {
+    try { return await createBillingPortal(request, response); }
+    catch (error) { return jsonResponse(response, error?.statusCode || 500, { error: error instanceof Error ? error.message : 'Could not open billing portal.' }); }
+  }
+  if (request.method === 'POST' && url.pathname === '/api/webhooks/stripe') {
+    try { return await handleStripeWebhook(request, response); }
+    catch (error) {
+      console.error('Stripe webhook failed:', error);
+      return jsonResponse(response, error?.statusCode || 500, { error: error instanceof Error ? error.message : 'Stripe webhook processing failed.' });
+    }
   }
   if (request.method === 'POST' && url.pathname === '/api/assistant') {
     try {
