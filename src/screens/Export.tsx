@@ -60,7 +60,7 @@ export default function Export() {
       </header>
 
       <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(300px,.75fr)]">
-        <Panel title="Render settings">
+        <Panel dataTour="export-format" title="Render settings">
           <div className="grid gap-2 sm:grid-cols-2">
             <Select
               label="Format"
@@ -140,7 +140,7 @@ export default function Export() {
               <span className="mb-1.5 block text-2xs font-medium text-ink-400">Filename</span>
               <input value={settings.filename} placeholder={project.name} onChange={(event) => setSettings((current) => ({ ...current, filename: event.target.value }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100 placeholder:text-ink-500" />
             </label>
-            <FlyoutMenu
+            <div data-tour="export-advanced"><FlyoutMenu
               label="Advanced options"
               icon="sliders"
               title="Advanced export options"
@@ -165,10 +165,10 @@ export default function Export() {
                   <input value={settings.metadata.comment} onChange={(event) => setSettings((current) => ({ ...current, metadata: { ...current.metadata, comment: event.target.value } }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100" />
                 </label>
               </div>
-            </FlyoutMenu>
+            </FlyoutMenu></div>
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div data-tour="export-render" className="mt-3 flex flex-wrap items-center gap-2">
             <Button
               variant="primary"
               disabled={Boolean(busy) || (settings.mode === 'track' && !audioTracks.length)}
@@ -212,7 +212,7 @@ export default function Export() {
         </Panel>
       </div>
 
-      <Panel title={`Export history (${exports.length})`} right={<Button size="sm" variant="ghost" onClick={() => void refreshExports()}>Refresh</Button>}>
+      <Panel dataTour="export-history" title={`Export history (${exports.length})`} right={<Button size="sm" variant="ghost" onClick={() => void refreshExports()}>Refresh</Button>}>
         {exports.length === 0 ? (
           <p className="text-2xs text-ink-500">No exports yet.</p>
         ) : (
