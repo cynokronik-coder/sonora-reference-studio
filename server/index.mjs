@@ -30,14 +30,14 @@ const RATE_LIMIT = 20;
 const requestsByIp = new Map();
 
 
-const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\\/$/, '');
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, '');
 const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '';
 const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 const SUPABASE_ADMIN_KEY = SUPABASE_SECRET_KEY || SUPABASE_SERVICE_ROLE_KEY;
 const SUPABASE_USE_LEGACY_SERVICE_ROLE = !SUPABASE_SECRET_KEY && Boolean(SUPABASE_SERVICE_ROLE_KEY);
 const SUPABASE_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY && SUPABASE_ADMIN_KEY);
-const APP_BASE_URL = (process.env.SONORA_APP_URL || 'http://localhost:3000').replace(/\\/$/, '');
+const APP_BASE_URL = (process.env.SONORA_APP_URL || 'http://localhost:3000').replace(/\/$/, '');
 const PRICE_IDS = {
   creator: { month: process.env.STRIPE_PRICE_CREATOR_MONTHLY || '', year: process.env.STRIPE_PRICE_CREATOR_YEARLY || '' },
   pro: { month: process.env.STRIPE_PRICE_PRO_MONTHLY || '', year: process.env.STRIPE_PRICE_PRO_YEARLY || '' },
@@ -48,7 +48,7 @@ const PLAN_LIMITS = { free: 10, creator: 100, pro: 400, studio: 1200 };
 
 function getBearerToken(request) {
   const value = request.headers.authorization || '';
-  const match = value.match(/^Bearer\\s+(.+)$/i);
+  const match = value.match(/^Bearer\s+(.+)$/i);
   return match?.[1] || null;
 }
 
