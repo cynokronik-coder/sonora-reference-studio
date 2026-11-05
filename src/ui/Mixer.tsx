@@ -371,7 +371,7 @@ function MasterStrip({ selected, onSelect }: { selected: boolean; onSelect: () =
   );
 }
 
-export function AssistantPanel() {
+export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
   const {
     project,
     chat,
@@ -434,7 +434,7 @@ export function AssistantPanel() {
           <HelpTip title="How Sonora AI works" steps={['The AI receives project metadata and measured analysis, not the raw audio file.', 'It can request local audio analysis when a report is missing.', 'It proposes real processors and parameter changes from the DSP registry.', 'Nothing is changed until you accept the proposal.']}>
             The connected model reasons about your project. If the API is not configured, Sonora uses its built-in offline command interpreter.
           </HelpTip>
-          <button type="button" onClick={() => useApp.getState().toggleAssistant()} aria-label="Close assistant" className="rounded px-1.5 text-ink-500 hover:text-ink-100">×</button>
+          <button type="button" onClick={() => { if (onClose) onClose(); else useApp.getState().toggleAssistant(); }} aria-label="Close assistant" className="rounded px-1.5 text-ink-500 hover:text-ink-100">×</button>
         </div>
       </div>
 
