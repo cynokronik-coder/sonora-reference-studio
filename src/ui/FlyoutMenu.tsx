@@ -144,6 +144,7 @@ export function FlyoutMenu({
       aria-label={title ?? label}
       onPointerEnter={clearTimers}
       onPointerLeave={scheduleClose}
+      onPointerDown={() => setPinned(true)}
       style={{ position: 'fixed', top: position.top, left: position.left }}
       className={`z-[1000] ${WIDTHS[width]} rounded-xl border border-white/[.11] bg-[rgba(20,20,37,.94)] p-3 text-left shadow-floating backdrop-blur-glass animate-[sonora-flyout-in_180ms_ease-out]`}
     >
