@@ -54,7 +54,7 @@ function getBearerToken(request) {
 
 async function requireSupabaseUser(request) {
   if (!SUPABASE_CONFIGURED) {
-    throw Object.assign(new Error('Supabase is not configured on the server. Add SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY.'), { statusCode: 503 });
+    throw Object.assign(new Error('Supabase is not configured on the server. Add SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY and SUPABASE_SECRET_KEY.'), { statusCode: 503 });
   }
   const accessToken = getBearerToken(request);
   if (!accessToken) throw Object.assign(new Error('Sign in to continue.'), { statusCode: 401 });
