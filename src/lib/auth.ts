@@ -31,7 +31,7 @@ let refreshPromise: Promise<AuthSession | null> | null = null;
 
 export function getSupabaseConfig() {
   const url = String(import.meta.env.VITE_SUPABASE_URL || '').replace(/\/$/, '');
-  const anonKey = String(import.meta.env.VITE_SUPABASE_ANON_KEY || '');
+  const anonKey = String(import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || '');
   return { configured: Boolean(url && anonKey), url, anonKey };
 }
 
