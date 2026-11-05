@@ -161,6 +161,12 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        rememberTour(screen, 'skipped');
+        onClose();
+        return;
+      }
       if (event.key === 'ArrowRight') {
         event.preventDefault();
         setIndex((current) => Math.min(steps.length - 1, current + 1));
