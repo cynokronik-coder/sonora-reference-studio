@@ -47,6 +47,7 @@ export default function App() {
   const enterStudio = () => {
     window.location.hash = 'studio';
     setShowLanding(false);
+    setScreen('studio');
   };
 
   const openLanding = () => {
@@ -55,7 +56,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    const syncFromHash = () => setShowLanding(window.location.hash !== '#studio');
+    const syncFromHash = () => {
+      const inStudio = window.location.hash === '#studio';
+      setShowLanding(!inStudio);
+      if (inStudio) setScreen('studio');
+    };
     window.addEventListener('hashchange', syncFromHash);
     return () => window.removeEventListener('hashchange', syncFromHash);
   }, []);

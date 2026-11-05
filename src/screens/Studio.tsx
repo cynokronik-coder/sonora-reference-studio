@@ -98,6 +98,7 @@ export default function Studio() {
             ))}
           </nav>
           <div className="mt-auto space-y-1 border-t border-white/[.06] pt-3">
+            <button type="button" onClick={() => useApp.getState().setScreen('dashboard')} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-white/[.04] hover:text-white"><span>⌂</span> Dashboard</button>
             <button type="button" onClick={() => useApp.getState().setScreen('settings')} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-white/[.04] hover:text-white"><span>⚙</span> Settings</button>
             <button type="button" onClick={() => useApp.getState().setScreen('learn')} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs text-slate-500 hover:bg-white/[.04] hover:text-white"><span>ⓘ</span> Help</button>
           </div>
