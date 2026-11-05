@@ -318,7 +318,6 @@ async function handleStripeWebhook(request, response) {
 async function createCheckoutSession(request, response) {
   const user = await requireSupabaseUser(request);
   if (!BILLING_ENABLED) return jsonResponse(response, 503, { error: 'Sonora billing is disabled. Complete the release checklist and explicitly enable SONORA_BILLING_ENABLED on the server.' });
-  if (!BILLING_ENABLED) return jsonResponse(response, 503, { error: 'Sonora billing is disabled. Complete the release checklist and explicitly enable SONORA_BILLING_ENABLED on the server.' });
   if (!STRIPE_CONFIGURED) return jsonResponse(response, 503, { error: 'Stripe billing is not fully configured on the server.' });
   const body = await readJson(request);
   const existing = await supabaseServiceRequest(
@@ -396,6 +395,7 @@ async function createCreditCheckoutSession(request, response) {
 
 async function createBillingPortal(request, response) {
   const user = await requireSupabaseUser(request);
+  if (!BILLING_ENABLED) return jsonResponse(response, 503, { error: 'Sonora billing is disabled. Complete the release checklist and explicitly enable SONORA_BILLING_ENABLED on the server.' });
   if (!STRIPE_CONFIGURED) return jsonResponse(response, 503, { error: 'Stripe billing is not fully configured on the server.' });
   const rows = await supabaseServiceRequest(
     `billing_customers?user_id=eq.${encodeURIComponent(user.id)}&select=stripe_customer_id&limit=1`,
