@@ -24,9 +24,9 @@ export interface FlyoutMenuProps {
 }
 
 const WIDTHS = {
-  sm: 'w-[min(260px,calc(100vw-24px))]',
-  md: 'w-[min(320px,calc(100vw-24px))]',
-  lg: 'w-[min(420px,calc(100vw-24px))]',
+  sm: 'w-[min(300px,calc(100vw-24px))]',
+  md: 'w-[min(360px,calc(100vw-24px))]',
+  lg: 'w-[min(480px,calc(100vw-24px))]',
 } as const;
 
 /**
@@ -157,15 +157,15 @@ export function FlyoutMenu({
       onPointerLeave={scheduleClose}
       onPointerDown={() => setPinned(true)}
       style={{ position: 'fixed', top: position.top, left: position.left }}
-      className={`z-[1000] ${WIDTHS[width]} rounded-xl border border-white/[.11] bg-[rgba(20,20,37,.94)] p-3 text-left shadow-floating backdrop-blur-glass animate-[sonora-flyout-in_180ms_ease-out]`}
+      className={`z-[1000] ${WIDTHS[width]} rounded-2xl border border-white/[.11] bg-[rgba(20,20,37,.96)] p-4 text-left shadow-floating backdrop-blur-glass animate-[sonora-flyout-in_180ms_ease-out]`}
     >
       {(title || description) && (
         <div className="mb-3 border-b border-white/[.07] pb-2.5">
-          {title && <p className="text-xs font-semibold text-ink-100">{title}</p>}
-          {description && <p className="mt-1 text-2xs leading-relaxed text-ink-400">{description}</p>}
+          {title && <p className="text-sm font-semibold text-ink-100">{title}</p>}
+          {description && <p className="mt-1.5 text-xs leading-relaxed text-ink-400">{description}</p>}
         </div>
       )}
-      <div className="max-h-[min(60vh,480px)] space-y-3 overflow-y-auto pr-0.5">
+      <div className="max-h-[min(65vh,560px)] space-y-4 overflow-y-auto pr-0.5">
         {children}
       </div>
     </div>,
