@@ -7,6 +7,8 @@ export interface BillingStatus {
   authConfigured: boolean;
   stripeConfigured: boolean;
   billingConfigured: boolean;
+  checkoutEnabled: boolean;
+  portalEnabled: boolean;
   configuredPlans: Record<string, { monthly: boolean; yearly: boolean }>;
   creditPacksConfigured: Record<string, boolean>;
   creditTopupsConfigured: boolean;
