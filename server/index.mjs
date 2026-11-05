@@ -44,6 +44,8 @@ const PRICE_IDS = {
   studio: { month: process.env.STRIPE_PRICE_STUDIO_MONTHLY || '', year: process.env.STRIPE_PRICE_STUDIO_YEARLY || '' },
 };
 const STRIPE_CONFIGURED = Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET);
+// Explicit opt-in protects against accidentally accepting payments before Sonora is ready.
+const BILLING_ENABLED = process.env.SONORA_BILLING_ENABLED === 'true';
 const CREDIT_PACK_PRICE_IDS = {
   100: process.env.STRIPE_PRICE_CREDITS_100 || '',
   500: process.env.STRIPE_PRICE_CREDITS_500 || '',
@@ -315,6 +317,8 @@ async function handleStripeWebhook(request, response) {
 
 async function createCheckoutSession(request, response) {
   const user = await requireSupabaseUser(request);
+  if (!BILLING_ENABLED) return jsonResponse(response, 503, { error: 'Sonora billing is disabled. Complete the release checklist and explicitly enable SONORA_BILLING_ENABLED on the server.' });
+  if (!BILLING_ENABLED) return jsonResponse(response, 503, { error: 'Sonora billing is disabled. Complete the release checklist and explicitly enable SONORA_BILLING_ENABLED on the server.' });
   if (!STRIPE_CONFIGURED) return jsonResponse(response, 503, { error: 'Stripe billing is not fully configured on the server.' });
   const body = await readJson(request);
   const existing = await supabaseServiceRequest(
@@ -357,6 +361,7 @@ async function createCheckoutSession(request, response) {
 
 async function createCreditCheckoutSession(request, response) {
   const user = await requireSupabaseUser(request);
+  if (!BILLING_ENABLED) return jsonResponse(response, 503, { error: 'Sonora billing is disabled. Complete the release checklist and explicitly enable SONORA_BILLING_ENABLED on the server.' });
   if (!STRIPE_CONFIGURED) return jsonResponse(response, 503, { error: 'Stripe billing is not configured on the server.' });
   const body = await readJson(request);
   const credits = Number(body.credits);
@@ -774,7 +779,7 @@ const server = createServer(async (request, response) => {
     return jsonResponse(response, 200, {
       authConfigured: SUPABASE_CONFIGURED,
       stripeConfigured: STRIPE_CONFIGURED,
-      billingConfigured: SUPABASE_CONFIGURED && STRIPE_CONFIGURED && allStripePricesConfigured(),
+      billingConfigured: BILLING_ENABLED && SUPABASE_CONFIGURED && STRIPE_CONFIGURED && allStripePricesConfigured(),
       configuredPlans: Object.fromEntries(Object.entries(PRICE_IDS).map(([plan, prices]) => [
         plan,
         { monthly: Boolean(prices.month), yearly: Boolean(prices.year) },
@@ -783,7 +788,7 @@ const server = createServer(async (request, response) => {
         credits,
         Boolean(price),
       ])),
-      creditTopupsConfigured: SUPABASE_CONFIGURED && STRIPE_CONFIGURED && allCreditPackPricesConfigured(),
+      creditTopupsConfigured: BILLING_ENABLED && SUPABASE_CONFIGURED && STRIPE_CONFIGURED && allCreditPackPricesConfigured(),
     });
   }
   if (request.method === 'GET' && url.pathname === '/api/billing/entitlements') {
