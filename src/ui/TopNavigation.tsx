@@ -75,7 +75,7 @@ export default function TopNavigation({
   };
 
   return (
-    <header className="relative z-30 flex h-[68px] shrink-0 items-center justify-between gap-3 border-b border-white/[.07] bg-[#0D0D1B]/88 px-4 shadow-[0_8px_30px_rgba(0,0,0,.14)] backdrop-blur-xl sm:px-5 lg:px-6">
+    <header className="relative z-30 flex h-[76px] shrink-0 items-center justify-between gap-3 border-b border-white/[.07] bg-[#0D0D1B]/88 px-5 shadow-[0_8px_30px_rgba(0,0,0,.14)] backdrop-blur-xl sm:px-6 lg:px-7">
       <div className="flex min-w-0 shrink-0 items-center gap-2.5">
         <button
           type="button"
@@ -83,12 +83,12 @@ export default function TopNavigation({
           aria-label="Sonora home"
           className="group flex items-center gap-2.5 rounded-lg text-left focus-ring"
         >
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl border border-[#A77AFF]/30 bg-gradient-to-br from-[#8957FF]/25 to-[#7545EA]/10 text-[#C4A2FF] shadow-violet-soft">
-            <Icon name="audio-lines" size={21} />
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#A77AFF]/30 bg-gradient-to-br from-[#8957FF]/25 to-[#7545EA]/10 text-[#C4A2FF] shadow-violet-soft">
+            <Icon name="audio-lines" size={24} />
           </span>
           <span className="hidden min-w-0 sm:block">
-            <span className="block text-[14px] font-semibold tracking-[-.025em] text-white">Sonora</span>
-            <span className="block text-[9px] font-medium uppercase tracking-[.18em] text-ink-500">Reference Studio</span>
+            <span className="block text-base font-semibold tracking-[-.025em] text-white">Sonora</span>
+            <span className="block text-[10px] font-medium uppercase tracking-[.18em] text-ink-500">Reference Studio</span>
           </span>
         </button>
       </div>
@@ -104,13 +104,13 @@ export default function TopNavigation({
               disabled={disabled}
               onClick={() => navigate(item.screen)}
               aria-current={selected ? 'page' : undefined}
-              className={`relative flex h-10 shrink-0 items-center gap-2 rounded-xl px-3 text-[11px] font-medium transition-all duration-180 disabled:cursor-not-allowed disabled:opacity-35 sm:px-4 sm:text-xs ${
+              className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium transition-all duration-180 disabled:cursor-not-allowed disabled:opacity-35 sm:px-5 sm:text-sm ${
                 selected
                   ? 'bg-[#8957FF]/15 text-white shadow-[0_4px_18px_rgba(117,69,234,.12)]'
                   : 'text-ink-400 hover:bg-white/[.04] hover:text-ink-100'
               }`}
             >
-              {index === 0 && <Icon name="waveform" size={15} className={selected ? 'text-[#C4A2FF]' : 'text-ink-500'} />}
+              {index === 0 && <Icon name="waveform" size={17} className={selected ? 'text-[#C4A2FF]' : 'text-ink-500'} />}
               {index === 1 && <Icon name="equalizer" size={15} className={selected ? 'text-[#C4A2FF]' : 'text-ink-500'} />}
               {index === 2 && <Icon name="audio-lines" size={15} className={selected ? 'text-[#C4A2FF]' : 'text-ink-500'} />}
               {index === 3 && <Icon name="sparkles" size={15} className={selected ? 'text-[#C4A2FF]' : 'text-ink-500'} />}
@@ -126,15 +126,15 @@ export default function TopNavigation({
             aria-haspopup="menu"
             aria-expanded={moreOpen}
             onClick={() => setMoreOpen((open) => !open)}
-            className={`flex h-10 items-center gap-1 rounded-xl px-3 text-xs font-medium transition-colors ${
+            className={`flex h-11 items-center gap-1.5 rounded-xl px-4 text-sm font-medium transition-colors ${
               moreOpen ? 'bg-white/[.06] text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-ink-100'
             }`}
           >
             More <Icon name="chevron-down" size={14} />
           </button>
           {moreOpen && (
-            <div role="menu" className="absolute right-0 top-[calc(100%+12px)] z-50 w-56 rounded-xl border border-white/[.10] bg-[#151426]/95 p-1.5 shadow-floating backdrop-blur-xl">
-              <div className="px-2.5 pb-1.5 pt-2 text-[9px] font-semibold uppercase tracking-[.16em] text-ink-500">Workspace</div>
+            <div role="menu" className="absolute right-0 top-[calc(100%+12px)] z-50 w-64 rounded-2xl border border-white/[.10] bg-[#151426]/95 p-2 shadow-floating backdrop-blur-xl">
+              <div className="px-3 pb-2 pt-2.5 text-[10px] font-semibold uppercase tracking-[.16em] text-ink-500">Workspace</div>
               {SECONDARY_LINKS.map((item) => {
                 const disabled = Boolean(item.disabledWithoutProject && !projectOpen);
                 return (
@@ -144,7 +144,7 @@ export default function TopNavigation({
                     role="menuitem"
                     disabled={disabled}
                     onClick={() => navigate(item.screen)}
-                    className={`flex w-full items-center rounded-lg px-2.5 py-2 text-left text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+                    className={`flex w-full items-center rounded-xl px-3 py-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
                       screen === item.screen ? 'bg-[#8957FF]/15 text-[#C4A2FF]' : 'text-ink-300 hover:bg-white/[.05] hover:text-white'
                     }`}
                   >
@@ -161,7 +161,7 @@ export default function TopNavigation({
                       key={option}
                       type="button"
                       onClick={() => onModeChange(option)}
-                      className={`flex-1 rounded-md px-2 py-1.5 text-[10px] capitalize transition-colors ${
+                      className={`flex-1 rounded-md px-3 py-2 text-xs capitalize transition-colors ${
                         mode === option ? 'bg-[#8957FF]/20 text-[#C4A2FF]' : 'text-ink-500 hover:text-ink-200'
                       }`}
                     >
@@ -185,7 +185,7 @@ export default function TopNavigation({
             <span className="truncate text-[10px] text-ink-300" title={projectName}>{projectName}</span>
           </div>
         )}
-        <button type="button" onClick={onUndo} title="Undo" aria-label="Undo" className="focus-ring hidden h-8 w-8 items-center justify-center rounded-lg border border-white/[.07] text-ink-400 transition-colors hover:bg-white/[.05] hover:text-ink-100 sm:inline-flex">
+        <button type="button" onClick={onUndo} title="Undo" aria-label="Undo" className="focus-ring hidden h-10 w-10 items-center justify-center rounded-lg border border-white/[.07] text-ink-400 transition-colors hover:bg-white/[.05] hover:text-ink-100 sm:inline-flex">
           <span className="text-base">↶</span>
         </button>
         <button type="button" onClick={onRedo} title="Redo" aria-label="Redo" className="focus-ring hidden h-8 w-8 items-center justify-center rounded-lg border border-white/[.07] text-ink-400 transition-colors hover:bg-white/[.05] hover:text-ink-100 sm:inline-flex">
@@ -196,18 +196,18 @@ export default function TopNavigation({
           onClick={onStartTour}
           title="Start guided tour"
           aria-label="Start guided tour"
-          className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-2.5 text-[10px] font-medium text-[#C4A2FF] transition-colors hover:border-[#A77AFF]/45 hover:bg-[#8957FF]/15"
+          className="focus-ring inline-flex h-10 items-center gap-2 rounded-xl border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-3.5 text-xs font-semibold text-[#C4A2FF] transition-colors hover:border-[#A77AFF]/45 hover:bg-[#8957FF]/15"
         >
-          <Icon name="sparkles" size={13} /> <span className="hidden sm:inline">Tour</span>
+          <Icon name="sparkles" size={16} /> <span className="hidden sm:inline">Tour</span>
         </button>
         <HelpTip title="Quick guide" steps={['Import your song to create or open a project.', 'Open Reference Match and add a professional release you like.', 'Generate a chain, then edit or bypass every suggested processor.', 'Use the Mixing Studio timeline to arrange clips and the Mastering workspace to verify the final render.']}>
           <span className="sr-only">Sonora quick guide</span>
           Sonora keeps primary actions visible and advanced controls available when needed.
         </HelpTip>
-        <button type="button" onClick={() => navigate('settings')} title="Settings" aria-label="Settings" className={`focus-ring flex h-8 w-8 items-center justify-center rounded-full border transition-all ${
+        <button type="button" onClick={() => navigate('settings')} title="Settings" aria-label="Settings" className={`focus-ring flex h-10 w-10 items-center justify-center rounded-full border transition-all ${
           screen === 'settings' ? 'border-[#A77AFF]/60 bg-[#8957FF]/20 text-[#C4A2FF]' : 'border-white/[.10] bg-[#1D1D30] text-ink-300 hover:border-white/[.2] hover:text-white'
         }`}>
-          <Icon name="settings" size={15} />
+          <Icon name="settings" size={18} />
         </button>
         <span className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#A77AFF]/40 bg-gradient-to-br from-[#8957FF]/35 to-[#7545EA]/15 text-[11px] font-semibold text-white sm:flex" title="Sonora profile">S</span>
       </div>
