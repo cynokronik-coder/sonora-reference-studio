@@ -10,6 +10,7 @@ import Presets from './screens/Presets';
 import Analysis from './screens/Analysis';
 import Export from './screens/Export';
 import Settings from './screens/Settings';
+import Monetization from './screens/Monetization';
 import Learn from './screens/Learn';
 import { Button, EmptyState, HelpTip, Panel, ProgressBar } from './ui/Primitives';
 import { realtimeHost } from './audio/engine/realtime';
@@ -17,6 +18,7 @@ import { realtimeHost } from './audio/engine/realtime';
 const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boolean }[] = [
   { screen: 'dashboard', label: 'Dashboard', glyph: '◫' },
   { screen: 'projects', label: 'Projects', glyph: '▤' },
+  { screen: 'plans', label: 'Plans & Add-ons', glyph: '✦' },
   { screen: 'studio', label: 'Mixing Studio', glyph: '⌁', requiresProject: true },
   { screen: 'reference', label: 'Reference Match', glyph: '◎', requiresProject: true },
   { screen: 'mastering', label: 'Mastering', glyph: '▮', requiresProject: true },
@@ -37,17 +39,24 @@ const TITLES: Record<Screen, string> = {
   analysis: 'Audio Analysis',
   export: 'Export Center',
   settings: 'Settings',
+  plans: 'Plans & Add-ons',
   learn: 'Learn & Help',
 };
 
 export default function App() {
   const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError, storageError } = useApp();
-  const [showLanding, setShowLanding] = useState(() => window.location.hash !== '#studio');
+  const [showLanding, setShowLanding] = useState(() => !['#studio', '#plans'].includes(window.location.hash));
 
   const enterStudio = () => {
     window.location.hash = 'studio';
     setShowLanding(false);
     setScreen('studio');
+  };
+
+  const openPricing = () => {
+    window.location.hash = 'plans';
+    setShowLanding(false);
+    setScreen('plans');
   };
 
   const openLanding = () => {
@@ -57,9 +66,11 @@ export default function App() {
 
   useEffect(() => {
     const syncFromHash = () => {
-      const inStudio = window.location.hash === '#studio';
-      setShowLanding(!inStudio);
-      if (inStudio) setScreen('studio');
+      const hash = window.location.hash;
+      const inApp = hash === '#studio' || hash === '#plans';
+      setShowLanding(!inApp);
+      if (hash === '#plans') setScreen('plans');
+      else if (hash === '#studio') setScreen('studio');
     };
     window.addEventListener('hashchange', syncFromHash);
     return () => window.removeEventListener('hashchange', syncFromHash);
@@ -98,7 +109,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [undo, redo, saveNow, showLanding]);
 
-  if (showLanding) return <Landing onEnterStudio={enterStudio} />;
+  if (showLanding) return <Landing onEnterStudio={enterStudio} onOpenPricing={openPricing} />;
 
   const active = NAV.find((item) => item.screen === screen);
   const blocked = active?.requiresProject && !project;
@@ -252,6 +263,8 @@ export default function App() {
             <Analysis />
           ) : screen === 'export' ? (
             <Export />
+          ) : screen === 'plans' ? (
+            <Monetization />
           ) : screen === 'learn' ? (
             <Learn />
           ) : (
