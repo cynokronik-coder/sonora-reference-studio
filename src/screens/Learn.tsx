@@ -207,7 +207,7 @@ export default function Learn() {
   };
 
   return (
-    <div className="mx-auto max-w-[1450px] space-y-5 p-4 sm:p-6">
+    <div data-tour="learn-content" className="mx-auto max-w-[1450px] space-y-5 p-4 sm:p-6">
       <header className="relative overflow-hidden rounded-2xl border border-ink-700 bg-gradient-to-br from-[#172027] via-[#10151b] to-[#0b0e12] p-5 sm:p-7">
         <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
         <div className="relative flex flex-wrap items-start justify-between gap-4">
