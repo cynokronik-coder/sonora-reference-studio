@@ -245,6 +245,17 @@ input[type='range']:focus-visible::-moz-range-thumb {
   }
 }
 
+@keyframes sonora-tour-pop {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.99);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
