@@ -95,8 +95,45 @@ export function subscribeToAuth(listener: (session: AuthSession | null) => void)
   return () => listeners.delete(listener);
 }
 
+async function recoverSessionFromRedirect(): Promise<AuthSession | null> {
+  if (typeof window === 'undefined') return null;
+  const config = getSupabaseConfig();
+  if (!config.configured) return null;
+  const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+  const params = new URLSearchParams(hash);
+  const accessToken = params.get('access_token');
+  const refreshToken = params.get('refresh_token');
+  if (!accessToken || !refreshToken) return null;
+
+  try {
+    const response = await fetch(`${config.url}/auth/v1/user`, {
+      headers: { apikey: config.anonKey, Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+    });
+    const user = await response.json().catch(() => null) as AuthUser | null;
+    if (!response.ok || !user?.id) throw new Error('Email confirmation returned an invalid session.');
+    const expiresIn = Number(params.get('expires_in') || 3600);
+    const session: AuthSession = {
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      token_type: params.get('token_type') || 'bearer',
+      expires_at: Number(params.get('expires_at')) || Math.floor(Date.now() / 1000) + expiresIn,
+      user,
+    };
+    persistSession(session);
+    // Remove tokens from the URL and browser history after validation.
+    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}#account`);
+    return session;
+  } catch {
+    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}#account`);
+    return null;
+  }
+}
+
 export async function getAuthSession(): Promise<AuthSession | null> {
-  if (currentSession === undefined) currentSession = readStoredSession();
+  if (currentSession === undefined) {
+    currentSession = readStoredSession();
+    if (!currentSession) await recoverSessionFromRedirect();
+  }
   const session = currentSession;
   if (!session) return null;
   if (session.expires_at > Math.floor(Date.now() / 1000) + 60) return session;
