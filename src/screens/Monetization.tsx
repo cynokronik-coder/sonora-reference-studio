@@ -151,7 +151,7 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
     }
     setBusyPlan(plan);
     try {
-      if (entitlements && entitlements.plan !== 'free') {
+      if (entitlements?.subscriptionStatus) {
         await openBillingPortal();
       } else {
         await startCheckout(plan, annual ? 'year' : 'month');
@@ -252,7 +252,7 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
                       className={`w-full rounded-lg border px-3 py-2.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${'popular' in plan && plan.popular ? 'border-accent/40 bg-accent text-[#10150a] hover:bg-[#d5fa7a]' : 'border-white/[.1] bg-white/[.045] text-white hover:border-accent/35'}`}
                       title={!billingReady ? 'Configure Supabase and Stripe server credentials and all Price IDs to enable checkout.' : !session ? 'Sign in to subscribe.' : 'Continue to secure Stripe Checkout.'}
                     >
-                      {busyPlan === plan.key ? 'Opening secure checkout…' : entitlements && entitlements.plan !== 'free' ? 'Manage subscription' : !billingReady ? 'Billing setup required' : session ? 'Choose ' + plan.name : 'Sign in to subscribe'}
+                      {busyPlan === plan.key ? 'Opening secure checkout…' : entitlements?.subscriptionStatus ? 'Manage subscription' : !billingReady ? 'Billing setup required' : session ? 'Choose ' + plan.name : 'Sign in to subscribe'}
                     </button>
                   )}
                 </article>
