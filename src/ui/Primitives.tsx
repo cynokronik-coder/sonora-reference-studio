@@ -22,15 +22,15 @@ export function Panel({
   return (
     <section data-tour={dataTour} className={`panel shadow-panel ${className}`}>
       {(title || right) && (
-        <header className="flex items-center justify-between gap-3 border-b border-white/[.06] px-4 py-3">
+        <header className="flex items-center justify-between gap-3 border-b border-white/[.06] px-5 py-4">
           <div className="min-w-0">
-            {title && <h2 className="text-[13px] font-semibold tracking-wide text-ink-100">{title}</h2>}
+            {title && <h2 className="text-[15px] font-semibold tracking-wide text-ink-100">{title}</h2>}
             {subtitle && <p className="mt-0.5 truncate text-2xs text-ink-400">{subtitle}</p>}
           </div>
           {right}
         </header>
       )}
-      <div className={dense ? '' : 'p-4'}>{children}</div>
+      <div className={dense ? '' : 'p-5'}>{children}</div>
     </section>
   );
 }
@@ -55,8 +55,8 @@ export function Button({
   type?: 'button' | 'submit';
 }) {
   const base =
-    'inline-flex items-center justify-center gap-1.5 rounded-control border font-medium transition-all duration-180 focus-ring disabled:cursor-not-allowed disabled:opacity-40 active:scale-[.985]';
-  const sizes = size === 'sm' ? 'min-h-8 px-3 py-1.5 text-2xs' : 'min-h-9 px-3.5 py-2 text-xs';
+    'inline-flex items-center justify-center gap-2 rounded-control border font-semibold tracking-[.005em] transition-all duration-180 focus-ring disabled:cursor-not-allowed disabled:opacity-40 active:scale-[.985]';
+  const sizes = size === 'sm' ? 'min-h-10 px-4 py-2 text-xs' : 'min-h-11 px-5 py-2.5 text-sm';
   const variants: Record<string, string> = {
     primary: 'border-[#A77AFF]/55 bg-gradient-to-br from-[#8957FF] to-[#7545EA] text-white shadow-violet hover:brightness-110 hover:shadow-violet-soft',
     secondary: 'border-white/[.09] bg-[#1D1D30]/90 text-ink-100 shadow-[0_1px_0_rgba(255,255,255,.035)_inset] hover:border-white/[.16] hover:bg-[#252538]',
@@ -98,7 +98,7 @@ export function IconButton({
       aria-label={title}
       onClick={onClick}
       disabled={disabled}
-      className={`focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-lg border px-1.5 text-2xs font-medium transition-all duration-180 disabled:opacity-40 ${
+      className={`focus-ring inline-flex h-10 min-w-10 items-center justify-center rounded-xl border px-2 text-xs font-semibold transition-all duration-180 disabled:opacity-40 ${
         active
           ? 'border-[#A77AFF]/55 bg-[#8957FF]/15 text-[#C4A2FF] shadow-violet-soft'
           : 'border-white/[.08] bg-[#171727] text-ink-300 hover:border-white/[.16] hover:bg-[#252538] hover:text-ink-100'
@@ -136,14 +136,14 @@ export function Toggle({
         aria-describedby={description ? descriptionId : undefined}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`focus-ring relative mt-0.5 h-[18px] w-8 shrink-0 rounded-full border transition-colors duration-180 ${
+        className={`focus-ring relative mt-0.5 h-5 w-10 shrink-0 rounded-full border transition-colors duration-180 ${
           checked ? 'border-[#A77AFF]/65 bg-[#8957FF]' : 'border-white/[.12] bg-[#303047]'
         }`}
       >
         <span
           aria-hidden="true"
           className={`absolute top-[2px] h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-180 ${
-            checked ? 'translate-x-[15px]' : 'translate-x-[2px]'
+            checked ? 'translate-x-[19px]' : 'translate-x-[2px]'
           }`}
         />
       </button>
@@ -183,7 +183,7 @@ export function Select<T extends string | number>({
           const match = options.find((o) => String(o.value) === raw);
           if (match) onChange(match.value);
         }}
-        className="focus-ring w-full rounded-control border border-white/[.09] bg-[#171727] px-3 py-2 text-xs text-ink-100 shadow-[0_1px_0_rgba(255,255,255,.025)_inset] transition-colors hover:border-white/[.15] disabled:opacity-40"
+        className="focus-ring w-full rounded-control border border-white/[.09] bg-[#171727] px-3.5 py-2.5 text-sm text-ink-100 shadow-[0_1px_0_rgba(255,255,255,.025)_inset] transition-colors hover:border-white/[.15] disabled:opacity-40"
       >
         {options.map((option) => (
           <option key={String(option.value)} value={String(option.value)}>
@@ -234,7 +234,7 @@ export function NumberField({
       {label && <span className="mb-1.5 block text-2xs font-medium text-ink-400">{label}</span>}
       <span className="flex items-center rounded-control border border-white/[.09] bg-[#0D0D1B] px-2 focus-within:border-[#A77AFF]/60 focus-within:ring-2 focus-within:ring-[#8957FF]/10">
         <input
-          className="num-input w-full bg-transparent py-2 text-right font-mono text-xs text-ink-100 outline-none disabled:opacity-40"
+          className="num-input w-full bg-transparent py-2.5 text-right font-mono text-sm text-ink-100 outline-none disabled:opacity-40"
           type="number"
           value={draft}
           step={step}
@@ -352,7 +352,7 @@ export function ProgressBar({ value, tone = 'accent' }: { value: number; tone?: 
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={percentage}
-      className="h-1 w-full overflow-hidden rounded-full bg-[#303047]"
+      className="h-1.5 w-full overflow-hidden rounded-full bg-[#303047]"
     >
       <div
         aria-hidden="true"
@@ -497,7 +497,7 @@ export function Tabs<T extends string>({
           type="button"
           aria-pressed={value === tab.value}
           onClick={() => onChange(tab.value)}
-          className={`focus-ring whitespace-nowrap rounded-lg px-3 py-1.5 text-2xs font-medium transition-all duration-180 ${
+          className={`focus-ring whitespace-nowrap rounded-xl px-4 py-2 text-xs font-semibold transition-all duration-180 ${
             value === tab.value
               ? 'border border-[#A77AFF]/25 bg-[#8957FF]/15 text-[#C4A2FF] shadow-violet-soft'
               : 'border border-transparent text-ink-400 hover:bg-white/[.04] hover:text-ink-200'
