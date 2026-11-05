@@ -81,12 +81,12 @@ export default function ReferenceMatch() {
     : [];
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-4 p-4 sm:p-5">
-      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/[.06] pb-4">
+    <div className="mx-auto max-w-[1600px] space-y-5 p-5 sm:p-6 lg:p-7">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/[.06] pb-5">
         <div>
           <p className="section-label">Reference Match Studio</p>
           <div className="mt-1 flex items-center gap-2">
-            <h1 className="text-xl font-semibold tracking-[-.025em] text-white">Reference Match</h1>
+            <h1 className="text-2xl font-semibold tracking-[-.025em] text-white">Reference Match</h1>
             <HelpTip title="What is reference matching?" steps={['Upload the song you want to improve.', 'Add a professionally released song as a sonic reference.', 'Choose which sound qualities matter to you.', 'Generate a processing chain, listen and adjust it.']}>
               The engine measures frequency balance, loudness, dynamics and stereo behaviour. It creates editable processing suggestions; it does not copy the audio or guarantee an identical sound.
             </HelpTip>
@@ -94,7 +94,7 @@ export default function ReferenceMatch() {
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-ink-400">Compare measured production characteristics and move your mix toward a sound you love, while keeping every creative decision in your hands.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" variant="secondary" onClick={() => picker.open(AUDIO_ACCEPT, true, (files) => void importFiles(files, 'reference'))}>
+          <Button size="md" variant="secondary" onClick={() => picker.open(AUDIO_ACCEPT, true, (files) => void importFiles(files, 'reference'))}>
             <Icon name="upload" size={14} /> Upload reference
           </Button>
           <Button size="sm" onClick={() => void analyzeProjectAssets()} disabled={!targetId && referenceIds.length === 0}>
