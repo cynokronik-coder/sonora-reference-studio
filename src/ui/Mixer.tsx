@@ -17,12 +17,12 @@ export function TransportBar() {
   const duration = transport.duration || 0;
 
   return (
-    <div className="relative z-20 flex flex-wrap items-center gap-2 border-b border-ink-700 bg-ink-900/90 px-3 py-2">
+    <div className="relative z-20 flex flex-wrap items-center gap-2 border-b border-white/[.07] bg-[#0D0D1B]/92 px-3 py-2.5 backdrop-blur-xl">
       <div className="flex items-center gap-1">
         <button
           type="button"
           onClick={() => void togglePlay()}
-          className="focus-ring flex h-8 w-8 items-center justify-center rounded-full border border-accent/50 bg-accent/15 text-accent hover:bg-accent/25"
+          className="focus-ring flex h-9 w-9 items-center justify-center rounded-full border border-[#A77AFF]/55 bg-gradient-to-br from-[#8957FF] to-[#7545EA] text-white shadow-violet hover:brightness-110"
           title={transport.playing ? 'Pause (space)' : 'Play (space)'}
         >
           {transport.playing ? '❚❚' : '▶'}
@@ -45,7 +45,7 @@ export function TransportBar() {
             Tools {toolsOpen ? '↑' : '↓'}
           </Button>
           {toolsOpen && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-[min(340px,calc(100vw-24px))] rounded-xl border border-ink-600 bg-[#11151b] p-3 text-left shadow-2xl shadow-black/60">
+            <div className="absolute right-0 top-full z-50 mt-2 w-[min(340px,calc(100vw-24px))] rounded-xl border border-white/[.10] bg-[#151426]/95 p-3 text-left shadow-floating backdrop-blur-xl">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-ink-100">Playback tools</p>
                 <button type="button" onClick={() => setToolsOpen(false)} className="rounded px-1 text-ink-500 hover:text-ink-100" aria-label="Close playback tools">×</button>
@@ -132,7 +132,7 @@ export function Mixer({
   if (!project) return null;
   const audibleTracks = project.tracks.filter((t) => t.kind !== 'reference' || t.clips.length > 0);
   return (
-    <div className="flex min-h-0 items-stretch gap-1 overflow-x-auto bg-ink-950/70 p-2">
+    <div className="flex min-h-0 items-stretch gap-2 overflow-x-auto bg-[#090914] p-3">
       {audibleTracks.map((track) => (
         <TrackStrip
           key={track.id}
@@ -166,8 +166,8 @@ function StripShell({
     <div
       onClick={onSelect}
       style={{ width, borderTopColor: accent }}
-      className={`flex shrink-0 cursor-pointer flex-col gap-1.5 rounded-b border border-t-2 bg-ink-850/80 p-1.5 ${
-        selected ? 'border-ink-500 ring-1 ring-inset ring-accent/20' : 'border-ink-700'
+      className={`flex shrink-0 cursor-pointer flex-col gap-2 rounded-xl border border-t-2 bg-[#171727]/90 p-2.5 shadow-panel transition-all duration-180 ${
+        selected ? 'border-[#A77AFF]/55 ring-1 ring-inset ring-[#8957FF]/20 shadow-violet-soft' : 'border-white/[.07] hover:border-white/[.12]'
       }`}
     >
       {children}
@@ -193,7 +193,7 @@ function TrackStrip({ track, selected, onSelect }: { track: TrackState; selected
               e.stopPropagation();
               updateTrack(track.id, { muted: !track.muted });
             }}
-            className={`h-4 w-4 rounded text-2xs ${track.muted ? 'bg-signal-red/30 text-signal-red' : 'bg-ink-800 text-ink-500'}`}
+            className={`h-5 w-5 rounded-md text-[9px] ${track.muted ? 'bg-signal-red/30 text-signal-red' : 'bg-ink-800 text-ink-500'}`}
             title="Mute"
           >
             M
@@ -250,7 +250,7 @@ function TrackStrip({ track, selected, onSelect }: { track: TrackState; selected
         </button>
       </div>
       {expanded && (
-        <div className="space-y-1 border-t border-ink-700 pt-1" onClick={(e) => e.stopPropagation()}>
+        <div className="space-y-2 border-t border-white/[.07] pt-2" onClick={(e) => e.stopPropagation()}>
           <Select
             value={track.output ?? ''}
             options={[{ value: '', label: 'Master' }, ...project.buses.map((b) => ({ value: b.id, label: b.name }))]}
@@ -346,7 +346,7 @@ function MasterStrip({ selected, onSelect }: { selected: boolean; onSelect: () =
   const meters = useMeters();
   const master = meters.peaks.master;
   return (
-    <StripShell selected={selected} onSelect={onSelect} accent="#c8f169" width={118}>
+    <StripShell selected={selected} onSelect={onSelect} accent="#8EDB75" width={118}>
       <div className="flex items-center justify-between">
         <span className="font-mono text-2xs uppercase tracking-wider text-accent">master</span>
         <span className="font-mono text-2xs text-ink-500">{project.master.processors.length} fx</span>
@@ -420,7 +420,7 @@ export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-ink-700 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-white/[.07] px-3 py-3">
         <div className="min-w-0">
           <div className="section-label">Sonora AI · Mixing engineer</div>
           <div className="mt-0.5 text-2xs text-ink-500">Project-aware advice · preview-first DSP edits</div>
@@ -454,7 +454,7 @@ export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
               )}
               {statusError && <p className="mt-1.5 text-2xs text-signal-amber">{statusError}</p>}
             </div>
-            <div className="rounded-lg border border-ink-700 bg-ink-900/60 p-2.5">
+            <div className="rounded-xl border border-white/[.07] bg-[#0D0D1B]/75 p-3">
               <div className="mb-2 flex items-center gap-2">
                 <span aria-hidden="true" className="text-accent">✦</span>
                 <span className="text-2xs font-medium text-ink-200">Try asking</span>
