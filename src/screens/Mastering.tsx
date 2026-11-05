@@ -77,22 +77,22 @@ export default function Mastering() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sonora-canvas">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[.07] bg-[#0D0D1B]/75 px-4 py-3 backdrop-blur-xl sm:px-5">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[.07] bg-[#0D0D1B]/75 px-5 py-4 backdrop-blur-xl sm:px-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-semibold tracking-[-.025em] text-white">Mastering</h1>
+            <h1 className="text-2xl font-semibold tracking-[-.025em] text-white">Mastering</h1>
             <HelpTip title="What happens during mastering?" steps={['Balance the overall tone.', 'Control peaks and dynamics.', 'Check loudness against your delivery goal.', 'Render and measure the finished audio.']}>
               Mastering processes the complete mix. It cannot independently fix a vocal or instrument inside a stereo file; use stems and the Mixing Studio when individual elements need changes.
             </HelpTip>
           </div>
-          <p className="mt-0.5 text-xs text-ink-400">Give your track the final polish, then verify the actual render.</p>
+          <p className="mt-1 text-sm text-ink-400">Give your track the final polish, then verify the actual render.</p>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge tone="neutral">{master.processors.length} processors</Badge>
-          <Button size="sm" variant="primary" disabled={busy?.kind === 'render'} onClick={startMastering}>
+          <Button size="md" variant="primary" disabled={busy?.kind === 'render'} onClick={startMastering}>
             <Icon name="sparkles" size={14} /> {busy?.kind === 'render' ? 'Mastering…' : 'Start mastering'}
           </Button>
-          <Button size="sm" variant="secondary" onClick={() => setScreen('export')}>
+          <Button size="md" variant="secondary" onClick={() => setScreen('export')}>
             <Icon name="download" size={14} /> Export
           </Button>
         </div>
@@ -101,7 +101,7 @@ export default function Mastering() {
       <TransportBar />
 
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1500px] space-y-4 p-4 sm:p-5">
+        <div className="mx-auto max-w-[1600px] space-y-5 p-5 sm:p-6 lg:p-7">
           <section className="grid gap-3 xl:grid-cols-[1.05fr_.95fr]">
             <Panel dataTour="mastering-upload" title="Your track" subtitle="The original audio remains untouched; mastering uses the current project chain.">
               <div
