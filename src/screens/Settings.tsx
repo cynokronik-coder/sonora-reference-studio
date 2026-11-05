@@ -232,7 +232,7 @@ export default function Settings() {
           </Panel>
           <Panel title="Accounts and privacy" subtitle="This build runs locally; multi-user access is not implemented.">
             <p className="text-xs leading-relaxed text-ink-400">There is no account system or server-side user table in this local build. Reference tracks remain stored in the current browser profile. Multi-user access control, sharing and server-side retention policies are deployment concerns, not simulated features.</p>
-            <div className="mt-3 flex items-center gap-2"><Icon name="shield-check" size={16} className="text-signal-green" /><span className="text-2xs text-ink-400">Original audio remains local unless you explicitly export it or configure a connected service.</span></div>
+            <div className="mt-3 flex items-center gap-2"><Icon name="check" size={16} className="text-signal-green" /><span className="text-2xs text-ink-400">Original audio remains local unless you explicitly export it or configure a connected service.</span></div>
           </Panel>
         </div>
       )}
