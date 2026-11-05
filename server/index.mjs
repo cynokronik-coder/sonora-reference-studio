@@ -44,6 +44,11 @@ const PRICE_IDS = {
   studio: { month: process.env.STRIPE_PRICE_STUDIO_MONTHLY || '', year: process.env.STRIPE_PRICE_STUDIO_YEARLY || '' },
 };
 const STRIPE_CONFIGURED = Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET);
+const CREDIT_PACK_PRICE_IDS = {
+  100: process.env.STRIPE_PRICE_CREDITS_100 || '',
+  500: process.env.STRIPE_PRICE_CREDITS_500 || '',
+  1500: process.env.STRIPE_PRICE_CREDITS_1500 || '',
+};
 const PLAN_LIMITS = { free: 10, creator: 100, pro: 400, studio: 1200 };
 
 function getBearerToken(request) {
@@ -164,6 +169,34 @@ function allStripePricesConfigured() {
   return Object.values(PRICE_IDS).every((intervals) => intervals.month && intervals.year);
 }
 
+function allCreditPackPricesConfigured() {
+  return Object.values(CREDIT_PACK_PRICE_IDS).every(Boolean);
+}
+
+async function syncCreditPurchase(session, status) {
+  const metadata = session?.metadata || {};
+  const credits = Number(metadata.credits);
+  const userId = metadata.user_id || session?.client_reference_id;
+  const paymentIntentId = typeof session?.payment_intent === 'string'
+    ? session.payment_intent
+    : session?.payment_intent?.id || null;
+  if (metadata.product_type !== 'ai_credit_topup' || !session?.id || !userId || ![100, 500, 1500].includes(credits)) {
+    throw new Error('Stripe credit-pack checkout is missing valid Sonora purchase metadata.');
+  }
+  await supabaseServiceRequest('ai_credit_purchases?on_conflict=stripe_checkout_session_id', {
+    method: 'POST',
+    body: {
+      user_id: userId,
+      stripe_checkout_session_id: session.id,
+      stripe_payment_intent_id: paymentIntentId,
+      credits,
+      status,
+      updated_at: new Date().toISOString(),
+    },
+    prefer: 'resolution=merge-duplicates,return=minimal',
+  });
+}
+
 function planForPrice(priceId) {
   for (const [plan, intervals] of Object.entries(PRICE_IDS)) {
     if (priceId && Object.values(intervals).includes(priceId)) return plan;
@@ -231,7 +264,12 @@ async function handleStripeWebhook(request, response) {
   if (Array.isArray(seen) && seen.length) return jsonResponse(response, 200, { received: true, duplicate: true });
 
   const object = event.data?.object;
-  if (event.type === 'checkout.session.completed' && object?.mode === 'subscription' && object.subscription) {
+  if ((event.type === 'checkout.session.completed' || event.type === 'checkout.session.async_payment_succeeded')
+      && object?.mode === 'payment' && object.metadata?.product_type === 'ai_credit_topup') {
+    await syncCreditPurchase(object, object.payment_status === 'paid' || event.type === 'checkout.session.async_payment_succeeded' ? 'paid' : 'pending');
+  } else if (event.type === 'checkout.session.async_payment_failed' && object?.metadata?.product_type === 'ai_credit_topup') {
+    await syncCreditPurchase(object, 'failed');
+  } else if (event.type === 'checkout.session.completed' && object?.mode === 'subscription' && object.subscription) {
     const subscriptionId = typeof object.subscription === 'string' ? object.subscription : object.subscription.id;
     const subscription = await stripeRequest(`subscriptions/${encodeURIComponent(subscriptionId)}`);
     if (object.metadata?.plan_key && !subscription.metadata?.plan_key) {
@@ -241,6 +279,12 @@ async function handleStripeWebhook(request, response) {
       subscription.metadata = { ...(subscription.metadata || {}), user_id: object.client_reference_id };
     }
     await syncStripeSubscription(subscription);
+  } else if (event.type === 'charge.refunded' && object?.refunded && object?.payment_intent) {
+    await supabaseServiceRequest(`ai_credit_purchases?stripe_payment_intent_id=eq.${encodeURIComponent(object.payment_intent)}`, {
+      method: 'PATCH',
+      body: { status: 'refunded', updated_at: new Date().toISOString() },
+      prefer: 'return=minimal',
+    });
   } else if (event.type?.startsWith('customer.subscription.') && object?.id) {
     await syncStripeSubscription(object);
   } else if (event.type === 'invoice.paid' || event.type === 'invoice.payment_failed') {
@@ -311,6 +355,40 @@ async function createCheckoutSession(request, response) {
   return jsonResponse(response, 200, { url: session.url });
 }
 
+async function createCreditCheckoutSession(request, response) {
+  const user = await requireSupabaseUser(request);
+  if (!STRIPE_CONFIGURED) return jsonResponse(response, 503, { error: 'Stripe billing is not configured on the server.' });
+  const body = await readJson(request);
+  const credits = Number(body.credits);
+  if (![100, 500, 1500].includes(credits)) return jsonResponse(response, 400, { error: 'Choose a valid AI credit pack.' });
+  const priceId = CREDIT_PACK_PRICE_IDS[credits];
+  if (!priceId) return jsonResponse(response, 503, { error: 'This AI credit pack is not configured in Stripe yet.' });
+  const requestId = typeof body.requestId === 'string' && /^[a-zA-Z0-9_-]{8,160}$/.test(body.requestId)
+    ? body.requestId
+    : randomUUID();
+  const customerId = await getOrCreateStripeCustomer(user);
+  const session = await stripeRequest('checkout/sessions', {
+    method: 'POST',
+    form: stripeForm({
+      mode: 'payment',
+      customer: customerId,
+      'line_items[0][price]': priceId,
+      'line_items[0][quantity]': 1,
+      success_url: `${APP_BASE_URL}/#plans`,
+      cancel_url: `${APP_BASE_URL}/#plans`,
+      client_reference_id: user.id,
+      'metadata[product_type]': 'ai_credit_topup',
+      'metadata[user_id]': user.id,
+      'metadata[credits]': credits,
+      'payment_intent_data[metadata][product_type]': 'ai_credit_topup',
+      'payment_intent_data[metadata][user_id]': user.id,
+      'payment_intent_data[metadata][credits]': credits,
+    }),
+    idempotencyKey: `sonora-credits-${user.id}-${requestId}`,
+  });
+  return jsonResponse(response, 200, { url: session.url });
+}
+
 async function createBillingPortal(request, response) {
   const user = await requireSupabaseUser(request);
   if (!STRIPE_CONFIGURED) return jsonResponse(response, 503, { error: 'Stripe billing is not fully configured on the server.' });
@@ -342,9 +420,17 @@ async function getBillingEntitlements(request, response) {
   const periodStart = current?.current_period_start || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
   const periodEnd = current?.current_period_end || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
   const usage = await supabaseServiceRequest(
-    `ai_credit_ledger?user_id=eq.${encodeURIComponent(user.id)}&period_start=eq.${encodeURIComponent(periodStart)}&period_end=eq.${encodeURIComponent(periodEnd)}&status=in.(reserved,captured)&select=credits`,
+    `ai_credit_ledger?user_id=eq.${encodeURIComponent(user.id)}&period_start=eq.${encodeURIComponent(periodStart)}&period_end=eq.${encodeURIComponent(periodEnd)}&source=eq.monthly&status=in.(reserved,captured)&select=credits`,
+  );
+  const purchasedUsage = await supabaseServiceRequest(
+    `ai_credit_ledger?user_id=eq.${encodeURIComponent(user.id)}&source=eq.purchased&status=in.(reserved,captured)&select=credits`,
+  );
+  const purchases = await supabaseServiceRequest(
+    `ai_credit_purchases?user_id=eq.${encodeURIComponent(user.id)}&status=eq.paid&select=credits`,
   );
   const used = Array.isArray(usage) ? usage.reduce((sum, row) => sum + Number(row.credits || 0), 0) : 0;
+  const purchasedUsed = Array.isArray(purchasedUsage) ? purchasedUsage.reduce((sum, row) => sum + Number(row.credits || 0), 0) : 0;
+  const purchasedTotal = Array.isArray(purchases) ? purchases.reduce((sum, row) => sum + Number(row.credits || 0), 0) : 0;
   const allowance = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
   return jsonResponse(response, 200, {
     authenticated: true,
@@ -353,7 +439,13 @@ async function getBillingEntitlements(request, response) {
     subscriptionStatus: current?.status || null,
     currentPeriodEnd: current?.current_period_end || null,
     cancelAtPeriodEnd: Boolean(current?.cancel_at_period_end),
-    aiCredits: { allowance, used, remaining: Math.max(allowance - used, 0), periodEnd },
+    aiCredits: {
+      allowance,
+      used,
+      remaining: Math.max(allowance - used, 0),
+      periodEnd,
+      purchased: { total: purchasedTotal, used: purchasedUsed, remaining: Math.max(purchasedTotal - purchasedUsed, 0) },
+    },
   });
 }
 
@@ -677,11 +769,17 @@ const server = createServer(async (request, response) => {
   if (request.method === 'GET' && url.pathname === '/api/billing/status') {
     return jsonResponse(response, 200, {
       authConfigured: SUPABASE_CONFIGURED,
+      stripeConfigured: STRIPE_CONFIGURED,
       billingConfigured: SUPABASE_CONFIGURED && STRIPE_CONFIGURED && allStripePricesConfigured(),
       configuredPlans: Object.fromEntries(Object.entries(PRICE_IDS).map(([plan, prices]) => [
         plan,
         { monthly: Boolean(prices.month), yearly: Boolean(prices.year) },
       ])),
+      creditPacksConfigured: Object.fromEntries(Object.entries(CREDIT_PACK_PRICE_IDS).map(([credits, price]) => [
+        credits,
+        Boolean(price),
+      ])),
+      creditTopupsConfigured: SUPABASE_CONFIGURED && STRIPE_CONFIGURED && allCreditPackPricesConfigured(),
     });
   }
   if (request.method === 'GET' && url.pathname === '/api/billing/entitlements') {
@@ -691,6 +789,10 @@ const server = createServer(async (request, response) => {
   if (request.method === 'POST' && url.pathname === '/api/billing/checkout') {
     try { return await createCheckoutSession(request, response); }
     catch (error) { return jsonResponse(response, error?.statusCode || 500, { error: error instanceof Error ? error.message : 'Could not create checkout.' }); }
+  }
+  if (request.method === 'POST' && url.pathname === '/api/billing/credits/checkout') {
+    try { return await createCreditCheckoutSession(request, response); }
+    catch (error) { return jsonResponse(response, error?.statusCode || 500, { error: error instanceof Error ? error.message : 'Could not create credit-pack checkout.' }); }
   }
   if (request.method === 'POST' && url.pathname === '/api/billing/portal') {
     try { return await createBillingPortal(request, response); }
