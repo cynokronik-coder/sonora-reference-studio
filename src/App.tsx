@@ -11,7 +11,7 @@ import Analysis from './screens/Analysis';
 import Export from './screens/Export';
 import Settings from './screens/Settings';
 import Learn from './screens/Learn';
-import { EmptyState, Panel, ProgressBar } from './ui/Primitives';
+import { Button, EmptyState, Panel, ProgressBar } from './ui/Primitives';
 import TopNavigation from './ui/TopNavigation';
 import { realtimeHost } from './audio/engine/realtime';
 
