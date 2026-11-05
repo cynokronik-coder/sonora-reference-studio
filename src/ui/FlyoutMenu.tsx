@@ -89,6 +89,12 @@ export function FlyoutMenu({
     }
     setPinned(true);
     setOpen(true);
+    window.requestAnimationFrame(() => {
+      const firstControl = panelRef.current?.querySelector<HTMLElement>(
+        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      (firstControl ?? panelRef.current)?.focus();
+    });
   };
 
   useLayoutEffect(() => {
@@ -124,7 +130,11 @@ export function FlyoutMenu({
       dismiss();
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') dismiss();
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        dismiss();
+        triggerRef.current?.focus();
+      }
     };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
@@ -142,6 +152,7 @@ export function FlyoutMenu({
       id={panelId}
       role="dialog"
       aria-label={title ?? label}
+      tabIndex={-1}
       onPointerEnter={clearTimers}
       onPointerLeave={scheduleClose}
       onPointerDown={() => setPinned(true)}
