@@ -279,7 +279,7 @@ async function handleStripeWebhook(request, response) {
       subscription.metadata = { ...(subscription.metadata || {}), user_id: object.client_reference_id };
     }
     await syncStripeSubscription(subscription);
-  } else if (event.type === 'charge.refunded' && object?.refunded && object?.payment_intent) {
+  } else if (event.type === 'charge.refunded' && Number(object?.amount_refunded || 0) > 0 && object?.payment_intent) {
     await supabaseServiceRequest(`ai_credit_purchases?stripe_payment_intent_id=eq.${encodeURIComponent(object.payment_intent)}`, {
       method: 'PATCH',
       body: { status: 'refunded', updated_at: new Date().toISOString() },
@@ -410,10 +410,14 @@ async function getBillingEntitlements(request, response) {
   const rows = await supabaseServiceRequest(
     `subscriptions?user_id=eq.${encodeURIComponent(user.id)}&select=plan_key,status,current_period_start,current_period_end,cancel_at_period_end&order=current_period_end.desc&limit=5`,
   );
+  const withinCurrentPeriod = (row) => row.current_period_start
+    && new Date(row.current_period_start).getTime() <= Date.now()
+    && row.current_period_end && new Date(row.current_period_end).getTime() > Date.now();
   const current = Array.isArray(rows) ? rows.find((row) =>
-    ['active', 'trialing'].includes(row.status)
-    && row.current_period_start && new Date(row.current_period_start).getTime() <= Date.now()
-    && row.current_period_end && new Date(row.current_period_end).getTime() > Date.now()
+    ['active', 'trialing'].includes(row.status) && withinCurrentPeriod(row)
+  ) : null;
+  const management = Array.isArray(rows) ? rows.find((row) =>
+    ['active', 'trialing', 'past_due'].includes(row.status)
   ) : null;
   const plan = current?.plan_key || 'free';
   const now = new Date();
@@ -436,9 +440,9 @@ async function getBillingEntitlements(request, response) {
     authenticated: true,
     email: user.email,
     plan,
-    subscriptionStatus: current?.status || null,
-    currentPeriodEnd: current?.current_period_end || null,
-    cancelAtPeriodEnd: Boolean(current?.cancel_at_period_end),
+    subscriptionStatus: management?.status || current?.status || null,
+    currentPeriodEnd: management?.current_period_end || current?.current_period_end || null,
+    cancelAtPeriodEnd: Boolean(management?.cancel_at_period_end || current?.cancel_at_period_end),
     aiCredits: {
       allowance,
       used,
