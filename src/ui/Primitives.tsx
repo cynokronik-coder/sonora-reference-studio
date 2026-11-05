@@ -122,12 +122,18 @@ export function Toggle({
   description?: string;
   disabled?: boolean;
 }) {
+  const labelId = useId();
+  const descriptionId = useId();
+
   return (
-    <label className={`flex cursor-pointer items-start gap-2.5 ${disabled ? 'opacity-50' : ''}`}>
+    <div className={`flex items-start gap-2.5 ${disabled ? 'opacity-50' : ''}`}>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
+        aria-label={label ? undefined : 'Toggle setting'}
+        aria-labelledby={label ? labelId : undefined}
+        aria-describedby={description ? descriptionId : undefined}
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={`focus-ring relative mt-0.5 h-[18px] w-8 shrink-0 rounded-full border transition-colors duration-180 ${
@@ -135,6 +141,7 @@ export function Toggle({
         }`}
       >
         <span
+          aria-hidden="true"
           className={`absolute top-[2px] h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-180 ${
             checked ? 'translate-x-[15px]' : 'translate-x-[2px]'
           }`}
@@ -142,11 +149,11 @@ export function Toggle({
       </button>
       {(label || description) && (
         <span className="min-w-0">
-          {label && <span className="block text-xs font-medium text-ink-100">{label}</span>}
-          {description && <span className="mt-0.5 block text-2xs leading-relaxed text-ink-400">{description}</span>}
+          {label && <span id={labelId} className="block text-xs font-medium text-ink-100">{label}</span>}
+          {description && <span id={descriptionId} className="mt-0.5 block text-2xs leading-relaxed text-ink-400">{description}</span>}
         </span>
       )}
-    </label>
+    </div>
   );
 }
 
@@ -337,11 +344,20 @@ export function Badge({
 }
 
 export function ProgressBar({ value, tone = 'accent' }: { value: number; tone?: 'accent' | 'danger' }) {
+  const percentage = Math.round(clamp(value, 0, 1) * 100);
   return (
-    <div className="h-1 w-full overflow-hidden rounded-full bg-[#303047]">
+    <div
+      role="progressbar"
+      aria-label="Progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percentage}
+      className="h-1 w-full overflow-hidden rounded-full bg-[#303047]"
+    >
       <div
+        aria-hidden="true"
         className={`h-full rounded-full transition-[width] duration-180 ${tone === 'accent' ? 'bg-gradient-to-r from-[#7545EA] to-[#A77AFF]' : 'bg-signal-red'}`}
-        style={{ width: `${Math.round(clamp(value, 0, 1) * 100)}%` }}
+        style={{ width: `${percentage}%` }}
       />
     </div>
   );
@@ -360,15 +376,81 @@ export function Modal({
   children: ReactNode;
   wide?: boolean;
 }) {
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleId = useId();
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const previousActive = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const dialog = dialogRef.current;
+    document.body.style.overflow = 'hidden';
+
+    const focusableSelector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])
+      .filter((element) => element.getAttribute('aria-hidden') !== 'true' && element.offsetParent !== null);
+
+    (focusable()[0] ?? dialog)?.focus();
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const items = focusable();
+      if (items.length === 0) {
+        event.preventDefault();
+        dialog?.focus();
+        return;
+      }
+
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialog?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialog?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousActive?.focus();
+    };
+  }, [open]);
+
   if (!open) return null;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#05050c]/75 p-4 backdrop-blur-md" onClick={onClose}>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[#05050c]/75 p-3 backdrop-blur-md sm:p-4"
+      onClick={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
       <div
-        className={`max-h-[85vh] w-full overflow-auto rounded-panel border border-white/[.10] bg-[#151426]/95 p-4 shadow-floating backdrop-blur-xl ${wide ? 'max-w-3xl' : 'max-w-md'}`}
-        onClick={(e) => e.stopPropagation()}
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className={`max-h-[min(85vh,900px)] w-full overflow-auto rounded-panel border border-white/[.10] bg-[#151426]/95 p-3 shadow-floating backdrop-blur-xl sm:p-4 ${wide ? 'max-w-3xl' : 'max-w-md'}`}
       >
         <div className="mb-3 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold text-ink-100">{title}</h3>
+          <h2 id={titleId} className="text-sm font-semibold text-ink-100">{title}</h2>
           <IconButton onClick={onClose} title="Close">
             ×
           </IconButton>
