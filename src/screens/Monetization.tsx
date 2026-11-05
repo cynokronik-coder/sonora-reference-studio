@@ -129,7 +129,7 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
     return () => { alive = false; unsubscribe(); };
   }, []);
 
-  const billingReady = Boolean(billingStatus?.billingConfigured && isSupabaseAuthConfigured());
+  const billingReady = Boolean(billingStatus?.checkoutEnabled && isSupabaseAuthConfigured());
 
   const choosePlan = async (plan: Exclude<PlanKey, 'free'>) => {
     setBillingError(null);
