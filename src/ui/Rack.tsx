@@ -59,14 +59,14 @@ export function Rack({
       if (!definition) return false;
       if (!filterCategory) return true;
       if (filterCategory === 'effects') {
-        return ['saturation', 'stereo', 'time', 'vocal', 'utility'].includes(definition.category);
+        return ['saturation', 'stereo', 'time', 'vocal', 'utility', 'mastering'].includes(definition.category);
       }
       return definition.category === filterCategory;
     });
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between gap-2 border-b border-ink-700 px-3 py-2">
+      <div className="flex items-center justify-between gap-2 border-b border-white/[.07] px-4 py-3">
         <div>
           <div className="flex items-center gap-2"><div className="section-label">Processing chain</div><HelpTip title="What is a processing chain?">Audio flows through processors in order. Each processor changes the signal before it reaches the next one. Drag processors to reorder them, bypass one to compare, or select it to edit its settings.</HelpTip></div>
           <div className="mt-0.5 text-2xs text-ink-500">
@@ -112,12 +112,12 @@ export function Rack({
                 if (dragIndex !== null) moveProcessor(scope, trackId, dragIndex, index);
                 setDragIndex(null);
               }}
-              className={`mb-1.5 overflow-hidden rounded border transition-colors ${
-                isSelected ? 'border-accent/40 bg-ink-800' : 'border-ink-700 bg-ink-850/70 hover:border-ink-600'
+              className={`mb-2 overflow-hidden rounded-xl border transition-all duration-180 ${
+                isSelected ? 'border-[#A77AFF]/45 bg-[#8957FF]/[.09] shadow-violet-soft' : 'border-white/[.07] bg-[#171727]/75 hover:border-white/[.14] hover:bg-[#1D1D30]'
               }`}
             >
-              <div className="flex items-center gap-1.5 px-2 py-1.5">
-                <span className="cursor-grab select-none text-2xs text-ink-600" title="Drag to reorder">
+              <div className="flex items-center gap-2 px-3 py-2.5">
+                <span className="cursor-grab select-none text-xs tracking-[-.15em] text-ink-600" title="Drag to reorder">
                   ⋮⋮
                 </span>
                 <button
@@ -151,7 +151,7 @@ export function Rack({
               </div>
 
               {isSelected && (
-                <div className="border-t border-ink-700 bg-ink-900/60 p-2.5">
+                <div className="border-t border-white/[.07] bg-[#0D0D1B]/70 p-3">
                   <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <div className="flex min-w-0 items-start gap-2"><p className="max-w-[70%] text-2xs leading-relaxed text-ink-400">{def.description}</p><HelpTip title={def.name}>{def.description} Start with small adjustments, bypass the processor to compare, and keep the change only if it improves the result.</HelpTip></div>
                     <div className="flex gap-1">
@@ -172,7 +172,7 @@ export function Rack({
                   </div>
 
                   {node.note && (
-                    <div className="mb-2 rounded border border-accent/20 bg-accent/5 p-2 text-2xs leading-relaxed text-ink-300">
+                    <div className="mb-2 rounded-lg border border-[#A77AFF]/20 bg-[#8957FF]/[.08] p-2.5 text-2xs leading-relaxed text-ink-300">
                       <span className="mr-1 font-mono uppercase tracking-wider text-accent/80">why</span>
                       {node.note}
                     </div>
@@ -204,7 +204,7 @@ export function Rack({
         })}
       </div>
 
-      <div className="border-t border-ink-700 px-3 py-2 text-2xs text-ink-500">
+      <div className="border-t border-white/[.07] px-4 py-2.5 text-2xs text-ink-500">
         {selected ? (
           <span>
             Editing <span className="text-ink-200">{getDefinition(selected.type)?.name}</span> · changes are non-destructive
@@ -238,7 +238,7 @@ export function Rack({
                         addProcessor(scope, trackId, def.type);
                         setAddOpen(false);
                       }}
-                      className="focus-ring rounded border border-ink-700 bg-ink-850 p-2 text-left transition-colors hover:border-accent/40 hover:bg-ink-800"
+                      className="focus-ring rounded-xl border border-white/[.08] bg-[#171727] p-3 text-left transition-all duration-180 hover:border-[#A77AFF]/40 hover:bg-[#1D1D30]"
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-ink-100">{def.name}</span>
