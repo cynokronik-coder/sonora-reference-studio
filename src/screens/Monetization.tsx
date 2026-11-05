@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { getAuthSession, isSupabaseAuthConfigured, subscribeToAuth, type AuthSession } from '../lib/auth';
+import { getBillingStatus, getEntitlements, openBillingPortal, startCheckout, type BillingStatus, type Entitlements } from '../lib/billing';
 
 type Section = 'plans' | 'credits' | 'marketplace' | 'partners';
 
@@ -102,9 +104,62 @@ function StatusNote({ children }: { children: string }) {
   return <div className="rounded-xl border border-signal-amber/20 bg-signal-amber/[.06] px-3 py-2.5 text-2xs leading-relaxed text-amber-100/80">{children}</div>;
 }
 
-export default function Monetization() {
+export default function Monetization({ onOpenAccount }: { onOpenAccount: () => void }) {
   const [section, setSection] = useState<Section>('plans');
   const [annual, setAnnual] = useState(true);
+  const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
+  const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  const [billingError, setBillingError] = useState<string | null>(null);
+  const [billingMessage, setBillingMessage] = useState<string | null>(null);
+
+  const refreshAccount = async (active: AuthSession | null) => {
+    if (active) {
+      try { setEntitlements(await getEntitlements()); }
+      catch { setEntitlements(null); }
+    } else {
+      setEntitlements(null);
+    }
+  };
+
+  useEffect(() => {
+    let alive = true;
+    void getBillingStatus().then((status) => { if (alive) setBillingStatus(status); }).catch(() => { if (alive) setBillingStatus(null); });
+    void getAuthSession().then((active) => {
+      if (!alive) return;
+      setSession(active);
+      void refreshAccount(active);
+    });
+    const unsubscribe = subscribeToAuth((active) => {
+      if (!alive) return;
+      setSession(active);
+      void refreshAccount(active);
+    });
+    return () => { alive = false; unsubscribe(); };
+  }, []);
+
+  const billingReady = Boolean(billingStatus?.billingConfigured && isSupabaseAuthConfigured());
+
+  const choosePlan = async (plan: Exclude<PlanKey, 'free'>) => {
+    setBillingError(null);
+    setBillingMessage(null);
+    if (!session) {
+      onOpenAccount();
+      return;
+    }
+    setBusyPlan(plan);
+    try {
+      if (entitlements?.plan === plan) {
+        await openBillingPortal();
+      } else {
+        await startCheckout(plan, annual ? 'year' : 'month');
+      }
+    } catch (cause) {
+      setBillingError(cause instanceof Error ? cause.message : 'Could not start checkout.');
+      setBusyPlan(null);
+    }
+  };
 
   return (
     <div className="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
@@ -115,7 +170,8 @@ export default function Monetization() {
           <p className="mt-2 max-w-xl text-sm leading-6 text-ink-400">Choose the workspace that fits your production rhythm. Local audio processing stays useful on every plan; subscriptions add higher limits and connected services.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="rounded-full border border-signal-amber/25 bg-signal-amber/[.07] px-3 py-1.5 font-mono text-[9px] uppercase tracking-[.14em] text-signal-amber">Commercial preview · checkout not connected</span>
+          <span className={`rounded-full border px-3 py-1.5 font-mono text-[9px] uppercase tracking-[.14em] ${billingReady ? 'border-accent/25 bg-accent/[.07] text-accent' : 'border-signal-amber/25 bg-signal-amber/[.07] text-signal-amber'}`}>{billingReady ? 'Billing configured' : 'Billing setup required'}</span>
+          <button type="button" onClick={onOpenAccount} className="rounded-lg border border-white/[.1] px-3 py-2 text-xs text-ink-300 transition hover:border-accent/30 hover:text-white">{session ? session.user.email : 'Sign in / Create account'}</button>
         </div>
       </header>
 
@@ -139,6 +195,8 @@ export default function Monetization() {
             </div>
           </div>
 
+          {billingError && <div role="alert" className="rounded-xl border border-signal-red/25 bg-signal-red/[.06] px-4 py-3 text-xs text-signal-red">{billingError}</div>}
+          {billingMessage && <div role="status" className="rounded-xl border border-accent/20 bg-accent/[.06] px-4 py-3 text-xs text-accent">{billingMessage}</div>}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             {PLANS.map((plan) => {
               const price = annual ? plan.annual : plan.monthly;
@@ -167,9 +225,19 @@ export default function Monetization() {
                   <ul className="mb-5 flex-1 space-y-2">
                     {plan.features.map((feature) => <li key={feature} className="flex gap-2 text-2xs leading-relaxed text-ink-300"><span className="text-accent">✓</span><span>{feature}</span></li>)}
                   </ul>
-                  <button type="button" disabled className="w-full cursor-not-allowed rounded-lg border border-white/[.08] bg-white/[.035] px-3 py-2.5 text-xs font-medium text-ink-500" title="Checkout becomes available after authentication, billing and persistent storage are connected">
-                    {plan.key === 'free' ? 'Local free workspace' : 'Checkout not connected'}
-                  </button>
+                  {plan.key === 'free' ? (
+                    <div className="w-full rounded-lg border border-white/[.08] bg-white/[.025] px-3 py-2.5 text-center text-xs font-medium text-ink-400">{entitlements?.plan === 'free' ? 'Your current plan' : 'Free plan'}</div>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={!billingReady || busyPlan !== null}
+                      onClick={() => void choosePlan(plan.key)}
+                      className={`w-full rounded-lg border px-3 py-2.5 text-xs font-medium transition disabled:cursor-not-allowed disabled:opacity-45 ${'popular' in plan && plan.popular ? 'border-accent/40 bg-accent text-[#10150a] hover:bg-[#d5fa7a]' : 'border-white/[.1] bg-white/[.045] text-white hover:border-accent/35'}`}
+                      title={!billingReady ? 'Configure Supabase and Stripe server credentials and all Price IDs to enable checkout.' : !session ? 'Sign in to subscribe.' : 'Continue to secure Stripe Checkout.'}
+                    >
+                      {busyPlan === plan.key ? 'Opening secure checkout…' : entitlements?.plan === plan.key ? 'Manage current plan' : !billingReady ? 'Billing setup required' : session ? 'Choose ' + plan.name : 'Sign in to subscribe'}
+                    </button>
+                  )}
                 </article>
               );
             })}
@@ -184,7 +252,11 @@ export default function Monetization() {
               </table>
             </div>
           </div>
-          <StatusNote>Billing is intentionally not enabled in this build. Sonora currently has no sign-in, subscription database or Stripe connection, so plan selection is a pricing preview only. No payment will be taken and no account entitlement is being simulated.</StatusNote>
+          {billingReady ? (
+            <div className="rounded-xl border border-accent/20 bg-accent/[.05] px-3 py-2.5 text-2xs leading-relaxed text-accent">Supabase authentication and Stripe billing credentials are configured. Sign in to start a secure Checkout Session. Subscription access is activated only after Stripe sends a verified webhook.</div>
+          ) : (
+            <StatusNote>Checkout stays disabled until Supabase Auth, the server-side service-role key, Stripe secret and webhook keys, and all six monthly/yearly Stripe Price IDs are configured. The app will not accept or simulate payments without them.</StatusNote>
+          )}
         </section>
       )}
 
