@@ -39,7 +39,8 @@ export type Screen =
   | 'export'
   | 'learn'
   | 'settings'
-  | 'plans';
+  | 'plans'
+  | 'account';
 
 export type Mode = 'beginner' | 'advanced';
 
