@@ -59,6 +59,7 @@ export default function Settings() {
         </div>
       </header>
 
+      <div data-tour="settings-categories">
       <Tabs
         value={section}
         onChange={setSection}
@@ -71,7 +72,9 @@ export default function Settings() {
           { value: 'about', label: 'About' },
         ]}
       />
+      </div>
 
+      <div data-tour="settings-content">
       {section === 'ai' && (
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
           <Panel title="Sonora AI assistant" subtitle="Connection status and safe processing workflow." right={<Badge tone={aiStatus?.configured ? 'accent' : 'neutral'}>{aiStatus?.configured ? 'Connected' : 'Offline fallback'}</Badge>}>
@@ -256,6 +259,7 @@ export default function Settings() {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }
