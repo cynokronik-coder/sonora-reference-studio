@@ -18,18 +18,18 @@ export function TransportBar() {
   const duration = transport.duration || 0;
 
   return (
-    <div className="relative z-20 flex flex-wrap items-center gap-2 border-b border-white/[.07] bg-[#0D0D1B]/92 px-3 py-2.5 backdrop-blur-xl">
+    <div className="relative z-20 flex flex-wrap items-center gap-3 border-b border-white/[.07] bg-[#0D0D1B]/92 px-4 py-3 backdrop-blur-xl sm:px-5">
       <div className="flex items-center gap-1">
         <button
           type="button"
           onClick={() => void togglePlay()}
-          className="focus-ring flex h-9 w-9 items-center justify-center rounded-full border border-[#A77AFF]/55 bg-gradient-to-br from-[#8957FF] to-[#7545EA] text-white shadow-violet hover:brightness-110"
+          className="focus-ring flex h-11 w-11 items-center justify-center rounded-full border border-[#A77AFF]/55 bg-gradient-to-br from-[#8957FF] to-[#7545EA] text-white shadow-violet hover:brightness-110"
           title={transport.playing ? 'Pause (space)' : 'Play (space)'}
         >
           {transport.playing ? '❚❚' : '▶'}
         </button>
         <IconButton title="Stop and return to start" onClick={stop}>■</IconButton>
-        <div className="ml-2 font-mono text-xs tabular-nums text-ink-100">
+        <div className="ml-2 font-mono text-sm tabular-nums text-ink-100">
           {formatTime(transport.position)}
           <span className="text-ink-500"> / {formatTime(duration)}</span>
         </div>
@@ -133,7 +133,7 @@ export function Mixer({
   if (!project) return null;
   const audibleTracks = project.tracks.filter((t) => t.kind !== 'reference' || t.clips.length > 0);
   return (
-    <div className="flex min-h-0 items-stretch gap-2 overflow-x-auto bg-[#090914] p-3">
+    <div className="flex min-h-0 items-stretch gap-3 overflow-x-auto bg-[#090914] p-4 sm:p-5">
       {audibleTracks.map((track) => (
         <TrackStrip
           key={track.id}
