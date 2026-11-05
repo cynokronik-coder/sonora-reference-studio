@@ -16,11 +16,11 @@ export default function Analysis() {
   const bands = useMemo(() => report?.spectrum.bands ?? [], [report]);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4">
+    <div className="mx-auto max-w-[1500px] space-y-5 p-5 sm:p-6 lg:p-7">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="section-label">Measurement</p>
-          <div className="mt-1 flex items-center gap-2"><h1 className="text-xl font-semibold text-ink-100">Audio analysis</h1><HelpTip title="Why analyze audio?">Analysis measures the actual uploaded file so the Reference Match engine can compare it with another song. Measurements are useful clues; they do not replace listening or musical judgement.</HelpTip></div>
+          <div className="mt-1 flex items-center gap-2"><h1 className="text-2xl font-semibold text-ink-100">Audio analysis</h1><HelpTip title="Why analyze audio?">Analysis measures the actual uploaded file so the Reference Match engine can compare it with another song. Measurements are useful clues; they do not replace listening or musical judgement.</HelpTip></div>
           <p className="mt-1 text-xs text-ink-400">Real measurements from the decoded audio, computed in a background worker.</p>
         </div>
         <div data-tour="analysis-select" className="flex items-end gap-2">
