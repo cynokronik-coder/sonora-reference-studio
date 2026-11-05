@@ -82,7 +82,7 @@ export default function Dashboard() {
   const go = (screen: 'studio' | 'reference' | 'mastering' | 'analysis' | 'export') => useApp.getState().setScreen(screen);
 
   return (
-    <div className="mx-auto max-w-[1500px] space-y-5 p-4 sm:p-6">
+    <div className="mx-auto max-w-[1600px] space-y-6 p-5 sm:p-7 lg:p-8">
       <section className="relative isolate overflow-hidden rounded-2xl border border-ink-700 bg-[#11161b] shadow-panel">
         <div className="pointer-events-none absolute -right-24 -top-32 h-80 w-80 rounded-full bg-accent/10 blur-3xl" />
         <div className="pointer-events-none absolute -bottom-32 right-1/3 h-72 w-72 rounded-full bg-signal-violet/10 blur-3xl" />
@@ -133,22 +133,22 @@ export default function Dashboard() {
 
       {project && (
         <section className="grid gap-3 md:grid-cols-4">
-          <div className="rounded-xl border border-ink-700 bg-ink-900/70 p-3">
+          <div className="rounded-2xl border border-ink-700 bg-ink-900/70 p-4">
             <div className="text-2xs text-ink-500">Active project</div>
             <div className="mt-1 truncate text-sm font-medium text-ink-100">{project.name}</div>
             <div className="mt-1 font-mono text-2xs text-ink-500">{project.sampleRate.toLocaleString()} Hz session</div>
           </div>
-          <div className="rounded-xl border border-ink-700 bg-ink-900/70 p-3">
+          <div className="rounded-2xl border border-ink-700 bg-ink-900/70 p-4">
             <div className="text-2xs text-ink-500">Arrangement</div>
             <div className="mt-1 text-sm font-medium text-ink-100">{project.tracks.length} tracks</div>
             <div className="mt-1 font-mono text-2xs text-ink-500">{formatTime(duration)} timeline length</div>
           </div>
-          <div className="rounded-xl border border-ink-700 bg-ink-900/70 p-3">
+          <div className="rounded-2xl border border-ink-700 bg-ink-900/70 p-4">
             <div className="text-2xs text-ink-500">Reference library</div>
             <div className="mt-1 text-sm font-medium text-ink-100">{project.referenceAssetIds.length} tracks</div>
             <div className="mt-1 font-mono text-2xs text-ink-500">{analyzed} assets analyzed</div>
           </div>
-          <div className="rounded-xl border border-ink-700 bg-ink-900/70 p-3">
+          <div className="rounded-2xl border border-ink-700 bg-ink-900/70 p-4">
             <div className="text-2xs text-ink-500">Latest measured master</div>
             <div className="mt-1 text-sm font-medium text-ink-100">{lastRenderStats ? `${lastRenderStats.lufs.toFixed(1)} LUFS` : 'Not rendered yet'}</div>
             <div className="mt-1 font-mono text-2xs text-ink-500">{lastRenderStats ? `${lastRenderStats.truePeakDb.toFixed(1)} dBTP` : 'Render to verify output'}</div>
@@ -229,7 +229,7 @@ export default function Dashboard() {
             </div>
             <Button size="sm" variant="ghost" onClick={() => useApp.getState().setScreen('projects')}>All projects ↗</Button>
           </div>
-          <div className="rounded-xl border border-ink-700 bg-ink-900/70 p-3">
+          <div className="rounded-2xl border border-ink-700 bg-ink-900/70 p-4">
             {projects.length === 0 ? (
               <EmptyState
                 title="Your studio starts here"
@@ -274,7 +274,7 @@ export default function Dashboard() {
       </section>
 
       <section className="grid gap-3 md:grid-cols-2">
-        <div className="rounded-xl border border-ink-700 bg-ink-900/60 p-4">
+        <div className="rounded-2xl border border-ink-700 bg-ink-900/60 p-5">
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs font-semibold text-ink-100">New to mixing and mastering?</div>
             <Badge tone="info">{mode === 'beginner' ? 'Beginner mode' : 'Engineer mode'}</Badge>
@@ -290,7 +290,7 @@ export default function Dashboard() {
             </HelpTip>
           </div>
         </div>
-        <div className="rounded-xl border border-ink-700 bg-ink-900/60 p-4">
+        <div className="rounded-2xl border border-ink-700 bg-ink-900/60 p-5">
           <div className="flex items-center justify-between gap-3">
             <div className="text-xs font-semibold text-ink-100">Your progress</div>
             <span className="font-mono text-2xs text-ink-500">{completed}/4 milestones</span>
