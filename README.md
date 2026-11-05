@@ -35,10 +35,19 @@ The offline assistant and audio engine work without external services. The optio
 
 ## What is actually implemented
 
-### Commercial model preview
-- A **Plans & Add-ons** workspace is available from the landing-page Pricing link and the in-app navigation.
-- It presents proposed Free, Creator, Pro and Studio plans, a monthly/yearly toggle, a feature comparison, AI credit packs, and previews for presets, professional services, education, teams and affiliates.
-- All prices and quotas are commercial hypotheses for review. The page explicitly marks checkout, credit sales, marketplace orders, affiliate applications and team accounts as not connected.
+### Accounts and subscriptions (configuration required)
+- Supabase Auth email/password sign-up, sign-in, refresh and sign-out are implemented in the Account workspace.
+- The API verifies bearer sessions against Supabase Auth; account identity is not accepted from untrusted request-body fields.
+- Stripe subscription Checkout Sessions are created server-side from an allow-listed plan/interval-to-Price-ID map. Existing subscribers are routed to the customer portal rather than being offered a second subscription.
+- The Stripe webhook endpoint verifies signatures against the raw request body, syncs subscription status, and records processed event IDs.
+- Supabase migration creates private billing-customer, subscription, webhook-event and AI-credit ledger tables with row-level security and restricted grants.
+- Connected AI requests require a verified user when Supabase is enabled. One AI credit is atomically reserved per request, captured on success and released on provider failure. Local DSP and offline renders remain independent of AI credits.
+- **No credentials are committed.** Sign-up, live checkout, portal and paid entitlements remain disabled until the owner configures Supabase, Stripe products/prices and webhook secrets. See [MONETIZATION.md](MONETIZATION.md).
+
+### Additional revenue concepts
+- The Plans & Add-ons workspace presents proposed AI credit packs, a preset marketplace, human-reviewed mastering, education, studio/team subscriptions and affiliate commissions.
+- Credit top-ups, marketplace fulfilment, team workspaces, affiliate attribution/payouts and service fulfilment are still roadmap items, not active purchase flows.
+- Prices and limits are hypotheses and must be validated against actual operating costs and customer research.
 
 ### Arrangement timeline
 - Multitrack arrangement view with tempo-based bar/beat ruler and adjustable zoom.
@@ -137,10 +146,9 @@ decoding and the visual UI have not been exercised end-to-end. The DSP they call
 
 - **No AI stem separation.** A stereo mix cannot be split into vocals/drums/bass inside this build. Any UI that
   suggests otherwise is not present. Instrumental/vocal-only export therefore does not exist.
-- **No accounts or collaboration.** The app is local-first: projects and audio live in this browser. There is no
-  server-side user table, sharing, comments or access-control layer in this build. See
-  [ARCHITECTURE.md](ARCHITECTURE.md) for the proposed deployment model.
-- **No live billing or monetization backend.** The Plans & Add-ons screen is a pricing/product preview only. There is no Stripe Checkout, subscription state, credit ledger, marketplace fulfilment, affiliate attribution or payout processing. Do not take payments based on this preview. See [MONETIZATION.md](MONETIZATION.md) for the required production integration.
+- **No cloud project sync or collaboration.** Supabase Auth and billing identity are implemented, but projects, imported audio, analyses and exports still live in browser IndexedDB. There is no shared workspace, object storage, comments or multi-user project access.
+- **Billing needs owner configuration and end-to-end testing.** Stripe Checkout, portal and webhook code are implemented, but no Supabase or Stripe credentials, products, Prices, webhook endpoint or customer portal configuration are included in the repository. Do not accept live payments until test-mode events and production release gates in [MONETIZATION.md](MONETIZATION.md) pass.
+- **Credit top-ups and marketplace purchases are not connected.** The current monthly AI allowance is enforced for connected assistant requests; paid top-up packs, preset/course fulfilment, affiliate payouts and team seats remain roadmap items.
 - **No external DAW or plugin control.** The assistant can propose changes only to Sonora's own supported processors; connected AI is optional and all proposals require user approval.
 - **No batch processing, DAW session import or hardware inserts.**
 - **Dynamic range cannot be expanded upward.** If the source is already over-compressed, the matcher reports this rather
