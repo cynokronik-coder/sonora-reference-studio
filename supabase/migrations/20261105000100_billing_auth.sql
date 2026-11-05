@@ -52,6 +52,7 @@ create table if not exists public.ai_credit_ledger (
   request_id text not null unique,
   operation text not null,
   credits integer not null check (credits > 0),
+  source text not null default 'monthly' check (source in ('monthly', 'purchased')),
   period_start timestamptz not null,
   period_end timestamptz not null,
   status text not null check (status in ('reserved', 'captured', 'released')),
@@ -63,6 +64,22 @@ create index if not exists ai_credit_ledger_user_period_idx
 alter table public.ai_credit_ledger enable row level security;
 revoke all on table public.ai_credit_ledger from anon, authenticated;
 grant all on table public.ai_credit_ledger to service_role;
+
+create table if not exists public.ai_credit_purchases (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  stripe_checkout_session_id text not null unique,
+  stripe_payment_intent_id text unique,
+  credits integer not null check (credits in (100, 500, 1500)),
+  status text not null check (status in ('pending', 'paid', 'refunded', 'failed')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+create index if not exists ai_credit_purchases_user_status_idx
+  on public.ai_credit_purchases (user_id, status);
+alter table public.ai_credit_purchases enable row level security;
+revoke all on table public.ai_credit_purchases from anon, authenticated;
+grant all on table public.ai_credit_purchases to service_role;
 
 -- Reserve one credit atomically before a connected AI request. Reservations count
 -- against the allowance to prevent concurrent requests overspending a user's quota.
@@ -78,9 +95,12 @@ as $$
 declare
   v_plan text := 'free';
   v_limit integer := 10;
-  v_used integer := 0;
+  v_month_used integer := 0;
+  v_purchased_used integer := 0;
+  v_purchased_total integer := 0;
   v_period_start timestamptz;
   v_period_end timestamptz;
+  v_source text := 'monthly';
   v_existing public.ai_credit_ledger%rowtype;
 begin
   if p_user_id is null or length(coalesce(p_request_id, '')) < 8 or length(p_request_id) > 160 then
@@ -98,7 +118,8 @@ begin
       'ok', v_existing.status in ('reserved', 'captured'),
       'duplicate', true,
       'status', v_existing.status,
-      'credits', v_existing.credits
+      'credits', v_existing.credits,
+      'source', v_existing.source
     );
   end if;
 
@@ -125,37 +146,55 @@ begin
     else 10
   end;
 
-  select coalesce(sum(l.credits), 0)::integer into v_used
+  select coalesce(sum(l.credits), 0)::integer into v_month_used
   from public.ai_credit_ledger l
   where l.user_id = p_user_id
     and l.period_start = v_period_start
     and l.period_end = v_period_end
+    and l.source = 'monthly'
     and l.status in ('reserved', 'captured');
 
-  if v_used >= v_limit then
+  select coalesce(sum(l.credits), 0)::integer into v_purchased_used
+  from public.ai_credit_ledger l
+  where l.user_id = p_user_id
+    and l.source = 'purchased'
+    and l.status in ('reserved', 'captured');
+
+  select coalesce(sum(p.credits), 0)::integer into v_purchased_total
+  from public.ai_credit_purchases p
+  where p.user_id = p_user_id and p.status = 'paid';
+
+  if v_month_used < v_limit then
+    v_source := 'monthly';
+  elsif v_purchased_used < v_purchased_total then
+    v_source := 'purchased';
+  else
     return jsonb_build_object(
       'ok', false,
       'plan', v_plan,
       'allowance', v_limit,
-      'used', v_used,
+      'used', v_month_used,
       'remaining', 0,
+      'purchased_remaining', greatest(v_purchased_total - v_purchased_used, 0),
       'period_end', v_period_end
     );
   end if;
 
   insert into public.ai_credit_ledger (
-    user_id, request_id, operation, credits, period_start, period_end, status
+    user_id, request_id, operation, credits, source, period_start, period_end, status
   ) values (
     p_user_id, p_request_id, left(coalesce(p_operation, 'assistant'), 64), 1,
-    v_period_start, v_period_end, 'reserved'
+    v_source, v_period_start, v_period_end, 'reserved'
   );
 
   return jsonb_build_object(
     'ok', true,
     'plan', v_plan,
+    'source', v_source,
     'allowance', v_limit,
-    'used', v_used + 1,
-    'remaining', greatest(v_limit - v_used - 1, 0),
+    'used', v_month_used + case when v_source = 'monthly' then 1 else 0 end,
+    'remaining', greatest(v_limit - v_month_used - case when v_source = 'monthly' then 1 else 0 end, 0),
+    'purchased_remaining', greatest(v_purchased_total - v_purchased_used - case when v_source = 'purchased' then 1 else 0 end, 0),
     'period_end', v_period_end
   );
 end;
