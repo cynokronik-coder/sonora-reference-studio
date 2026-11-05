@@ -405,6 +405,7 @@ export function Timeline({
       <div
         ref={contentRef}
         className="min-h-0 flex-1 overflow-auto"
+        onScroll={(event) => onVerticalScroll?.(event.currentTarget.scrollTop)}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={() => setGesture(null)}
@@ -441,7 +442,7 @@ export function Timeline({
               key={track.id}
               data-timeline-track={track.id}
               className="grid min-h-[72px] border-b border-ink-800"
-              style={{ gridTemplateColumns: TRACK_HEADER_WIDTH + 'px ' + contentWidth + 'px' }}
+              style={{ gridTemplateColumns: timelineColumns }}
             >
               {showTrackHeaders && (
                 <div
