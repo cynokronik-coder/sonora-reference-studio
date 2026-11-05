@@ -13,6 +13,7 @@ interface TopNavigationProps {
   onUndo: () => void;
   onRedo: () => void;
   onOpenLanding: () => void;
+  onStartTour: () => void;
 }
 
 const PRIMARY_LINKS: { label: string; screen: Screen; disabledWithoutProject?: boolean }[] = [
@@ -42,6 +43,7 @@ export default function TopNavigation({
   onUndo,
   onRedo,
   onOpenLanding,
+  onStartTour,
 }: TopNavigationProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
@@ -188,6 +190,15 @@ export default function TopNavigation({
         </button>
         <button type="button" onClick={onRedo} title="Redo" aria-label="Redo" className="focus-ring hidden h-8 w-8 items-center justify-center rounded-lg border border-white/[.07] text-ink-400 transition-colors hover:bg-white/[.05] hover:text-ink-100 sm:inline-flex">
           <span className="text-base">↷</span>
+        </button>
+        <button
+          type="button"
+          onClick={onStartTour}
+          title="Start guided tour"
+          aria-label="Start guided tour"
+          className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-2.5 text-[10px] font-medium text-[#C4A2FF] transition-colors hover:border-[#A77AFF]/45 hover:bg-[#8957FF]/15"
+        >
+          <Icon name="sparkles" size={13} /> <span className="hidden sm:inline">Tour</span>
         </button>
         <HelpTip title="Quick guide" steps={['Import your song to create or open a project.', 'Open Reference Match and add a professional release you like.', 'Generate a chain, then edit or bypass every suggested processor.', 'Use the Mixing Studio timeline to arrange clips and the Mastering workspace to verify the final render.']}>
           <span className="sr-only">Sonora quick guide</span>
