@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getAuthSession, isSupabaseAuthConfigured, subscribeToAuth, type AuthSession } from '../lib/auth';
-import { getBillingStatus, getEntitlements, openBillingPortal, startCheckout, type BillingStatus, type Entitlements, type PlanKey } from '../lib/billing';
+import { getBillingStatus, getEntitlements, openBillingPortal, startCheckout, startCreditCheckout, type BillingStatus, type Entitlements, type PlanKey } from '../lib/billing';
 
 type Section = 'plans' | 'credits' | 'marketplace' | 'partners';
 
@@ -111,6 +111,7 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
   const [session, setSession] = useState<AuthSession | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
   const [busyPlan, setBusyPlan] = useState<string | null>(null);
+  const [busyCreditPack, setBusyCreditPack] = useState<string | null>(null);
   const [billingError, setBillingError] = useState<string | null>(null);
   const [billingMessage, setBillingMessage] = useState<string | null>(null);
 
@@ -158,6 +159,22 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
     } catch (cause) {
       setBillingError(cause instanceof Error ? cause.message : 'Could not start checkout.');
       setBusyPlan(null);
+    }
+  };
+
+  const purchaseCredits = async (credits: '100' | '500' | '1500') => {
+    setBillingError(null);
+    setBillingMessage(null);
+    if (!session) {
+      onOpenAccount();
+      return;
+    }
+    setBusyCreditPack(credits);
+    try {
+      await startCreditCheckout(credits);
+    } catch (cause) {
+      setBillingError(cause instanceof Error ? cause.message : 'Could not start credit checkout.');
+      setBusyCreditPack(null);
     }
   };
 
@@ -264,13 +281,18 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
         <section className="space-y-5">
           <div className="max-w-2xl"><p className="section-label">Usage-based AI</p><h2 className="mt-2 text-xl font-semibold text-white">Keep expensive AI work predictable.</h2><p className="mt-2 text-sm leading-6 text-ink-400">Monthly allowances are reserved for AI analysis and assistant requests. Local audio playback, DSP processing and offline rendering should not consume AI credits.</p></div>
           <div className="grid gap-3 md:grid-cols-3">
-            {CREDIT_PACKS.map((pack) => <article key={pack.credits} className="rounded-2xl border border-white/[.08] bg-[#101318] p-5"><p className="font-mono text-[9px] uppercase tracking-[.16em] text-ink-500">Top-up pack</p><div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold text-white">{pack.credits}</span><span className="text-xs text-ink-500">credits</span></div><p className="mt-2 text-sm text-ink-300">{pack.price}</p><p className="mt-1 text-2xs text-ink-500">{pack.note}</p><button type="button" disabled className="mt-5 w-full cursor-not-allowed rounded-lg border border-white/[.08] bg-white/[.035] px-3 py-2 text-xs text-ink-500">Credit checkout not connected</button></article>)}
+            {CREDIT_PACKS.map((pack) => <article key={pack.credits} className="rounded-2xl border border-white/[.08] bg-[#101318] p-5"><p className="font-mono text-[9px] uppercase tracking-[.16em] text-ink-500">Top-up pack</p><div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold text-white">{pack.credits}</span><span className="text-xs text-ink-500">credits</span></div><p className="mt-2 text-sm text-ink-300">{pack.price}</p><p className="mt-1 text-2xs text-ink-500">{pack.note}</p><button
+            type="button"
+            disabled={!billingStatus?.creditTopupsConfigured || !isSupabaseAuthConfigured() || busyCreditPack !== null}
+            onClick={() => void purchaseCredits(pack.credits.replace(',', '') as '100' | '500' | '1500')}
+            className="mt-5 w-full rounded-lg border border-white/[.08] bg-white/[.035] px-3 py-2 text-xs text-ink-300 transition hover:border-accent/30 hover:text-white disabled:cursor-not-allowed disabled:opacity-45"
+          >{busyCreditPack === pack.credits.replace(',', '') ? 'Opening checkout…' : billingStatus?.creditTopupsConfigured ? session ? 'Buy credits' : 'Sign in to buy' : 'Credit checkout setup required'}</button></article>)}
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-2xl border border-white/[.08] bg-[#101318] p-4"><h3 className="text-sm font-semibold text-white">What should consume credits?</h3><ul className="mt-3 space-y-2 text-xs text-ink-400"><li>• AI track analysis and interpretation</li><li>• Reference-based AI recommendations</li><li>• Conversational assistant requests</li><li>• AI-assisted processing-chain proposals</li></ul></div>
             <div className="rounded-2xl border border-white/[.08] bg-[#101318] p-4"><h3 className="text-sm font-semibold text-white">What should stay unlimited?</h3><ul className="mt-3 space-y-2 text-xs text-ink-400"><li>• Local audio import and playback</li><li>• Built-in DSP and processor editing</li><li>• Offline rendering within plan limits</li><li>• Project editing and local measurements</li></ul></div>
           </div>
-          <StatusNote>Live balances, usage history, monthly resets and top-ups require authenticated accounts and a persistent usage ledger. This local build does not currently track or sell credits.</StatusNote>
+          <StatusNote>Included monthly allowances are tracked on the server. Credit packs are fulfilled only after a verified Stripe payment webhook; configure the three credit-pack Price IDs to enable purchases. Local playback, DSP processing and offline rendering never consume AI credits.</StatusNote>
         </section>
       )}
 
