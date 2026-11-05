@@ -11,6 +11,7 @@ import Analysis from './screens/Analysis';
 import Export from './screens/Export';
 import Settings from './screens/Settings';
 import Monetization from './screens/Monetization';
+import Account from './screens/Account';
 import Learn from './screens/Learn';
 import { Button, EmptyState, HelpTip, Panel, ProgressBar } from './ui/Primitives';
 import { realtimeHost } from './audio/engine/realtime';
@@ -19,6 +20,7 @@ const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boo
   { screen: 'dashboard', label: 'Dashboard', glyph: '◫' },
   { screen: 'projects', label: 'Projects', glyph: '▤' },
   { screen: 'plans', label: 'Plans & Add-ons', glyph: '✦' },
+  { screen: 'account', label: 'Account', glyph: '◉' },
   { screen: 'studio', label: 'Mixing Studio', glyph: '⌁', requiresProject: true },
   { screen: 'reference', label: 'Reference Match', glyph: '◎', requiresProject: true },
   { screen: 'mastering', label: 'Mastering', glyph: '▮', requiresProject: true },
@@ -40,12 +42,13 @@ const TITLES: Record<Screen, string> = {
   export: 'Export Center',
   settings: 'Settings',
   plans: 'Plans & Add-ons',
+  account: 'Account & Membership',
   learn: 'Learn & Help',
 };
 
 export default function App() {
   const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError, storageError } = useApp();
-  const [showLanding, setShowLanding] = useState(() => !['#studio', '#plans'].includes(window.location.hash));
+  const [showLanding, setShowLanding] = useState(() => !['#studio', '#plans', '#account'].includes(window.location.hash));
 
   const enterStudio = () => {
     window.location.hash = 'studio';
@@ -59,6 +62,12 @@ export default function App() {
     setScreen('plans');
   };
 
+  const openAccount = () => {
+    window.location.hash = 'account';
+    setShowLanding(false);
+    setScreen('account');
+  };
+
   const openLanding = () => {
     window.location.hash = '';
     setShowLanding(true);
@@ -67,9 +76,10 @@ export default function App() {
   useEffect(() => {
     const syncFromHash = () => {
       const hash = window.location.hash;
-      const inApp = hash === '#studio' || hash === '#plans';
+      const inApp = hash === '#studio' || hash === '#plans' || hash === '#account';
       setShowLanding(!inApp);
       if (hash === '#plans') setScreen('plans');
+      else if (hash === '#account') setScreen('account');
       else if (hash === '#studio') setScreen('studio');
     };
     syncFromHash();
@@ -110,7 +120,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [undo, redo, saveNow, showLanding]);
 
-  if (showLanding) return <Landing onEnterStudio={enterStudio} onOpenPricing={openPricing} />;
+  if (showLanding) return <Landing onEnterStudio={enterStudio} onOpenPricing={openPricing} onOpenAccount={openAccount} />;
 
   const active = NAV.find((item) => item.screen === screen);
   const blocked = active?.requiresProject && !project;
@@ -265,7 +275,9 @@ export default function App() {
           ) : screen === 'export' ? (
             <Export />
           ) : screen === 'plans' ? (
-            <Monetization />
+            <Monetization onOpenAccount={openAccount} />
+          ) : screen === 'account' ? (
+            <Account />
           ) : screen === 'learn' ? (
             <Learn />
           ) : (
