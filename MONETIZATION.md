@@ -2,7 +2,7 @@
 
 ## Current implementation status
 
-The repository now contains the **first real account and recurring-billing integration**, alongside the Plans & Add-ons commercial UI.
+The repository now contains the **first real account, recurring-billing and paid AI credit top-up integration**, alongside the Plans & Add-ons commercial UI.
 
 Implemented in code:
 - Supabase email/password sign-up, sign-in, session refresh and sign-out in the Account screen.
@@ -10,17 +10,17 @@ Implemented in code:
 - Stripe Checkout Session creation for the Creator, Pro and Studio subscription plans, with the plan and billing interval resolved from server environment variables.
 - Stripe customer creation and customer-portal session creation.
 - Raw-body Stripe webhook signature verification, duplicate-event recording, and subscription status synchronization.
-- A Supabase migration for billing customers, subscriptions, Stripe events and a private AI-credit ledger, with restrictive grants and row-level security.
-- Atomic server-side monthly AI-credit reservations for connected assistant calls; successful calls are captured and failed provider requests release their reservation. In production, connected AI refuses to run until Supabase identity/usage controls are configured.
-- Pricing buttons connect to Checkout only when server billing settings and browser Supabase public keys are present. Existing paid users are sent to the billing portal.
+- A Supabase migration for billing customers, subscriptions, Stripe events, a private monthly/purchased AI-credit ledger and top-up purchase records, with restrictive grants and row-level security.
+- Atomic server-side AI-credit reservations use included monthly credits first, then verified purchased top-ups. Successful calls are captured and failed provider requests release their reservation. In production, connected AI refuses to run until Supabase identity/usage controls are configured.
+- Pricing buttons connect to Stripe Checkout only when the server settings and browser Supabase public key are present. Existing paid users are sent to the billing portal.
+- One-time 100, 500 and 1,500-credit packs have Stripe Checkout routes. Credits are added only after a verified payment webhook; a refund webhook revokes the associated pack.
 
 Still not live until the owner configures services:
 - Supabase project keys and migration.
-- Stripe account secret, six recurring Price IDs, webhook secret and customer-portal configuration.
+- Stripe account secret, six recurring subscription Price IDs, three credit-pack Price IDs, webhook secret and customer-portal configuration.
 - Auth redirect URLs, Stripe test-mode validation, production domain and deployment environment.
 
 Still roadmap:
-- One-time AI credit pack checkout and purchase ledger.
 - Preset/course marketplace catalogue and fulfilment.
 - Human-reviewed mastering order workflow.
 - Affiliate attribution, commission reversals and payouts.
@@ -79,11 +79,12 @@ The existing app stores projects and audio in browser IndexedDB. Billing identit
 1. Create six recurring Prices in Stripe: Creator monthly/yearly, Pro monthly/yearly and Studio monthly/yearly. Use the amounts displayed in the pricing page or adjust the product catalog before launch.
 2. Add each Stripe Price ID to its corresponding server environment variable in `.env.example`.
 3. Add `STRIPE_SECRET_KEY` to the API server (start with a test-mode key).
-4. Create a Stripe webhook endpoint pointing to `https://YOUR_DOMAIN/api/webhooks/stripe`. Subscribe to `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid` and `invoice.payment_failed`. Add the endpoint signing secret as `STRIPE_WEBHOOK_SECRET`.
-5. Configure the Stripe customer portal in the Stripe Dashboard with the plan changes, cancellations and payment-method updates you intend to allow.
-6. Set `SONORA_APP_URL` to the exact public Sonora origin. Configure the API server and reverse proxy so the same-origin `/api/*` routes reach `server/index.mjs`.
+4. Create three one-time Prices for 100, 500 and 1,500 AI credits; set `STRIPE_PRICE_CREDITS_100`, `STRIPE_PRICE_CREDITS_500` and `STRIPE_PRICE_CREDITS_1500`.
+5. Create a Stripe webhook endpoint pointing to `https://YOUR_DOMAIN/api/webhooks/stripe`. Subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed` and `charge.refunded`. Add the endpoint signing secret as `STRIPE_WEBHOOK_SECRET`.
+6. Configure the Stripe customer portal in the Stripe Dashboard with the plan changes, cancellations and payment-method updates you intend to allow.
+7. Set `SONORA_APP_URL` to the exact public Sonora origin. Configure the API server and reverse proxy so the same-origin `/api/*` routes reach `server/index.mjs`.
 
-For local testing, use Stripe test-mode keys and the Stripe CLI to forward webhook events to `http://localhost:8787/api/webhooks/stripe`. Do not use live keys until checkout, portal, renewal, failed-payment, cancellation and replayed-webhook behaviour have been tested.
+For local testing, use Stripe test-mode keys and the Stripe CLI to forward webhook events to `http://localhost:8787/api/webhooks/stripe`. Test recurring checkout, portal, renewal, failed-payment, cancellation and replayed events. Also test successful and failed credit-pack payments and a refunded top-up. The top-up grant is webhook-driven; do not grant credit from the Checkout success redirect.
 
 The preferred server API key is Supabase's `sb_secret_...` key. It is sent only in the `apikey` header. A legacy `service_role` JWT is also supported and is sent as both the API key and bearer authorization. Never expose either elevated key to the browser.
 
