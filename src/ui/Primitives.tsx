@@ -9,6 +9,7 @@ export function Panel({
   subtitle,
   right,
   dense,
+  dataTour,
 }: {
   children: ReactNode;
   className?: string;
@@ -16,9 +17,10 @@ export function Panel({
   subtitle?: string;
   right?: ReactNode;
   dense?: boolean;
+  dataTour?: string;
 }) {
   return (
-    <section className={`panel shadow-panel ${className}`}>
+    <section data-tour={dataTour} className={`panel shadow-panel ${className}`}>
       {(title || right) && (
         <header className="flex items-center justify-between gap-3 border-b border-white/[.06] px-4 py-3">
           <div className="min-w-0">
