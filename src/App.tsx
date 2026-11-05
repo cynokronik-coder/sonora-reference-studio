@@ -96,11 +96,11 @@ export default function App() {
   const blocked = active?.requiresProject && !project;
 
   return (
-    <div className="relative flex h-screen w-full overflow-hidden bg-sonora-canvas text-ink-100">
+    <div className="relative flex h-screen w-full overflow-hidden bg-sonora-canvas p-2 text-ink-100 sm:p-3 lg:p-4">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_82%_0%,rgba(117,69,234,.12),transparent_35%),radial-gradient(ellipse_at_50%_100%,rgba(137,87,255,.065),transparent_40%)]" />
 
 
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-white/[.12] bg-[#0D0D1B]/80 shadow-[0_24px_80px_rgba(0,0,0,.48)]">
         <TopNavigation
           screen={screen}
           projectName={project?.name}
@@ -129,7 +129,7 @@ export default function App() {
           </div>
         )}
 
-        <main className="relative z-0 min-h-0 flex-1 overflow-y-auto">
+        <main className="relative z-0 min-h-0 flex-1 overflow-y-auto rounded-b-[22px]">
           {blocked ? (
             <div className="p-5">
               <Panel>
