@@ -107,7 +107,7 @@ export default function ReferenceMatch() {
       </header>
 
       <section className="grid items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_112px_minmax(0,1fr)]">
-        <Panel title="Your Track" subtitle="The mix you want to improve." right={targetMeta && <Badge tone={targetReport ? 'accent' : 'warn'}>{targetReport ? 'Analysed' : 'Analysis pending'}</Badge>}>
+        <Panel dataTour="reference-target" title="Your Track" subtitle="The mix you want to improve." right={targetMeta && <Badge tone={targetReport ? 'accent' : 'warn'}>{targetReport ? 'Analysed' : 'Analysis pending'}</Badge>}>
           {targetMeta ? (
             <div className="space-y-3">
               <div className="flex min-w-0 items-center gap-2">
@@ -141,7 +141,7 @@ export default function ReferenceMatch() {
           )}
         </Panel>
 
-        <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-white/[.06] bg-[#11111F]/80 px-2 py-4">
+        <div data-tour="reference-readiness" className="flex flex-col items-center justify-center gap-2 rounded-xl border border-white/[.06] bg-[#11111F]/80 px-2 py-4">
           <div
             className="grid h-[86px] w-[86px] place-items-center rounded-full p-[5px]"
             style={{ background: `conic-gradient(#8EDB75 ${analysisReadiness}%, #303047 ${analysisReadiness}% 100%)` }}
@@ -160,7 +160,7 @@ export default function ReferenceMatch() {
           </span>
         </div>
 
-        <Panel title="Reference Track" subtitle="The production characteristics you want to study." right={
+        <Panel dataTour="reference-source" title="Reference Track" subtitle="The production characteristics you want to study." right={
           <Button size="sm" variant="ghost" onClick={() => picker.open(AUDIO_ACCEPT, true, (files) => void importFiles(files, 'reference'))}>
             <Icon name="plus" size={13} /> Add
           </Button>
@@ -240,7 +240,7 @@ export default function ReferenceMatch() {
       )}
 
       <div className="grid gap-3 xl:grid-cols-[1.15fr_1fr]">
-        <Panel title="Reference Match controls" subtitle="Intensity scales the corrections perceptually, not by blindly multiplying every parameter.">
+        <Panel dataTour="reference-controls" title="Reference Match controls" subtitle="Intensity scales the corrections perceptually, not by blindly multiplying every parameter.">
           <div className="space-y-3">
             <div className="rounded-xl border border-[#A77AFF]/20 bg-[#8957FF]/[.07] p-3">
               <div className="flex items-center justify-between">
@@ -373,6 +373,7 @@ export default function ReferenceMatch() {
         </Panel>
       </div>
 
+      <div data-tour="reference-proposals">
       {matchPlan && (
         <Panel
           title="Generated processing chain"
@@ -442,6 +443,7 @@ export default function ReferenceMatch() {
           </div>
         </Panel>
       )}
+      </div>
 
       {lastRenderStats && (
         <Panel title="Measured master (offline render)">
