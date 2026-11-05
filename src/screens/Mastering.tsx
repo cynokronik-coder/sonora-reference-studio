@@ -103,7 +103,7 @@ export default function Mastering() {
       <main className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[1500px] space-y-4 p-4 sm:p-5">
           <section className="grid gap-3 xl:grid-cols-[1.05fr_.95fr]">
-            <Panel title="Your track" subtitle="The original audio remains untouched; mastering uses the current project chain.">
+            <Panel dataTour="mastering-upload" title="Your track" subtitle="The original audio remains untouched; mastering uses the current project chain.">
               <div
                 onDragOver={(event) => event.preventDefault()}
                 onDrop={handleDrop}
@@ -150,7 +150,7 @@ export default function Mastering() {
               </div>
             </Panel>
 
-            <Panel title="Choose a style" subtitle="These are real, editable processor-chain starting points.">
+            <Panel dataTour="mastering-styles" title="Choose a style" subtitle="These are real, editable processor-chain starting points.">
               <div className="space-y-2">
                 {MASTERING_STYLES.map((style) => {
                   const active = selectedStyle === style.id;
@@ -188,7 +188,7 @@ export default function Mastering() {
           </section>
 
           <div className="grid gap-3 xl:grid-cols-[1.15fr_.85fr]">
-            <Panel title="Master metering" subtitle="Peak and gain reduction are live; loudness is measured from an offline render." right={<HelpTip title="Understanding the meters">Peak shows the signal level. Gain reduction shows how much a dynamics processor is turning the signal down. LUFS describes perceived loudness; dBTP measures estimated reconstructed peaks.</HelpTip>}>
+            <Panel dataTour="mastering-metering" title="Master metering" subtitle="Peak and gain reduction are live; loudness is measured from an offline render." right={<HelpTip title="Understanding the meters">Peak shows the signal level. Gain reduction shows how much a dynamics processor is turning the signal down. LUFS describes perceived loudness; dBTP measures estimated reconstructed peaks.</HelpTip>}>
               <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
                 <div className="flex gap-3">
                   <div className="text-center">
@@ -257,7 +257,7 @@ export default function Mastering() {
             </div>
           </div>
 
-          <Panel title="Master chain" subtitle="Drag to reorder. Bypass, duplicate, reset or remove any processor.">
+          <Panel dataTour="mastering-chain" title="Master chain" subtitle="Drag to reorder. Bypass, duplicate, reset or remove any processor.">
             <div className="max-h-[520px] overflow-auto">
               <Rack scope="master" trackId={null} processors={master.processors} selectedId={selectedProcessorId} onSelect={selectProcessor} meters={meters.gr.master ?? {}} emptyHint="Start from a mastering preset or reference match, then edit each processor." />
             </div>
