@@ -28,6 +28,10 @@ Still roadmap:
 
 The application does not include customer credentials or Stripe/Supabase secrets. The repository branch is code-complete for the initial integration but has not been connected to a live Supabase or Stripe account.
 
+**Important entitlement boundary:** the only paid usage limit currently enforced by the server is connected AI assistant credits (included monthly allowance plus purchased top-ups). Sonora's local DSP, analysis, project creation and offline export remain available across plans. Per-plan project limits, advanced-feature gates, cloud storage, collaboration and priority queues are not yet implemented. Do not sell those as active paid entitlements.
+
+Checkout, top-up and customer-portal endpoints also require the explicit server environment flag `SONORA_BILLING_ENABLED=true`. It defaults to false in `.env.example`; leave it false until test-mode validation and the release gates below are complete.
+
 ## Proposed pricing hypotheses
 
 All values below are starting points for customer research. They are not live offers and must be validated against actual support, hosting, payment, tax and AI costs.
@@ -83,6 +87,7 @@ The existing app stores projects and audio in browser IndexedDB. Billing identit
 5. Create a Stripe webhook endpoint pointing to `https://YOUR_DOMAIN/api/webhooks/stripe`. Subscribe to `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed` and `charge.refunded`. Add the endpoint signing secret as `STRIPE_WEBHOOK_SECRET`.
 6. Configure the Stripe customer portal in the Stripe Dashboard with the plan changes, cancellations and payment-method updates you intend to allow.
 7. Set `SONORA_APP_URL` to the exact public Sonora origin. Configure the API server and reverse proxy so the same-origin `/api/*` routes reach `server/index.mjs`.
+8. Keep `SONORA_BILLING_ENABLED=false` while testing. After all test-mode payment, webhook, subscription, credit and refund checks pass and the paid-feature description is accurate, set `SONORA_BILLING_ENABLED=true` in the API server environment. The server independently rejects checkout and portal creation while the flag is false.
 
 For local testing, use Stripe test-mode keys and the Stripe CLI to forward webhook events to `http://localhost:8787/api/webhooks/stripe`. Test recurring checkout, portal, renewal, failed-payment, cancellation and replayed events. Also test successful and failed credit-pack payments and a refunded top-up. The top-up grant is webhook-driven; do not grant credit from the Checkout success redirect.
 
