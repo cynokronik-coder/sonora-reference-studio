@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useApp } from '../state/store';
 import { AUDIO_ACCEPT, Badge, Button, EmptyState, HelpTip, InfoRow, Panel, ParamSlider, Select, Toggle, useFilePicker } from '../ui/Primitives';
 import { Icon } from '../ui/Icon';
+import { FlyoutMenu } from '../ui/FlyoutMenu';
 import { BandChart, BandBars, Waveform } from '../ui/viz';
 import { MATCH_CATEGORIES, type CategorySource } from '../audio/analysis/match';
 import type { MatchSettings } from '../audio/model/types';
@@ -286,11 +287,15 @@ export default function ReferenceMatch() {
               })}
             </div>
 
-            <details className="rounded border border-ink-700 bg-ink-900/40">
-              <summary className="cursor-pointer px-2 py-1.5 text-2xs uppercase tracking-wider text-ink-400">
-                Advanced matching
-              </summary>
-              <div className="grid gap-3 border-t border-ink-700 p-2.5 sm:grid-cols-2">
+            <FlyoutMenu
+              label="Advanced matching"
+              icon="sliders"
+              title="Advanced matching"
+              description="Fine-tune section selection, correction limits, protected ranges and reference weighting."
+              placement="bottom-end"
+              width="lg"
+            >
+              <div className="grid gap-3 sm:grid-cols-2">
                 <Select
                   label="Target section"
                   value={project.match.targetSection}
@@ -329,7 +334,7 @@ export default function ReferenceMatch() {
                   </div>
                 )}
               </div>
-            </details>
+            </FlyoutMenu>
           </div>
         </Panel>
 
