@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { getAuthSession, isSupabaseAuthConfigured, signInWithPassword, signOut, signUpWithPassword, subscribeToAuth, type AuthSession } from '../lib/auth';
 import { getBillingStatus, getEntitlements, openBillingPortal, type BillingStatus, type Entitlements } from '../lib/billing';
 import { Badge, Button, Panel } from '../ui/Primitives';
@@ -44,7 +44,7 @@ export default function Account() {
     return () => { alive = false; unsubscribe(); };
   }, []);
 
-  const submit = async (event: React.FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setError(null);
@@ -146,7 +146,7 @@ export default function Account() {
             <form className="space-y-3" onSubmit={(event) => void submit(event)}>
               <label className="block"><span className="mb-1.5 block text-xs text-ink-400">Email address</span><input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-lg border border-white/[.1] bg-black/25 px-3 py-2.5 text-sm text-white outline-none transition focus:border-accent/50" placeholder="you@example.com" /></label>
               <label className="block"><span className="mb-1.5 block text-xs text-ink-400">Password</span><input required minLength={8} type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-lg border border-white/[.1] bg-black/25 px-3 py-2.5 text-sm text-white outline-none transition focus:border-accent/50" placeholder="At least 8 characters" /></label>
-              <Button type="submit" block disabled={busy}>{busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}</Button>
+              <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}</Button>
             </form>
             <div className="mt-4 border-t border-white/[.07] pt-3 text-xs text-ink-500">
               {mode === 'signin' ? 'New to Sonora? ' : 'Already have an account? '}
