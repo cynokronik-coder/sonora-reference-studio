@@ -273,6 +273,12 @@ async function createCheckoutSession(request, response) {
   const user = await requireSupabaseUser(request);
   if (!STRIPE_CONFIGURED) return jsonResponse(response, 503, { error: 'Stripe billing is not fully configured on the server.' });
   const body = await readJson(request);
+  const existing = await supabaseServiceRequest(
+    `subscriptions?user_id=eq.${encodeURIComponent(user.id)}&status=in.(active,trialing,past_due)&select=stripe_subscription_id&limit=1`,
+  );
+  if (Array.isArray(existing) && existing.length) {
+    return jsonResponse(response, 409, { error: 'This account already has a subscription. Use Manage subscription to change or cancel it.' });
+  }
   const plan = body.plan;
   const interval = body.interval;
   if (!['creator', 'pro', 'studio'].includes(plan) || !['month', 'year'].includes(interval)) {
@@ -332,8 +338,9 @@ async function getBillingEntitlements(request, response) {
     && row.current_period_end && new Date(row.current_period_end).getTime() > Date.now()
   ) : null;
   const plan = current?.plan_key || 'free';
-  const periodStart = current?.current_period_start || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
-  const periodEnd = current?.current_period_end || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString();
+  const now = new Date();
+  const periodStart = current?.current_period_start || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+  const periodEnd = current?.current_period_end || new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
   const usage = await supabaseServiceRequest(
     `ai_credit_ledger?user_id=eq.${encodeURIComponent(user.id)}&period_start=eq.${encodeURIComponent(periodStart)}&period_end=eq.${encodeURIComponent(periodEnd)}&status=in.(reserved,captured)&select=credits`,
   );
@@ -516,6 +523,9 @@ function extractText(output = []) {
 }
 
 async function handleAssistant(request, response) {
+  if (process.env.NODE_ENV === 'production' && !SUPABASE_CONFIGURED) {
+    return jsonResponse(response, 503, { error: 'Sign-in and usage limits must be configured before connected AI can be enabled in production.' });
+  }
   if (!process.env.OPENAI_API_KEY) {
     return jsonResponse(response, 503, {
       error: 'AI is not configured. Add OPENAI_API_KEY to .env.local and restart the development server.',
