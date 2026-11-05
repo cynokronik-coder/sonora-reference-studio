@@ -2,16 +2,31 @@
 
 ## Current implementation status
 
-The Plans & Add-ons page is a **commercial preview**, not a payment system. It is available from the public landing-page Pricing action and from the in-app navigation.
+The repository now contains the **first real account and recurring-billing integration**, alongside the Plans & Add-ons commercial UI.
 
-The current preview includes:
-- Free, Creator, Pro and Studio plan cards.
-- Monthly/yearly pricing presentation and a feature comparison.
-- Proposed monthly AI credit allowances and one-time credit-pack prices.
-- Preset marketplace, human-reviewed mastering and education concepts.
-- Studio/team pricing and a recurring affiliate commission proposal.
+Implemented in code:
+- Supabase email/password sign-up, sign-in, session refresh and sign-out in the Account screen.
+- Server-side Supabase session verification before billing and account endpoints.
+- Stripe Checkout Session creation for the Creator, Pro and Studio subscription plans, with the plan and billing interval resolved from server environment variables.
+- Stripe customer creation and customer-portal session creation.
+- Raw-body Stripe webhook signature verification, duplicate-event recording, and subscription status synchronization.
+- A Supabase migration for billing customers, subscriptions, Stripe events and a private AI-credit ledger, with restrictive grants and row-level security.
+- Atomic server-side monthly AI-credit reservations for connected assistant calls; successful calls are captured and failed provider requests release their reservation. In production, connected AI refuses to run until Supabase identity/usage controls are configured.
+- Pricing buttons connect to Checkout only when server billing settings and browser Supabase public keys are present. Existing paid users are sent to the billing portal.
 
-No account, subscription, payment, credit balance, marketplace fulfilment, referral attribution or payout is created by this UI. All purchase and application controls are intentionally disabled until the backend exists.
+Still not live until the owner configures services:
+- Supabase project keys and migration.
+- Stripe account secret, six recurring Price IDs, webhook secret and customer-portal configuration.
+- Auth redirect URLs, Stripe test-mode validation, production domain and deployment environment.
+
+Still roadmap:
+- One-time AI credit pack checkout and purchase ledger.
+- Preset/course marketplace catalogue and fulfilment.
+- Human-reviewed mastering order workflow.
+- Affiliate attribution, commission reversals and payouts.
+- Team seats, roles and shared cloud projects.
+
+The application does not include customer credentials or Stripe/Supabase secrets. The repository branch is code-complete for the initial integration but has not been connected to a live Supabase or Stripe account.
 
 ## Proposed pricing hypotheses
 
@@ -48,9 +63,29 @@ Pro is the proposed default plan to emphasize, but the free plan should remain u
 
 Commission percentages are proposals only. The programme needs written rules for attribution windows, eligibility, refunds, chargebacks, self-referrals, cookie consent, payout minimums, tax documentation and termination before it is opened.
 
-## Billing and account architecture required before launch
+## Billing implementation and production configuration
 
-The existing app stores projects and audio in the browser's IndexedDB. It has no user identity or server-side database. A hosted subscription product therefore requires these components before Stripe Checkout can be safely enabled.
+The existing app stores projects and audio in browser IndexedDB. Billing identity and subscription metadata are server-side, but audio/project cloud sync is not included. The following integration is implemented; it becomes operational after configuration.
+
+### Supabase setup
+1. Create a Supabase project.
+2. Apply `supabase/migrations/20261105000100_billing_auth.sql` using the Supabase SQL Editor or the Supabase CLI.
+3. In Auth URL configuration, allow the local URL `http://localhost:3000/#account` and your exact production redirect URL.
+4. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` to the frontend environment.
+5. Add `SUPABASE_URL`, `SUPABASE_PUBLISHABLE_KEY` and `SUPABASE_SECRET_KEY` to the API server environment. The secret key must remain server-only. A legacy `SUPABASE_SERVICE_ROLE_KEY` JWT is supported during migration, but Supabase recommends the new secret key format.
+6. Configure email confirmation and an SMTP sender in Supabase before inviting customers. Test sign-up, confirmation, sign-in, session refresh and sign-out.
+
+### Stripe setup
+1. Create six recurring Prices in Stripe: Creator monthly/yearly, Pro monthly/yearly and Studio monthly/yearly. Use the amounts displayed in the pricing page or adjust the product catalog before launch.
+2. Add each Stripe Price ID to its corresponding server environment variable in `.env.example`.
+3. Add `STRIPE_SECRET_KEY` to the API server (start with a test-mode key).
+4. Create a Stripe webhook endpoint pointing to `https://YOUR_DOMAIN/api/webhooks/stripe`. Subscribe to `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid` and `invoice.payment_failed`. Add the endpoint signing secret as `STRIPE_WEBHOOK_SECRET`.
+5. Configure the Stripe customer portal in the Stripe Dashboard with the plan changes, cancellations and payment-method updates you intend to allow.
+6. Set `SONORA_APP_URL` to the exact public Sonora origin. Configure the API server and reverse proxy so the same-origin `/api/*` routes reach `server/index.mjs`.
+
+For local testing, use Stripe test-mode keys and the Stripe CLI to forward webhook events to `http://localhost:8787/api/webhooks/stripe`. Do not use live keys until checkout, portal, renewal, failed-payment, cancellation and replayed-webhook behaviour have been tested.
+
+The preferred server API key is Supabase's `sb_secret_...` key. It is sent only in the `apikey` header. A legacy `service_role` JWT is also supported and is sent as both the API key and bearer authorization. Never expose either elevated key to the browser.
 
 ### 1. Identity and project ownership
 
