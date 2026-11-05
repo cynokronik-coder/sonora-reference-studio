@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useApp } from '../state/store';
-import { AUDIO_ACCEPT, Badge, Button, EmptyState, IconButton, Modal, Panel, useFilePicker } from '../ui/Primitives';
+import { AUDIO_ACCEPT, Badge, Button, EmptyState, IconButton, Modal, Panel, ParamSlider, Toggle, useFilePicker } from '../ui/Primitives';
+import { FlyoutMenu } from '../ui/FlyoutMenu';
 import { Icon } from '../ui/Icon';
 import { Mixer, TransportBar, AssistantPanel } from '../ui/Mixer';
 import { Rack } from '../ui/Rack';
@@ -28,6 +29,7 @@ export default function Studio() {
   const [newTrackKind, setNewTrackKind] = useState<TrackKind>('audio');
   const meters = useMeters();
   const selectedProcessorId = useApp((s) => s.selectedProcessorId);
+  const activeTrack = project?.tracks.find((track) => track.id === selectedTrackId) ?? null;
   const setMasterVolume = useApp((s) => s.setMasterVolume);
 
   const effectiveFocus: Focus = useMemo(() => {
@@ -120,6 +122,32 @@ export default function Studio() {
             </div>
             <div className="flex items-center gap-1">
               <IconButton title="Manage tracks and buses" onClick={() => setTracksOpen(true)}><Icon name="settings" size={14} /></IconButton>
+              <FlyoutMenu
+                label=""
+                icon="sliders"
+                title={activeTrack ? `${activeTrack.name} settings` : 'Track settings'}
+                description="Secondary channel controls. The main level, mute and solo controls stay visible beside the timeline."
+                placement="bottom-start"
+                width="md"
+                triggerClassName="!h-8 !min-h-8 !w-8 !px-0 !py-0"
+                disabled={!activeTrack}
+              >
+                {activeTrack ? (
+                  <>
+                    <ParamSlider
+                      label="Pan"
+                      value={activeTrack.pan}
+                      min={-100}
+                      max={100}
+                      step={1}
+                      format={(value) => value === 0 ? 'Center' : `${Math.abs(value).toFixed(0)}${value > 0 ? ' R' : ' L'}`}
+                      onChange={(value) => updateTrack(activeTrack.id, { pan: value })}
+                    />
+                    <Toggle checked={activeTrack.polarity} onChange={(value) => updateTrack(activeTrack.id, { polarity: value })} label="Invert polarity" description="Flip the track's signal polarity." />
+                    <Toggle checked={activeTrack.mono} onChange={(value) => updateTrack(activeTrack.id, { mono: value })} label="Mono fold-down" description="Sum this track to mono before its processor chain." />
+                  </>
+                ) : <p className="text-2xs text-ink-500">Select a track to edit its secondary channel settings.</p>}
+              </FlyoutMenu>
               <button type="button" title="Add audio or track" onClick={() => setAddOpen(true)} className="focus-ring flex h-8 w-8 items-center justify-center rounded-lg border border-[#A77AFF]/30 bg-[#8957FF]/15 text-[#C4A2FF] transition-all hover:bg-[#8957FF]/25">
                 <Icon name="plus" size={16} />
               </button>
