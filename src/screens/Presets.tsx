@@ -27,11 +27,11 @@ export default function Presets() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-4">
+    <div className="mx-auto max-w-[1400px] space-y-5 p-5 sm:p-6 lg:p-7">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="section-label">Library</p>
-          <h1 className="mt-1 text-xl text-ink-100">Presets</h1>
+          <h1 className="mt-1 text-2xl font-semibold text-ink-100">Presets</h1>
           <p className="mt-1 text-xs text-ink-400">
             Starting points, not universal solutions. Loading one replaces the target chain with fully editable processors.
           </p>
