@@ -13,6 +13,7 @@ import Settings from './screens/Settings';
 import Learn from './screens/Learn';
 import { Button, EmptyState, Panel, ProgressBar } from './ui/Primitives';
 import TopNavigation from './ui/TopNavigation';
+import { GuidedTour } from './ui/GuidedTour';
 import { realtimeHost } from './audio/engine/realtime';
 
 const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boolean }[] = [
@@ -33,6 +34,7 @@ const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boo
 export default function App() {
   const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError, storageError } = useApp();
   const [showLanding, setShowLanding] = useState(() => window.location.hash !== '#studio');
+  const [tourOpen, setTourOpen] = useState(false);
 
   const enterStudio = () => {
     window.location.hash = 'studio';
@@ -109,6 +111,7 @@ export default function App() {
           onUndo={undo}
           onRedo={redo}
           onOpenLanding={openLanding}
+          onStartTour={() => setTourOpen(true)}
         />
 
 
@@ -142,7 +145,7 @@ export default function App() {
           ) : screen === 'projects' ? (
             <Projects />
           ) : screen === 'studio' ? (
-            <Studio />
+            <Studio onStartTour={() => setTourOpen(true)} />
           ) : screen === 'reference' ? (
             <ReferenceMatch />
           ) : screen === 'mastering' ? (
@@ -178,6 +181,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <GuidedTour open={tourOpen} screen={screen} onClose={() => setTourOpen(false)} />
 
       {toast && (
         <div className="fixed bottom-4 left-1/2 z-50 max-w-xl -translate-x-1/2 rounded-xl border border-white/[.10] bg-[#151426]/95 px-4 py-2.5 text-xs text-ink-100 shadow-floating backdrop-blur-xl">
