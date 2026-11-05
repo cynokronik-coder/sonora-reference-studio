@@ -106,17 +106,28 @@ IndexedDB database `sonora-reference-studio`:
 Schema version is 1. Project objects carry their own `version` semantics through app-level migration; no destructive
 migration exists yet. Deleting a project cascades to its assets and exports.
 
-## Security and multi-user deployment
+## Security, identity and billing
 
-This build is local-first. It has no authentication, server API or shared storage, so there is no simulated access
-control to bypass. For a hosted deployment the following is required:
+The audio product remains local-first: projects, decoded assets, analyses and exports live in browser IndexedDB. A Node server now provides account and billing routes, but it does not yet sync audio projects to cloud storage.
 
-- authenticated users (`sub` from the identity provider) and ownership checks on every project/asset/export query;
-- signed, expiring URLs or a server proxy for private audio; never public buckets;
+### Implemented identity and billing boundary
+
+- Supabase Auth email/password sessions are refreshed in the browser and verified server-side through the Supabase Auth user endpoint.
+- A Supabase publishable key is public; the Supabase secret key (or legacy service-role JWT) is server-only.
+- Stripe Price IDs are selected from a server-side allow-list. The browser submits only a plan key and billing interval, never a price or amount.
+- Stripe webhooks are authenticated against the raw request body with the endpoint signing secret. Subscription metadata is synced from signed webhook events, not from the customer's success-page redirect.
+- Subscription reads are tied to the authenticated Supabase user. The browser cannot insert or modify subscription rows.
+- AI credit reservation is performed through a database function with a per-user transaction lock. The ledger is server-only and browser roles have no grants.
+- Connected assistant calls are authenticated and credit-limited when Supabase is configured. Production mode refuses connected AI without Supabase identity/usage configuration.
+
+### Remaining hosted-audio requirements
+
+- ownership checks on every project/asset/export query before any cloud-sync route is added;
+- private object storage and signed, expiring URLs for audio; never public buckets;
 - MIME sniffing plus decoder validation on upload, size and duration limits, and rate limiting;
 - private reference tracks by default; no training on user audio without explicit consent;
 - per-user retention and deletion endpoints;
-- object storage for PCM/blobs, a relational store for metadata and a job queue for renders/analysis.
+- object storage for PCM/blobs, relational storage for project metadata, and a job queue for renders/analysis.
 
-The store and data layer are already separated from the DSP so they can be swapped for an API without touching the
-engine.
+The store and data layer remain separated from the DSP so a future cloud storage adapter can be added without changing the
+audio engine.
