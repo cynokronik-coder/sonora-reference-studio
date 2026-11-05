@@ -3,6 +3,7 @@ import { useApp } from '../state/store';
 import type { ExportSettings } from '../state/store';
 import { Badge, Button, EmptyState, HelpTip, InfoRow, Panel, Select, Toggle } from '../ui/Primitives';
 import { Icon } from '../ui/Icon';
+import { FlyoutMenu } from '../ui/FlyoutMenu';
 import { formatBytes } from '../audio/dsp/util';
 import * as db from '../lib/db';
 import { verifyEncodedBlob } from '../state/store';
@@ -134,28 +135,37 @@ export default function Export() {
             )}
           </div>
 
-          <div className="mt-2 space-y-2">
-            <Toggle checked={settings.dither} onChange={(value) => setSettings((s) => ({ ...s, dither: value }))} label="TPDF dither when reducing bit depth" description="Only applied for 16/24-bit PCM. It is never applied to 32-bit float." />
-            <Toggle checked={settings.normalize} onChange={(value) => setSettings((s) => ({ ...s, normalize: value }))} label={`Normalise peak to ${targetTp.toFixed(1)} dB`} description="A final gain safety net. It does not replace the limiter and does not loudness-normalise." />
-          </div>
-
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-2xs text-ink-400">Filename</span>
-              <input value={settings.filename} placeholder={project.name} onChange={(e) => setSettings((s) => ({ ...s, filename: e.target.value }))} className="w-full rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-ink-100" />
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+            <label className="block min-w-[200px] flex-1">
+              <span className="mb-1.5 block text-2xs font-medium text-ink-400">Filename</span>
+              <input value={settings.filename} placeholder={project.name} onChange={(event) => setSettings((current) => ({ ...current, filename: event.target.value }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100 placeholder:text-ink-500" />
             </label>
-            <label className="block">
-              <span className="mb-1 block text-2xs text-ink-400">Metadata title</span>
-              <input value={settings.metadata.title} placeholder={project.name} onChange={(e) => setSettings((s) => ({ ...s, metadata: { ...s.metadata, title: e.target.value } }))} className="w-full rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-ink-100" />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-2xs text-ink-400">Artist</span>
-              <input value={settings.metadata.artist} onChange={(e) => setSettings((s) => ({ ...s, metadata: { ...s.metadata, artist: e.target.value } }))} className="w-full rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-ink-100" />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-2xs text-ink-400">Comment</span>
-              <input value={settings.metadata.comment} onChange={(e) => setSettings((s) => ({ ...s, metadata: { ...s.metadata, comment: e.target.value } }))} className="w-full rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-ink-100" />
-            </label>
+            <FlyoutMenu
+              label="Advanced options"
+              icon="sliders"
+              title="Advanced export options"
+              description="Dithering, final peak handling and file metadata."
+              placement="bottom-end"
+              width="lg"
+            >
+              <Toggle checked={settings.dither} onChange={(value) => setSettings((current) => ({ ...current, dither: value }))} label="TPDF dither when reducing bit depth" description="Only applied for 16/24-bit PCM. It is never applied to 32-bit float." />
+              <Toggle checked={settings.normalize} onChange={(value) => setSettings((current) => ({ ...current, normalize: value }))} label={`Normalise peak to ${targetTp.toFixed(1)} dB`} description="A final gain safety net. It does not replace the limiter and does not loudness-normalise." />
+              <div className="space-y-2 border-t border-white/[.07] pt-3">
+                <p className="text-[9px] font-semibold uppercase tracking-[.12em] text-ink-500">Metadata</p>
+                <label className="block">
+                  <span className="mb-1 block text-2xs text-ink-400">Title</span>
+                  <input value={settings.metadata.title} placeholder={project.name} onChange={(event) => setSettings((current) => ({ ...current, metadata: { ...current.metadata, title: event.target.value } }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100" />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-2xs text-ink-400">Artist</span>
+                  <input value={settings.metadata.artist} onChange={(event) => setSettings((current) => ({ ...current, metadata: { ...current.metadata, artist: event.target.value } }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100" />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-2xs text-ink-400">Comment</span>
+                  <input value={settings.metadata.comment} onChange={(event) => setSettings((current) => ({ ...current, metadata: { ...current.metadata, comment: event.target.value } }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100" />
+                </label>
+              </div>
+            </FlyoutMenu>
           </div>
 
           <div className="mt-3 flex flex-wrap items-center gap-2">
