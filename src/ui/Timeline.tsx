@@ -32,7 +32,17 @@ function sessionDuration(project: ProjectState, fallback: number): number {
   );
 }
 
-export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) => void }) {
+export function Timeline({
+  onSelectTrack,
+  showTrackHeaders = true,
+  externalScrollTop,
+  onVerticalScroll,
+}: {
+  onSelectTrack?: (trackId: string) => void;
+  showTrackHeaders?: boolean;
+  externalScrollTop?: number;
+  onVerticalScroll?: (scrollTop: number) => void;
+}) {
   const project = useApp((state) => state.project);
   const assets = useApp((state) => state.assets);
   const buffers = useApp((state) => state.assetBuffers);
@@ -54,6 +64,8 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
 
   const duration = project ? sessionDuration(project, transportDuration) : 16;
   const contentWidth = Math.max(960, duration * pixelsPerSecond);
+  const trackHeaderWidth = showTrackHeaders ? TRACK_HEADER_WIDTH : 0;
+  const timelineColumns = showTrackHeaders ? `${TRACK_HEADER_WIDTH}px ${contentWidth}px` : `${contentWidth}px`;
   const beatSeconds = 60 / Math.max(20, tempo);
   const gridSeconds = beatSeconds * (
     grid === 'bar' ? 4 : grid === 'half' ? 0.5 : grid === 'quarter' ? 0.25 : 1
@@ -68,6 +80,14 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
   useEffect(() => {
     setTempoDraft(String(tempo));
   }, [tempo]);
+
+  useEffect(() => {
+    if (externalScrollTop === undefined) return;
+    const element = contentRef.current;
+    if (element && Math.abs(element.scrollTop - externalScrollTop) > 1) {
+      element.scrollTop = externalScrollTop;
+    }
+  }, [externalScrollTop]);
 
   useEffect(() => {
     if (!selectedClip) {
@@ -363,7 +383,7 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
                 </div>
                 <div className="mt-3 flex flex-wrap items-center gap-1.5 border-t border-ink-700 pt-3">
                   <Button size="sm" variant="ghost" onClick={() => {
-                    const availableWidth = Math.max(320, (contentRef.current?.clientWidth ?? 640) - TRACK_HEADER_WIDTH);
+                    const availableWidth = Math.max(320, (contentRef.current?.clientWidth ?? 640) - trackHeaderWidth);
                     setPixelsPerSecond(Math.max(24, Math.min(180, availableWidth / Math.max(1, duration))));
                   }}>Fit timeline</Button>
                   <Button size="sm" onClick={() => {
@@ -389,14 +409,16 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
         onPointerUp={onPointerUp}
         onPointerCancel={() => setGesture(null)}
       >
-        <div style={{ width: TRACK_HEADER_WIDTH + contentWidth, minWidth: '100%' }}>
+        <div style={{ width: trackHeaderWidth + contentWidth, minWidth: '100%' }}>
           <div
             className="sticky top-0 z-20 grid h-9 border-b border-ink-700 bg-ink-900/95"
-            style={{ gridTemplateColumns: TRACK_HEADER_WIDTH + 'px ' + contentWidth + 'px' }}
+            style={{ gridTemplateColumns: timelineColumns }}
           >
-            <div className="sticky left-0 z-30 flex items-center border-r border-ink-700 bg-ink-900 px-2">
-              <span className="section-label">Track / clip</span>
-            </div>
+            {showTrackHeaders && (
+              <div className="sticky left-0 z-30 flex items-center border-r border-ink-700 bg-ink-900 px-2">
+                <span className="section-label">Track / clip</span>
+              </div>
+            )}
             <div
               className="relative cursor-crosshair"
               onPointerDown={seekFromRuler}
@@ -421,22 +443,24 @@ export function Timeline({ onSelectTrack }: { onSelectTrack?: (trackId: string) 
               className="grid min-h-[72px] border-b border-ink-800"
               style={{ gridTemplateColumns: TRACK_HEADER_WIDTH + 'px ' + contentWidth + 'px' }}
             >
-              <div
-                className={
-                  'sticky left-0 z-10 flex min-w-0 flex-col justify-center border-r border-ink-700 px-2 py-1 ' +
-                  (selectedTrackId === track.id ? 'bg-ink-800' : 'bg-ink-900/95')
-                }
-              >
-                <button type="button" onClick={() => activateTrack(track.id)} className="flex min-w-0 items-center gap-1.5 text-left">
-                  <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: track.color }} />
-                  <span className="truncate text-2xs text-ink-100">{track.name}</span>
-                </button>
-                <div className="mt-1 flex items-center gap-1">
-                  <IconButton title="Mute track" active={track.muted} onClick={() => useApp.getState().updateTrack(track.id, { muted: !track.muted })}>M</IconButton>
-                  <IconButton title="Solo track" active={track.soloed} onClick={() => useApp.getState().updateTrack(track.id, { soloed: !track.soloed })}>S</IconButton>
-                  <span className="truncate text-2xs text-ink-600">{track.clips.length} clips</span>
+              {showTrackHeaders && (
+                <div
+                  className={
+                    'sticky left-0 z-10 flex min-w-0 flex-col justify-center border-r border-ink-700 px-2 py-1 ' +
+                    (selectedTrackId === track.id ? 'bg-ink-800' : 'bg-ink-900/95')
+                  }
+                >
+                  <button type="button" onClick={() => activateTrack(track.id)} className="flex min-w-0 items-center gap-1.5 text-left">
+                    <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: track.color }} />
+                    <span className="truncate text-2xs text-ink-100">{track.name}</span>
+                  </button>
+                  <div className="mt-1 flex items-center gap-1">
+                    <IconButton title="Mute track" active={track.muted} onClick={() => useApp.getState().updateTrack(track.id, { muted: !track.muted })}>M</IconButton>
+                    <IconButton title="Solo track" active={track.soloed} onClick={() => useApp.getState().updateTrack(track.id, { soloed: !track.soloed })}>S</IconButton>
+                    <span className="truncate text-2xs text-ink-600">{track.clips.length} clips</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div
                 className="relative min-h-[72px] bg-ink-950/60"
