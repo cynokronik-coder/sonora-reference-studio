@@ -72,6 +72,7 @@ export default function App() {
       if (hash === '#plans') setScreen('plans');
       else if (hash === '#studio') setScreen('studio');
     };
+    syncFromHash();
     window.addEventListener('hashchange', syncFromHash);
     return () => window.removeEventListener('hashchange', syncFromHash);
   }, []);
