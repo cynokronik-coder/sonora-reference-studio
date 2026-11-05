@@ -35,6 +35,11 @@ The offline assistant and audio engine work without external services. The optio
 
 ## What is actually implemented
 
+### Commercial model preview
+- A **Plans & Add-ons** workspace is available from the landing-page Pricing link and the in-app navigation.
+- It presents proposed Free, Creator, Pro and Studio plans, a monthly/yearly toggle, a feature comparison, AI credit packs, and previews for presets, professional services, education, teams and affiliates.
+- All prices and quotas are commercial hypotheses for review. The page explicitly marks checkout, credit sales, marketplace orders, affiliate applications and team accounts as not connected.
+
 ### Arrangement timeline
 - Multitrack arrangement view with tempo-based bar/beat ruler and adjustable zoom.
 - Snap-to-grid controls (bar, beat, half-beat and quarter-beat), fit-to-session zoom and a seekable playhead.
@@ -135,6 +140,7 @@ decoding and the visual UI have not been exercised end-to-end. The DSP they call
 - **No accounts or collaboration.** The app is local-first: projects and audio live in this browser. There is no
   server-side user table, sharing, comments or access-control layer in this build. See
   [ARCHITECTURE.md](ARCHITECTURE.md) for the proposed deployment model.
+- **No live billing or monetization backend.** The Plans & Add-ons screen is a pricing/product preview only. There is no Stripe Checkout, subscription state, credit ledger, marketplace fulfilment, affiliate attribution or payout processing. Do not take payments based on this preview. See [MONETIZATION.md](MONETIZATION.md) for the required production integration.
 - **No external DAW or plugin control.** The assistant can propose changes only to Sonora's own supported processors; connected AI is optional and all proposals require user approval.
 - **No batch processing, DAW session import or hardware inserts.**
 - **Dynamic range cannot be expanded upward.** If the source is already over-compressed, the matcher reports this rather
@@ -155,6 +161,7 @@ decoding and the visual UI have not been exercised end-to-end. The DSP they call
 - [DEVELOPMENT.md](DEVELOPMENT.md) — setup, project layout, extension recipes, environment variables.
 - [TESTING.md](TESTING.md) — automated coverage, synthetic signals, browser checklist.
 - [API.md](API.md) — store actions, worker/worklet message protocols, module boundaries.
+- [MONETIZATION.md](MONETIZATION.md) — pricing assumptions, billing architecture, usage credits, marketplace and affiliate release gates.
 
 Built with React, TypeScript, Vite and Tailwind. No audio processing is delegated to Web Audio nodes; the Web Audio API is
 used only as a host for the custom AudioWorklet, with all DSP implemented in this repository.
