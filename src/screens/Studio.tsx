@@ -23,7 +23,7 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
   const [workspace, setWorkspace] = useState<Workspace>('arrangement');
   const [tracksOpen, setTracksOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(true);
+  const [assistantOpen, setAssistantOpen] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches);
   const [trackScrollTop, setTrackScrollTop] = useState(0);
   const [processingCategory, setProcessingCategory] = useState<'effects' | 'eq' | 'dynamics' | null>('effects');
   const [newTrackKind, setNewTrackKind] = useState<TrackKind>('audio');
@@ -100,7 +100,7 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
         </nav>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <button type="button" onClick={() => setTracksOpen(true)} title="Manage tracks and buses" className="hidden rounded-lg border border-white/[.08] bg-white/[.025] px-2.5 py-2 text-[10px] text-ink-300 transition-colors hover:bg-white/[.06] hover:text-white lg:inline-flex">
+          <button type="button" data-tour="studio-tracks" onClick={() => setTracksOpen(true)} title="Manage tracks and buses" aria-label={`Open tracks, ${project.tracks.length} tracks`} className="inline-flex rounded-lg border border-white/[.08] bg-white/[.025] px-2.5 py-2 text-[10px] text-ink-300 transition-colors hover:bg-white/[.06] hover:text-white">
             Tracks <span className="ml-1 text-ink-500">{project.tracks.length}</span>
           </button>
           <Button size="sm" variant="primary" onClick={() => setAddOpen(true)}><Icon name="plus" size={14} /> Add audio</Button>
@@ -117,7 +117,7 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
       <div data-tour="studio-transport"><TransportBar /></div>
 
       <div className="flex min-h-0 flex-1">
-        <aside data-tour="studio-tracks" className="flex w-[204px] shrink-0 flex-col border-r border-white/[.07] bg-[#0D0D1B]/92 sm:w-[220px]">
+        <aside data-tour="studio-tracks" className="hidden w-[204px] shrink-0 flex-col border-r border-white/[.07] bg-[#0D0D1B]/92 lg:flex xl:w-[220px]">
           <div className="flex h-[43px] shrink-0 items-center justify-between border-b border-white/[.07] px-3">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-ink-100">Tracks</span>
@@ -259,7 +259,7 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
             )}
           </div>
 
-          <div data-tour="studio-processing" className="flex h-[82px] shrink-0 items-center justify-center border-t border-white/[.07] bg-[#0D0D1B]/95 px-3">
+          <div data-tour="studio-processing" className="flex h-[66px] shrink-0 items-center justify-center border-t border-white/[.07] bg-[#0D0D1B]/95 px-2 sm:h-[82px] sm:px-3">
             <div className="grid w-full max-w-[600px] grid-cols-5 gap-2">
               {[
                 { id: 'mix', label: 'Mix', icon: 'sliders' as const, action: () => setWorkspace('arrangement'), active: workspace !== 'processing' },
@@ -268,9 +268,9 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
                 { id: 'dynamics', label: 'Dynamics', icon: 'activity' as const, action: () => { setWorkspace('processing'); setProcessingCategory('dynamics'); }, active: workspace === 'processing' && processingCategory === 'dynamics' },
                 { id: 'export', label: 'Export', icon: 'download' as const, action: () => useApp.getState().setScreen('export'), active: false },
               ].map((item) => (
-                <button key={item.id} type="button" onClick={item.action} aria-pressed={item.active} className={`group flex h-[66px] flex-col items-center justify-center gap-1.5 rounded-xl border transition-all duration-180 ${item.active ? 'border-[#A77AFF]/55 bg-[#8957FF]/15 text-white shadow-violet-soft' : 'border-white/[.055] bg-[#171727]/70 text-ink-400 hover:border-white/[.14] hover:bg-[#1D1D30] hover:text-ink-100'}`}>
+                <button key={item.id} type="button" onClick={item.action} aria-pressed={item.active} className={`group flex h-[54px] flex-col items-center justify-center gap-1 rounded-xl border transition-all duration-180 sm:h-[66px] sm:gap-1.5 ${item.active ? 'border-[#A77AFF]/55 bg-[#8957FF]/15 text-white shadow-violet-soft' : 'border-white/[.055] bg-[#171727]/70 text-ink-400 hover:border-white/[.14] hover:bg-[#1D1D30] hover:text-ink-100'}`}>
                   <Icon name={item.icon} size={21} className={item.active ? 'text-[#C4A2FF]' : 'text-ink-400 group-hover:text-ink-100'} />
-                  <span className="text-[10px] font-medium">{item.label}</span>
+                  <span className="text-[9px] font-medium sm:text-[10px]">{item.label}</span>
                 </button>
               ))}
             </div>
@@ -278,9 +278,20 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
         </section>
 
         {assistantOpen && (
-          <aside data-tour="studio-assistant" className="hidden w-[280px] shrink-0 border-l border-white/[.07] bg-[#0D0D1B] xl:flex 2xl:w-[310px]">
-            <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} /></div>
-          </aside>
+          <>
+            <aside data-tour="studio-assistant" className="hidden w-[280px] shrink-0 border-l border-white/[.07] bg-[#0D0D1B] xl:flex 2xl:w-[310px]">
+              <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} /></div>
+            </aside>
+            <div className="fixed inset-0 z-[70] bg-[#05050c]/65 backdrop-blur-sm xl:hidden" onClick={() => setAssistantOpen(false)}>
+              <aside
+                data-tour="studio-assistant"
+                className="absolute inset-y-0 right-0 flex w-[min(360px,94vw)] flex-col border-l border-white/[.10] bg-[#0D0D1B] shadow-floating"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} /></div>
+              </aside>
+            </div>
+          </>
         )}
       </div>
 
@@ -289,15 +300,19 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
           <div className="space-y-1">
             {project.tracks.length === 0 && <p className="py-6 text-center text-xs text-ink-500">No tracks yet. Add audio or create a track.</p>}
             {project.tracks.map((track) => (
-              <div key={track.id} className={`flex items-center gap-2 rounded-lg border px-3 py-2 ${selectedTrackId === track.id ? 'border-violet-400/40 bg-violet-500/10' : 'border-ink-700 bg-ink-900/50'}`}>
+              <div key={track.id} className={`flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 ${selectedTrackId === track.id ? 'border-violet-400/40 bg-violet-500/10' : 'border-ink-700 bg-ink-900/50'}`}>
                 <button type="button" onClick={() => { chooseTrack(track.id); setTracksOpen(false); }} className="min-w-0 flex-1 text-left"><span className="flex items-center gap-2"><span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: track.color }} /><span className="truncate text-xs font-medium text-ink-100">{track.name}</span>{track.kind === 'reference' && <Badge tone="info">Reference</Badge>}</span><span className="mt-1 block text-2xs text-ink-500">{track.clips.length} clips · {track.processors.length} processors</span></button>
-                <button type="button" title="Mute track" aria-pressed={track.muted} onClick={() => updateTrack(track.id, { muted: !track.muted })} className="rounded border border-ink-600 px-2 py-1 text-2xs text-ink-400">M</button>
-                <button type="button" title="Solo track" aria-pressed={track.soloed} onClick={() => updateTrack(track.id, { soloed: !track.soloed })} className="rounded border border-ink-600 px-2 py-1 text-2xs text-ink-400">S</button>
-                <button type="button" title="Delete track" onClick={() => removeTrackById(track.id, track.name)} className="rounded border border-ink-700 px-2 py-1 text-2xs text-ink-500 hover:text-red-300">Delete</button>
+                <button type="button" title={track.muted ? 'Unmute track' : 'Mute track'} aria-label={track.muted ? `Unmute ${track.name}` : `Mute ${track.name}`} aria-pressed={track.muted} onClick={() => updateTrack(track.id, { muted: !track.muted })} className="rounded border border-ink-600 px-2 py-1 text-2xs text-ink-400">M</button>
+                <button type="button" title={track.soloed ? 'Unsolo track' : 'Solo track'} aria-label={track.soloed ? `Unsolo ${track.name}` : `Solo ${track.name}`} aria-pressed={track.soloed} onClick={() => updateTrack(track.id, { soloed: !track.soloed })} className="rounded border border-ink-600 px-2 py-1 text-2xs text-ink-400">S</button>
+                <button type="button" title={`Delete ${track.name}`} onClick={() => removeTrackById(track.id, track.name)} className="rounded border border-ink-700 px-2 py-1 text-2xs text-ink-500 hover:text-red-300">Delete</button>
+                <div className="flex w-full items-center gap-2">
+                  <input aria-label={`${track.name} volume`} type="range" min={-60} max={6} step={0.5} value={track.volumeDb} onChange={(event) => updateTrack(track.id, { volumeDb: Number(event.target.value) })} className="min-w-0 flex-1" />
+                  <span className="w-12 text-right font-mono text-2xs tabular-nums text-ink-400">{track.volumeDb.toFixed(1)} dB</span>
+                </div>
               </div>
             ))}
           </div>
-          <div className="rounded-xl border border-ink-700 bg-ink-900/60 p-3"><p className="text-xs font-semibold text-ink-100">Track tools</p><p className="mt-1 text-2xs leading-relaxed text-ink-500">Create and organise the channels in this session.</p><label className="mt-4 block text-2xs text-ink-400">Track type<select value={newTrackKind} onChange={(event) => setNewTrackKind(event.target.value as TrackKind)} className="mt-1 w-full rounded border border-ink-600 bg-ink-850 px-2 py-1.5 text-xs text-ink-100">{TRACK_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label><Button className="mt-2 w-full" size="sm" onClick={createTrack}>＋ Create track</Button><Button className="mt-2 w-full" size="sm" variant="ghost" onClick={() => useApp.getState().addBus('Bus ' + (project.buses.length + 1))}>＋ Add bus</Button>{project.buses.length > 0 && <div className="mt-4 border-t border-ink-700 pt-3"><p className="text-2xs font-medium text-ink-300">Buses</p>{project.buses.map((bus) => <button key={bus.id} type="button" onClick={() => { setFocus({ scope: 'bus', id: bus.id }); setTracksOpen(false); setWorkspace('processing'); }} className="mt-1 block w-full rounded px-2 py-1.5 text-left text-2xs text-ink-400 hover:bg-ink-800 hover:text-ink-100">{bus.name} <span className="text-ink-600">· open chain</span></button>)}</div>}</div>
+          <div className="rounded-xl border border-ink-700 bg-ink-900/60 p-3"><p className="text-xs font-semibold text-ink-100">Track tools</p><p className="mt-1 text-2xs leading-relaxed text-ink-500">Create and organise the channels in this session.</p><div className="mt-4 border-t border-ink-700 pt-3"><div className="mb-1 flex items-center justify-between"><span className="text-2xs font-medium text-ink-300">Master output</span><span className="font-mono text-2xs text-ink-400">{project.master.volumeDb.toFixed(1)} dB</span></div><input aria-label="Master output level" type="range" min={-24} max={6} step={0.1} value={project.master.volumeDb} onChange={(event) => setMasterVolume(Number(event.target.value))} className="w-full" /></div><label className="mt-4 block text-2xs text-ink-400">Track type<select value={newTrackKind} onChange={(event) => setNewTrackKind(event.target.value as TrackKind)} className="mt-1 w-full rounded border border-ink-600 bg-ink-850 px-2 py-1.5 text-xs text-ink-100">{TRACK_KINDS.map((kind) => <option key={kind} value={kind}>{kind}</option>)}</select></label><Button className="mt-2 w-full" size="sm" onClick={createTrack}>＋ Create track</Button><Button className="mt-2 w-full" size="sm" variant="ghost" onClick={() => useApp.getState().addBus('Bus ' + (project.buses.length + 1))}>＋ Add bus</Button>{project.buses.length > 0 && <div className="mt-4 border-t border-ink-700 pt-3"><p className="text-2xs font-medium text-ink-300">Buses</p>{project.buses.map((bus) => <button key={bus.id} type="button" onClick={() => { setFocus({ scope: 'bus', id: bus.id }); setTracksOpen(false); setWorkspace('processing'); }} className="mt-1 block w-full rounded px-2 py-1.5 text-left text-2xs text-ink-400 hover:bg-ink-800 hover:text-ink-100">{bus.name} <span className="text-ink-600">· open chain</span></button>)}</div>}</div>
         </div>
       </Modal>
 
