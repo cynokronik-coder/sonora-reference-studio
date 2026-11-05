@@ -16,7 +16,7 @@ export default function Projects() {
           <h1 className="mt-1 text-xl text-ink-100">Projects</h1>
           <p className="mt-1 text-xs text-ink-400">Stored locally in this browser, including the original audio files.</p>
         </div>
-        <div className="flex gap-2">
+        <div data-tour="projects-create" className="flex gap-2">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -29,7 +29,7 @@ export default function Projects() {
         </div>
       </header>
 
-      <Panel>
+      <Panel dataTour="projects-list">
         {filtered.length === 0 ? (
           <EmptyState
             title={projects.length ? 'No matching projects' : 'No projects yet'}
