@@ -180,7 +180,6 @@ input[type='range']:focus-visible::-moz-range-thumb {
 }
 
 .panel {
-  overflow: hidden;
   border: 1px solid var(--sonora-border);
   border-radius: var(--sonora-radius-panel);
   background:
