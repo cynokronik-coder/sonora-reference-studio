@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Screen } from '../state/store';
 import { Icon } from './Icon';
@@ -21,7 +21,7 @@ const TOUR_STEPS: Partial<Record<Screen, TourStep[]>> = {
     { target: 'projects-list', title: 'Manage sessions', description: 'Open, duplicate or delete a local project. Its source audio stays in this browser profile.' },
   ],
   studio: [
-    { target: 'studio-tracks', title: 'Manage your tracks', description: 'Select a channel, adjust its level, and use Solo or Mute. Secondary channel settings live in the contextual controls.' },
+    { target: 'studio-tracks', title: 'Manage your tracks', description: 'Select a channel, adjust its level, and use Solo or Mute. On smaller screens, open Tracks to access the same controls.' },
     { target: 'studio-transport', title: 'Control playback', description: 'Play, pause, seek and adjust the session tempo from the transport bar.' },
     { target: 'studio-timeline', title: 'Edit the arrangement', description: 'Move, trim, split and shape clips directly on the timeline. Waveforms are drawn from your imported audio.' },
     { target: 'studio-processing', title: 'Open processing tools', description: 'Switch between Mix, Effects, EQ, Dynamics and Export without leaving the Studio layout.' },
@@ -78,6 +78,14 @@ interface SpotlightRect {
 
 const STORAGE_PREFIX = 'sonora:onboarding:v1:';
 
+function findVisibleTourTarget(name: string): HTMLElement | null {
+  const targets = Array.from(document.querySelectorAll<HTMLElement>(`[data-tour="${name}"]`));
+  return targets.find((target) => {
+    const bounds = target.getBoundingClientRect();
+    return bounds.width > 0 && bounds.height > 0 && window.getComputedStyle(target).visibility !== 'hidden';
+  }) ?? null;
+}
+
 function rememberTour(screen: Screen, state: 'completed' | 'skipped') {
   try {
     window.localStorage.setItem(`${STORAGE_PREFIX}${screen}`, state);
@@ -91,7 +99,14 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<SpotlightRect | null>(null);
   const [tooltip, setTooltip] = useState({ top: 100, left: 24 });
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const returnFocusRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
   const step = steps[index];
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     if (open) setIndex(0);
@@ -105,7 +120,7 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
 
     let frame = 0;
     const update = () => {
-      const target = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`);
+      const target = findVisibleTourTarget(step.target);
       if (!target) {
         setRect(null);
         setTooltip({ top: Math.max(24, window.innerHeight * 0.32), left: Math.max(16, (window.innerWidth - 340) / 2) });
@@ -137,7 +152,7 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
       setTooltip({ top, left });
     };
 
-    const target = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`);
+    const target = findVisibleTourTarget(step.target);
     if (target) {
       const bounds = target.getBoundingClientRect();
       const outsideViewport = bounds.top < 12 || bounds.bottom > window.innerHeight - 12 || bounds.left < 8 || bounds.right > window.innerWidth - 8;
@@ -160,25 +175,57 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
 
   useEffect(() => {
     if (!open) return;
+
+    returnFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => {
+      const first = dialogRef.current?.querySelector<HTMLElement>('button:not([disabled])');
+      first?.focus();
+    });
+
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         rememberTour(screen, 'skipped');
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (event.key === 'ArrowRight') {
         event.preventDefault();
         setIndex((current) => Math.min(steps.length - 1, current + 1));
+        return;
       }
       if (event.key === 'ArrowLeft') {
         event.preventDefault();
         setIndex((current) => Math.max(0, current - 1));
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])') ?? []);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
       }
     };
+
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [open, steps.length]);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      window.removeEventListener('keydown', onKeyDown);
+      returnFocusRef.current?.focus();
+      returnFocusRef.current = null;
+    };
+  }, [open, screen, steps.length]);
 
   if (!open || !step || typeof document === 'undefined') return null;
 
@@ -206,7 +253,7 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[1200]" aria-label="Guided tour">
+    <div className="fixed inset-0 z-[1200]">
       {rect ? (
         <>
           <div className="fixed left-0 top-0 w-full" style={{ ...spotlightStyle, height: rect.top }} />
@@ -223,9 +270,11 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
       )}
 
       <section
+        ref={dialogRef}
         role="dialog"
-        aria-modal="false"
+        aria-modal="true"
         aria-labelledby="sonora-tour-title"
+        tabIndex={-1}
         className="fixed w-[min(360px,calc(100vw-32px))] rounded-xl border border-white/[.11] bg-[rgba(20,20,37,.96)] p-4 text-left shadow-floating backdrop-blur-xl animate-[sonora-tour-pop_180ms_ease-out]"
         style={{ top: tooltip.top, left: tooltip.left }}
       >
