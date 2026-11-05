@@ -213,7 +213,10 @@ function unixDate(value) {
 async function syncStripeSubscription(subscription) {
   if (!subscription?.id || !subscription.customer) return;
   const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
-  const priceId = subscription.items?.data?.[0]?.price?.id || '';
+  const firstItem = subscription.items?.data?.[0];
+  const priceId = firstItem?.price?.id || '';
+  const periodStart = subscription.current_period_start ?? firstItem?.current_period_start ?? null;
+  const periodEnd = subscription.current_period_end ?? firstItem?.current_period_end ?? null;
   const metadataUserId = subscription.metadata?.user_id;
   const planKey = planForPrice(priceId) || subscription.metadata?.plan_key;
   if (!metadataUserId || !['creator', 'pro', 'studio'].includes(planKey)) {
@@ -228,8 +231,8 @@ async function syncStripeSubscription(subscription) {
       stripe_price_id: priceId,
       plan_key: planKey,
       status: subscription.status || 'incomplete',
-      current_period_start: unixDate(subscription.current_period_start),
-      current_period_end: unixDate(subscription.current_period_end),
+      current_period_start: unixDate(periodStart),
+      current_period_end: unixDate(periodEnd),
       cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
       updated_at: new Date().toISOString(),
     },
