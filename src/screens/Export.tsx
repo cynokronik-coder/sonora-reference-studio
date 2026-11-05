@@ -46,11 +46,11 @@ export default function Export() {
   };
 
   return (
-    <div className="mx-auto max-w-[1400px] space-y-4 p-4 sm:p-5">
-      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/[.06] pb-4">
+    <div className="mx-auto max-w-[1500px] space-y-5 p-5 sm:p-6 lg:p-7">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/[.06] pb-5">
         <div>
           <p className="section-label">Delivery</p>
-          <h1 className="mt-1 text-xl font-semibold tracking-[-.025em] text-white">Export</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-[-.025em] text-white">Export</h1>
           <p className="mt-1 text-xs text-ink-400">
             Offline, deterministic rendering at the session rate or higher. The download is the encoded file itself — no
             additional lossy conversion.
