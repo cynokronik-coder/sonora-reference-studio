@@ -274,6 +274,10 @@ function parseAssistantToolArguments(value: unknown): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+function describeSessionOnlyStorage(reason: string | null): string {
+  return `Sonora cannot save to this browser's database (${reason ?? 'storage unavailable'}), so it is running in session-only mode. You can create a project and work normally, but everything is lost when you reload. Open Sonora in a normal browser tab to keep your work.`;
+}
+
 function describeStorageError(error: unknown): string {
   const detail = error instanceof Error ? error.message : String(error);
   return `Sonora cannot use this browser's local storage, so projects cannot be saved. Open Sonora in its own browser tab and turn off strict storage blocking. (${detail})`;
@@ -331,7 +335,13 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const projects = await db.listProjects();
       const userPresets = await db.listUserPresets();
-      set({ projects, presets: [...BUILT_IN_PRESETS, ...userPresets], mode, storageError: null });
+      const storage = db.storageStatus();
+      set({
+        projects,
+        presets: [...BUILT_IN_PRESETS, ...userPresets],
+        mode,
+        storageError: storage.persistent ? null : describeSessionOnlyStorage(storage.reason),
+      });
     } catch (error) {
       set({ mode, storageError: describeStorageError(error) });
     }
