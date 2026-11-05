@@ -20,15 +20,15 @@ export function Panel({
   return (
     <section className={`panel shadow-panel ${className}`}>
       {(title || right) && (
-        <header className="flex items-center justify-between gap-3 border-b border-ink-700 px-3 py-2">
+        <header className="flex items-center justify-between gap-3 border-b border-white/[.06] px-4 py-3">
           <div className="min-w-0">
-            {title && <h2 className="section-label text-ink-300">{title}</h2>}
+            {title && <h2 className="text-[13px] font-semibold tracking-wide text-ink-100">{title}</h2>}
             {subtitle && <p className="mt-0.5 truncate text-2xs text-ink-400">{subtitle}</p>}
           </div>
           {right}
         </header>
       )}
-      <div className={dense ? '' : 'p-3'}>{children}</div>
+      <div className={dense ? '' : 'p-4'}>{children}</div>
     </section>
   );
 }
@@ -53,13 +53,13 @@ export function Button({
   type?: 'button' | 'submit';
 }) {
   const base =
-    'inline-flex items-center justify-center gap-1.5 rounded-md border font-medium transition-colors focus-ring disabled:cursor-not-allowed disabled:opacity-40';
-  const sizes = size === 'sm' ? 'px-2 py-1 text-2xs' : 'px-3 py-1.5 text-xs';
+    'inline-flex items-center justify-center gap-1.5 rounded-control border font-medium transition-all duration-180 focus-ring disabled:cursor-not-allowed disabled:opacity-40 active:scale-[.985]';
+  const sizes = size === 'sm' ? 'min-h-8 px-3 py-1.5 text-2xs' : 'min-h-9 px-3.5 py-2 text-xs';
   const variants: Record<string, string> = {
-    primary: 'border-accent bg-accent text-ink-950 hover:bg-accent-dim',
-    secondary: 'border-ink-600 bg-ink-800 text-ink-100 hover:border-ink-500 hover:bg-ink-750',
-    ghost: 'border-transparent bg-transparent text-ink-300 hover:border-ink-600 hover:text-ink-100',
-    danger: 'border-signal-red/40 bg-signal-red/10 text-signal-red hover:bg-signal-red/20',
+    primary: 'border-[#A77AFF]/55 bg-gradient-to-br from-[#8957FF] to-[#7545EA] text-white shadow-violet hover:brightness-110 hover:shadow-violet-soft',
+    secondary: 'border-white/[.09] bg-[#1D1D30]/90 text-ink-100 shadow-[0_1px_0_rgba(255,255,255,.035)_inset] hover:border-white/[.16] hover:bg-[#252538]',
+    ghost: 'border-transparent bg-transparent text-ink-300 hover:border-white/[.07] hover:bg-white/[.045] hover:text-ink-100',
+    danger: 'border-signal-red/35 bg-signal-red/10 text-signal-red hover:border-signal-red/55 hover:bg-signal-red/15',
   };
   return (
     <button
@@ -93,12 +93,13 @@ export function IconButton({
     <button
       type="button"
       title={title}
+      aria-label={title}
       onClick={onClick}
       disabled={disabled}
-      className={`focus-ring inline-flex h-6 min-w-6 items-center justify-center rounded border px-1 text-2xs font-medium transition-colors disabled:opacity-40 ${
+      className={`focus-ring inline-flex h-8 min-w-8 items-center justify-center rounded-lg border px-1.5 text-2xs font-medium transition-all duration-180 disabled:opacity-40 ${
         active
-          ? 'border-accent/60 bg-accent/15 text-accent'
-          : 'border-ink-600 bg-ink-800 text-ink-300 hover:border-ink-500 hover:text-ink-100'
+          ? 'border-[#A77AFF]/55 bg-[#8957FF]/15 text-[#C4A2FF] shadow-violet-soft'
+          : 'border-white/[.08] bg-[#171727] text-ink-300 hover:border-white/[.16] hover:bg-[#252538] hover:text-ink-100'
       } ${className}`}
     >
       {children}
@@ -120,26 +121,26 @@ export function Toggle({
   disabled?: boolean;
 }) {
   return (
-    <label className={`flex cursor-pointer items-start gap-2 ${disabled ? 'opacity-50' : ''}`}>
+    <label className={`flex cursor-pointer items-start gap-2.5 ${disabled ? 'opacity-50' : ''}`}>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`focus-ring relative mt-0.5 h-4 w-7 shrink-0 rounded-full border transition-colors ${
-          checked ? 'border-accent/50 bg-accent/70' : 'border-ink-500 bg-ink-700'
+        className={`focus-ring relative mt-0.5 h-[18px] w-8 shrink-0 rounded-full border transition-colors duration-180 ${
+          checked ? 'border-[#A77AFF]/65 bg-[#8957FF]' : 'border-white/[.12] bg-[#303047]'
         }`}
       >
         <span
-          className={`absolute top-0.5 h-2.5 w-2.5 rounded-full transition-transform ${
-            checked ? 'translate-x-3.5 bg-ink-950' : 'translate-x-0.5 bg-ink-300'
+          className={`absolute top-[2px] h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-180 ${
+            checked ? 'translate-x-[15px]' : 'translate-x-[2px]'
           }`}
         />
       </button>
       {(label || description) && (
         <span className="min-w-0">
-          {label && <span className="block text-xs text-ink-100">{label}</span>}
+          {label && <span className="block text-xs font-medium text-ink-100">{label}</span>}
           {description && <span className="mt-0.5 block text-2xs leading-relaxed text-ink-400">{description}</span>}
         </span>
       )}
@@ -164,7 +165,7 @@ export function Select<T extends string | number>({
 }) {
   return (
     <label className={`block ${className}`}>
-      {label && <span className="mb-1 block text-2xs text-ink-400">{label}</span>}
+      {label && <span className="mb-1.5 block text-2xs font-medium text-ink-400">{label}</span>}
       <select
         value={value}
         disabled={disabled}
@@ -173,7 +174,7 @@ export function Select<T extends string | number>({
           const match = options.find((o) => String(o.value) === raw);
           if (match) onChange(match.value);
         }}
-        className="focus-ring w-full rounded border border-ink-600 bg-ink-800 px-2 py-1 text-xs text-ink-100 disabled:opacity-40"
+        className="focus-ring w-full rounded-control border border-white/[.09] bg-[#171727] px-3 py-2 text-xs text-ink-100 shadow-[0_1px_0_rgba(255,255,255,.025)_inset] transition-colors hover:border-white/[.15] disabled:opacity-40"
       >
         {options.map((option) => (
           <option key={String(option.value)} value={String(option.value)}>
@@ -221,10 +222,10 @@ export function NumberField({
   };
   return (
     <label className={`block ${className}`}>
-      {label && <span className="mb-1 block text-2xs text-ink-400">{label}</span>}
-      <span className="flex items-center rounded border border-ink-600 bg-ink-900 px-1.5 focus-within:border-ink-400">
+      {label && <span className="mb-1.5 block text-2xs font-medium text-ink-400">{label}</span>}
+      <span className="flex items-center rounded-control border border-white/[.09] bg-[#0D0D1B] px-2 focus-within:border-[#A77AFF]/60 focus-within:ring-2 focus-within:ring-[#8957FF]/10">
         <input
-          className="num-input w-full bg-transparent py-1 text-right font-mono text-xs text-ink-100 outline-none disabled:opacity-40"
+          className="num-input w-full bg-transparent py-2 text-right font-mono text-xs text-ink-100 outline-none disabled:opacity-40"
           type="number"
           value={draft}
           step={step}
@@ -244,16 +245,15 @@ export function NumberField({
             }
           }}
         />
-        {unit && <span className="pl-1 text-2xs text-ink-500">{unit}</span>}
+        {unit && <span className="pl-2 text-2xs text-ink-500">{unit}</span>}
       </span>
     </label>
   );
 }
 
 /**
- * Parameter slider with a live numeric readout. The slider is logarithmic for
- * frequency controls so the low end — where most tonal problems live — gets
- * usable resolution.
+ * Parameter slider with a live numeric readout. Frequency controls can use
+ * logarithmic scaling so the low end receives useful adjustment resolution.
  */
 export function ParamSlider({
   label,
@@ -284,10 +284,10 @@ export function ParamSlider({
     logarithmic ? min * Math.pow(max / min, t) : min + t * (max - min);
   const sliderValue = clamp(toSlider(value), 0, 1) * 1000;
   return (
-    <div className={compact ? 'space-y-0.5' : 'space-y-1'}>
+    <div className={compact ? 'space-y-1' : 'space-y-1.5'}>
       <div className="flex items-baseline justify-between gap-2">
-        <span className="truncate text-2xs text-ink-400">{label}</span>
-        <span className="shrink-0 font-mono text-2xs text-ink-200">
+        <span className="truncate text-2xs font-medium text-ink-400">{label}</span>
+        <span className="shrink-0 font-mono text-2xs tabular-nums text-ink-200">
           {format ? format(value) : `${Number(value.toFixed(step < 0.1 ? 2 : step < 1 ? 1 : 0))}${unit ? ` ${unit}` : ''}`}
         </span>
       </div>
@@ -319,15 +319,15 @@ export function Badge({
   className?: string;
 }) {
   const tones: Record<string, string> = {
-    neutral: 'border-ink-600 text-ink-300',
-    accent: 'border-accent/30 bg-accent/10 text-accent',
+    neutral: 'border-white/[.10] bg-white/[.035] text-ink-300',
+    accent: 'border-[#A77AFF]/30 bg-[#8957FF]/10 text-[#C4A2FF]',
     warn: 'border-signal-amber/30 bg-signal-amber/10 text-signal-amber',
     danger: 'border-signal-red/30 bg-signal-red/10 text-signal-red',
     info: 'border-signal-cyan/30 bg-signal-cyan/10 text-signal-cyan',
   };
   return (
     <span
-      className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 font-mono text-2xs uppercase tracking-wider ${tones[tone]} ${className}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] font-medium tracking-wide ${tones[tone]} ${className}`}
     >
       {children}
     </span>
@@ -336,9 +336,9 @@ export function Badge({
 
 export function ProgressBar({ value, tone = 'accent' }: { value: number; tone?: 'accent' | 'danger' }) {
   return (
-    <div className="h-1 w-full overflow-hidden rounded-full bg-ink-700">
+    <div className="h-1 w-full overflow-hidden rounded-full bg-[#303047]">
       <div
-        className={`h-full transition-[width] duration-150 ${tone === 'accent' ? 'bg-accent' : 'bg-signal-red'}`}
+        className={`h-full rounded-full transition-[width] duration-180 ${tone === 'accent' ? 'bg-gradient-to-r from-[#7545EA] to-[#A77AFF]' : 'bg-signal-red'}`}
         style={{ width: `${Math.round(clamp(value, 0, 1) * 100)}%` }}
       />
     </div>
@@ -360,13 +360,13 @@ export function Modal({
 }) {
   if (!open) return null;
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#05050c]/75 p-4 backdrop-blur-md" onClick={onClose}>
       <div
-        className={`panel max-h-[85vh] w-full overflow-auto p-4 shadow-panel ${wide ? 'max-w-3xl' : 'max-w-md'}`}
+        className={`max-h-[85vh] w-full overflow-auto rounded-panel border border-white/[.10] bg-[#151426]/95 p-4 shadow-floating backdrop-blur-xl ${wide ? 'max-w-3xl' : 'max-w-md'}`}
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-medium text-ink-100">{title}</h3>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold text-ink-100">{title}</h3>
           <IconButton onClick={onClose} title="Close">
             ×
           </IconButton>
@@ -380,7 +380,7 @@ export function Modal({
 export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
   return (
     <div className="flex flex-col items-center justify-center gap-2 px-6 py-10 text-center">
-      <p className="text-sm text-ink-200">{title}</p>
+      <p className="text-sm font-medium text-ink-200">{title}</p>
       <p className="max-w-md text-xs leading-relaxed text-ink-400">{description}</p>
       {action}
     </div>
@@ -389,9 +389,9 @@ export function EmptyState({ title, description, action }: { title: string; desc
 
 export function InfoRow({ label, value, tone }: { label: string; value: ReactNode; tone?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3 border-b border-ink-700/60 py-1.5 last:border-0">
+    <div className="flex items-baseline justify-between gap-3 border-b border-white/[.055] py-2 last:border-0">
       <span className="text-2xs text-ink-400">{label}</span>
-      <span className={`font-mono text-2xs text-ink-100 ${tone ?? ''}`}>{value}</span>
+      <span className={`font-mono text-2xs tabular-nums text-ink-100 ${tone ?? ''}`}>{value}</span>
     </div>
   );
 }
@@ -406,16 +406,17 @@ export function Tabs<T extends string>({
   tabs: { value: T; label: string; badge?: string }[];
 }) {
   return (
-    <div className="flex gap-1">
+    <div className="inline-flex max-w-full gap-1 rounded-xl border border-white/[.07] bg-black/20 p-1">
       {tabs.map((tab) => (
         <button
           key={tab.value}
           type="button"
+          aria-pressed={value === tab.value}
           onClick={() => onChange(tab.value)}
-          className={`focus-ring rounded border px-2 py-1 text-2xs transition-colors ${
+          className={`focus-ring whitespace-nowrap rounded-lg px-3 py-1.5 text-2xs font-medium transition-all duration-180 ${
             value === tab.value
-              ? 'border-accent/50 bg-accent/10 text-accent'
-              : 'border-ink-700 bg-ink-850 text-ink-400 hover:text-ink-200'
+              ? 'border border-[#A77AFF]/25 bg-[#8957FF]/15 text-[#C4A2FF] shadow-violet-soft'
+              : 'border border-transparent text-ink-400 hover:bg-white/[.04] hover:text-ink-200'
           }`}
         >
           {tab.label}
@@ -452,8 +453,7 @@ export function useFilePicker(): { open: (accept: string, multiple: boolean, onF
   };
 }
 
-
-/** Contextual help: a compact explanation that opens exactly where the user needs it. */
+/** Contextual help foundation. Dedicated tours and advanced flyouts are introduced in later batches. */
 export function HelpTip({
   title,
   children,
@@ -467,15 +467,33 @@ export function HelpTip({
 }) {
   const [open, setOpen] = useState(false);
   const id = useId();
+  const rootRef = useRef<HTMLSpanElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    const onPointerDown = (event: PointerEvent) => {
+      if (rootRef.current && event.target instanceof Node && !rootRef.current.contains(event.target)) setOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onPointerDown);
+    };
+  }, [open]);
+
   return (
-    <span className="relative inline-flex align-middle">
+    <span ref={rootRef} className="relative inline-flex align-middle">
       <button
         type="button"
         aria-label={label}
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((value) => !value)}
-        className="focus-ring inline-flex h-5 w-5 items-center justify-center rounded-full border border-ink-600 bg-ink-850 text-[10px] font-semibold text-ink-300 transition-colors hover:border-accent/50 hover:text-accent"
+        className="focus-ring inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/[.12] bg-[#171727] text-[10px] font-semibold text-ink-300 transition-all duration-180 hover:border-[#A77AFF]/55 hover:bg-[#8957FF]/10 hover:text-[#C4A2FF]"
       >
         ?
       </button>
@@ -484,7 +502,7 @@ export function HelpTip({
           id={id}
           role="dialog"
           aria-label={title}
-          className="absolute right-0 top-7 z-50 block w-[min(300px,85vw)] rounded-xl border border-ink-600 bg-[#11151b] p-3 text-left shadow-2xl shadow-black/60"
+          className="absolute right-0 top-7 z-50 block w-[min(300px,85vw)] rounded-xl border border-white/[.10] bg-[#151426]/95 p-3 text-left shadow-floating backdrop-blur-xl"
         >
           <span className="flex items-start justify-between gap-3">
             <span className="text-xs font-semibold text-ink-100">{title}</span>
@@ -492,17 +510,17 @@ export function HelpTip({
               type="button"
               aria-label="Close explanation"
               onClick={() => setOpen(false)}
-              className="rounded px-1 text-ink-500 hover:text-ink-100"
+              className="rounded-md px-1 text-ink-500 transition-colors hover:bg-white/[.05] hover:text-ink-100"
             >
               ×
             </button>
           </span>
           <span className="mt-2 block text-2xs leading-relaxed text-ink-300">{children}</span>
           {steps && steps.length > 0 && (
-            <span className="mt-2 block space-y-1.5 border-t border-ink-700 pt-2">
+            <span className="mt-2 block space-y-1.5 border-t border-white/[.07] pt-2">
               {steps.map((step, index) => (
                 <span key={step} className="flex gap-2 text-2xs leading-relaxed text-ink-400">
-                  <span className="font-mono text-accent">{String(index + 1).padStart(2, '0')}</span>
+                  <span className="font-mono tabular-nums text-[#A77AFF]">{String(index + 1).padStart(2, '0')}</span>
                   <span>{step}</span>
                 </span>
               ))}
