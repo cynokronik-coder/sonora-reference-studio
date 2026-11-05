@@ -71,20 +71,20 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sonora-canvas text-ink-100">
-      <header className="relative z-30 flex h-[62px] shrink-0 items-center justify-between gap-3 border-b border-white/[.07] bg-[#0D0D1B]/92 px-3 shadow-[0_8px_28px_rgba(0,0,0,.16)] backdrop-blur-xl sm:px-4">
+      <header className="relative z-30 flex h-[72px] shrink-0 items-center justify-between gap-4 border-b border-white/[.07] bg-[#0D0D1B]/92 px-4 shadow-[0_8px_28px_rgba(0,0,0,.16)] backdrop-blur-xl sm:px-5">
         <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-[#A77AFF]/35 bg-gradient-to-br from-[#8957FF]/25 to-[#7545EA]/10 text-[#C4A2FF] shadow-violet-soft">
-            <Icon name="audio-lines" size={21} />
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#A77AFF]/35 bg-gradient-to-br from-[#8957FF]/25 to-[#7545EA]/10 text-[#C4A2FF] shadow-violet-soft">
+            <Icon name="audio-lines" size={24} />
           </div>
           <div className="min-w-0">
-            <h1 className="truncate text-sm font-semibold tracking-[-.02em] text-white">Sonora</h1>
-            <p className="max-w-[180px] truncate text-[10px] text-ink-500">{project.name} · {project.tracks.length} tracks · {(project.sampleRate / 1000).toFixed(1)} kHz</p>
+            <h1 className="truncate text-base font-semibold tracking-[-.02em] text-white">Sonora</h1>
+            <p className="max-w-[180px] truncate text-xs text-ink-400">{project.name} · {project.tracks.length} tracks · {(project.sampleRate / 1000).toFixed(1)} kHz</p>
           </div>
           <Badge tone="neutral" className="hidden lg:inline-flex">{project.autosave ? 'Autosave on' : 'Manual save'}</Badge>
         </div>
 
         <nav aria-label="Studio navigation" className="no-scrollbar flex min-w-0 items-center justify-center gap-0.5 overflow-x-auto px-1">
-          <button type="button" onClick={() => setWorkspace('arrangement')} aria-current={workspace === 'arrangement' ? 'page' : undefined} className={`relative flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-[11px] font-medium transition-all sm:px-4 sm:text-xs ${workspace === 'arrangement' ? 'bg-[#8957FF]/15 text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
+          <button type="button" onClick={() => setWorkspace('arrangement')} aria-current={workspace === 'arrangement' ? 'page' : undefined} className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium transition-all sm:px-5 sm:text-sm ${workspace === 'arrangement' ? 'bg-[#8957FF]/15 text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
             <Icon name="waveform" size={15} className={workspace === 'arrangement' ? 'text-[#C4A2FF]' : 'text-ink-500'} /> Studio
             {workspace === 'arrangement' && <span className="absolute inset-x-4 -bottom-[1px] h-[2px] rounded-full bg-gradient-to-r from-[#8957FF] to-[#C4A2FF]" />}
           </button>
@@ -117,8 +117,8 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
       <div data-tour="studio-transport"><TransportBar /></div>
 
       <div className="flex min-h-0 flex-1">
-        <aside data-tour="studio-tracks" className="hidden w-[204px] shrink-0 flex-col border-r border-white/[.07] bg-[#0D0D1B]/92 lg:flex xl:w-[220px]">
-          <div className="flex h-[43px] shrink-0 items-center justify-between border-b border-white/[.07] px-3">
+        <aside data-tour="studio-tracks" className="hidden w-[220px] shrink-0 flex-col border-r border-white/[.07] bg-[#0D0D1B]/92 lg:flex xl:w-[240px]">
+          <div className="flex h-[50px] shrink-0 items-center justify-between border-b border-white/[.07] px-3">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-ink-100">Tracks</span>
               <span className="font-mono text-[9px] text-ink-500">{project.tracks.length}</span>
@@ -163,13 +163,13 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
               {project.tracks.map((track) => {
                 const trackIcon = track.kind === 'vocal' ? 'microphone' : track.kind === 'drums' ? 'audio-lines' : track.kind === 'bass' ? 'guitar' : track.kind === 'reference' ? 'headphones' : 'music';
                 return (
-                  <div key={track.id} className={`flex h-[72px] flex-col justify-center border-b border-white/[.055] px-3 transition-colors ${selectedTrackId === track.id ? 'bg-[#8957FF]/[.09]' : 'hover:bg-white/[.025]'}`}>
+                  <div key={track.id} className={`flex h-[82px] flex-col justify-center border-b border-white/[.055] px-3 transition-colors ${selectedTrackId === track.id ? 'bg-[#8957FF]/[.09]' : 'hover:bg-white/[.025]'}`}>
                     <div className="flex min-w-0 items-center gap-2">
                       <button type="button" onClick={() => chooseTrack(track.id)} aria-label={`Select ${track.name}`} className="flex min-w-0 flex-1 items-center gap-2 text-left">
-                        <Icon name={trackIcon} size={22} className="shrink-0" style={{ color: track.color }} />
+                        <Icon name={trackIcon} size={25} className="shrink-0" style={{ color: track.color }} />
                         <span className="min-w-0 truncate text-[11px] font-medium text-ink-100">{track.name}</span>
                       </button>
-                      <button type="button" title={track.soloed ? 'Unsolo track' : 'Solo track'} aria-pressed={track.soloed} onClick={() => updateTrack(track.id, { soloed: !track.soloed })} className={`h-6 min-w-6 rounded-md border px-1 text-[9px] font-semibold transition-colors ${track.soloed ? 'border-[#A77AFF]/50 bg-[#8957FF]/20 text-[#C4A2FF]' : 'border-white/[.08] bg-[#171727] text-ink-500 hover:text-ink-100'}`}>S</button>
+                      <button type="button" title={track.soloed ? 'Unsolo track' : 'Solo track'} aria-pressed={track.soloed} onClick={() => updateTrack(track.id, { soloed: !track.soloed })} className={`h-7 min-w-7 rounded-lg border px-1 text-[10px] font-semibold transition-colors ${track.soloed ? 'border-[#A77AFF]/50 bg-[#8957FF]/20 text-[#C4A2FF]' : 'border-white/[.08] bg-[#171727] text-ink-500 hover:text-ink-100'}`}>S</button>
                       <button type="button" title={track.muted ? 'Unmute track' : 'Mute track'} aria-pressed={track.muted} onClick={() => updateTrack(track.id, { muted: !track.muted })} className={`h-6 min-w-6 rounded-md border px-1 text-[9px] font-semibold transition-colors ${track.muted ? 'border-signal-red/40 bg-signal-red/10 text-signal-red' : 'border-white/[.08] bg-[#171727] text-ink-500 hover:text-ink-100'}`}>M</button>
                     </div>
                     <div className="mt-1 flex items-center gap-2 pl-7">
@@ -259,7 +259,7 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
             )}
           </div>
 
-          <div data-tour="studio-processing" className="flex h-[66px] shrink-0 items-center justify-center border-t border-white/[.07] bg-[#0D0D1B]/95 px-2 sm:h-[82px] sm:px-3">
+          <div data-tour="studio-processing" className="flex h-[76px] shrink-0 items-center justify-center border-t border-white/[.07] bg-[#0D0D1B]/95 px-2 sm:h-[92px] sm:px-4">
             <div className="grid w-full max-w-[600px] grid-cols-5 gap-2">
               {[
                 { id: 'mix', label: 'Mix', icon: 'sliders' as const, action: () => setWorkspace('arrangement'), active: workspace !== 'processing' },
@@ -268,8 +268,8 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
                 { id: 'dynamics', label: 'Dynamics', icon: 'activity' as const, action: () => { setWorkspace('processing'); setProcessingCategory('dynamics'); }, active: workspace === 'processing' && processingCategory === 'dynamics' },
                 { id: 'export', label: 'Export', icon: 'download' as const, action: () => useApp.getState().setScreen('export'), active: false },
               ].map((item) => (
-                <button key={item.id} type="button" onClick={item.action} aria-pressed={item.active} className={`group flex h-[54px] flex-col items-center justify-center gap-1 rounded-xl border transition-all duration-180 sm:h-[66px] sm:gap-1.5 ${item.active ? 'border-[#A77AFF]/55 bg-[#8957FF]/15 text-white shadow-violet-soft' : 'border-white/[.055] bg-[#171727]/70 text-ink-400 hover:border-white/[.14] hover:bg-[#1D1D30] hover:text-ink-100'}`}>
-                  <Icon name={item.icon} size={21} className={item.active ? 'text-[#C4A2FF]' : 'text-ink-400 group-hover:text-ink-100'} />
+                <button key={item.id} type="button" onClick={item.action} aria-pressed={item.active} className={`group flex h-[64px] flex-col items-center justify-center gap-1 rounded-xl border transition-all duration-180 sm:h-[74px] sm:gap-2 ${item.active ? 'border-[#A77AFF]/55 bg-[#8957FF]/15 text-white shadow-violet-soft' : 'border-white/[.055] bg-[#171727]/70 text-ink-400 hover:border-white/[.14] hover:bg-[#1D1D30] hover:text-ink-100'}`}>
+                  <Icon name={item.icon} size={24} className={item.active ? 'text-[#C4A2FF]' : 'text-ink-400 group-hover:text-ink-100'} />
                   <span className="text-[9px] font-medium sm:text-[10px]">{item.label}</span>
                 </button>
               ))}
@@ -279,7 +279,7 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
 
         {assistantOpen && (
           <>
-            <aside data-tour="studio-assistant" className="hidden w-[280px] shrink-0 border-l border-white/[.07] bg-[#0D0D1B] xl:flex 2xl:w-[310px]">
+            <aside data-tour="studio-assistant" className="hidden w-[300px] shrink-0 border-l border-white/[.07] bg-[#0D0D1B] xl:flex 2xl:w-[320px]">
               <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} /></div>
             </aside>
             <div className="fixed inset-0 z-[70] bg-[#05050c]/65 backdrop-blur-sm xl:hidden" onClick={() => setAssistantOpen(false)}>
