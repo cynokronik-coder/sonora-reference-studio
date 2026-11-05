@@ -22,15 +22,11 @@ export interface Entitlements {
 async function apiRequest<T>(path: string, options: RequestInit = {}, requireAuth = false): Promise<T> {
   const token = requireAuth ? await getAuthAccessToken() : null;
   if (requireAuth && !token) throw new Error('Sign in to continue.');
-  const response = await fetch(path, {
-    ...options,
-    headers: {
-      Accept: 'application/json',
-      ...(options.body ? { 'Content-Type': 'application/json' } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers,
-    },
-  });
+  const headers = new Headers(options.headers);
+  headers.set('Accept', 'application/json');
+  if (options.body) headers.set('Content-Type', 'application/json');
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  const response = await fetch(path, { ...options, headers });
   const payload = await response.json().catch(() => ({})) as { error?: string } & T;
   if (!response.ok) throw new Error(payload.error || `Billing request failed (${response.status}).`);
   return payload;
