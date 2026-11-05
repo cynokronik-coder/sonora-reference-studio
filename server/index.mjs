@@ -28,6 +28,324 @@ const RATE_WINDOW_MS = 60_000;
 const RATE_LIMIT = 20;
 const requestsByIp = new Map();
 
+
+const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\\/$/, '');
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const SUPABASE_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY);
+const APP_BASE_URL = (process.env.SONORA_APP_URL || 'http://localhost:3000').replace(/\\/$/, '');
+const PRICE_IDS = {
+  creator: { month: process.env.STRIPE_PRICE_CREATOR_MONTHLY || '', year: process.env.STRIPE_PRICE_CREATOR_YEARLY || '' },
+  pro: { month: process.env.STRIPE_PRICE_PRO_MONTHLY || '', year: process.env.STRIPE_PRICE_PRO_YEARLY || '' },
+  studio: { month: process.env.STRIPE_PRICE_STUDIO_MONTHLY || '', year: process.env.STRIPE_PRICE_STUDIO_YEARLY || '' },
+};
+const STRIPE_CONFIGURED = Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET);
+const PLAN_LIMITS = { free: 10, creator: 100, pro: 400, studio: 1200 };
+
+function getBearerToken(request) {
+  const value = request.headers.authorization || '';
+  const match = value.match(/^Bearer\\s+(.+)$/i);
+  return match?.[1] || null;
+}
+
+async function requireSupabaseUser(request) {
+  if (!SUPABASE_CONFIGURED) {
+    throw Object.assign(new Error('Supabase is not configured on the server. Add SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY.'), { statusCode: 503 });
+  }
+  const accessToken = getBearerToken(request);
+  if (!accessToken) throw Object.assign(new Error('Sign in to continue.'), { statusCode: 401 });
+  let upstream;
+  try {
+    upstream = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
+      headers: {
+        apikey: SUPABASE_ANON_KEY,
+        Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
+      },
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch {
+    throw Object.assign(new Error('Could not verify your Sonora session. Please try again.'), { statusCode: 503 });
+  }
+  const user = await upstream.json().catch(() => null);
+  if (!upstream.ok || !user?.id) throw Object.assign(new Error('Your session is invalid or has expired. Please sign in again.'), { statusCode: 401 });
+  return { id: user.id, email: user.email || null };
+}
+
+async function supabaseServiceRequest(path, { method = 'GET', body, prefer } = {}) {
+  if (!SUPABASE_CONFIGURED) throw Object.assign(new Error('Supabase server credentials are not configured.'), { statusCode: 503 });
+  const headers = {
+    apikey: SUPABASE_SERVICE_ROLE_KEY,
+    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    Accept: 'application/json',
+    ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    ...(prefer ? { Prefer: prefer } : {}),
+  };
+  const response = await fetch(`${SUPABASE_URL}/rest/v1/${path}`, {
+    method,
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const text = await response.text();
+  const data = text ? JSON.parse(text) : null;
+  if (!response.ok) {
+    const error = new Error(data?.message || data?.hint || `Supabase database request failed (${response.status}).`);
+    error.statusCode = response.status >= 500 ? 503 : 400;
+    throw error;
+  }
+  return data;
+}
+
+async function supabaseRpc(functionName, body) {
+  return supabaseServiceRequest(`rpc/${functionName}`, { method: 'POST', body });
+}
+
+async function stripeRequest(path, { method = 'GET', form, idempotencyKey } = {}) {
+  if (!process.env.STRIPE_SECRET_KEY) {
+    throw Object.assign(new Error('Stripe is not configured. Add STRIPE_SECRET_KEY to the server environment.'), { statusCode: 503 });
+  }
+  const headers = {
+    Authorization: `Basic ${Buffer.from(`${process.env.STRIPE_SECRET_KEY}:`).toString('base64')}`,
+    Accept: 'application/json',
+  };
+  if (form) headers['Content-Type'] = 'application/x-www-form-urlencoded';
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
+  const response = await fetch(`https://api.stripe.com/v1/${path}`, {
+    method,
+    headers,
+    ...(form ? { body: form.toString() } : {}),
+    signal: AbortSignal.timeout(20_000),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload?.error?.message || `Stripe request failed (${response.status}).`);
+    error.statusCode = response.status >= 500 ? 502 : 400;
+    throw error;
+  }
+  return payload;
+}
+
+function stripeForm(entries) {
+  const form = new URLSearchParams();
+  for (const [key, value] of Object.entries(entries)) {
+    if (value !== undefined && value !== null && value !== '') form.set(key, String(value));
+  }
+  return form;
+}
+
+async function getOrCreateStripeCustomer(user) {
+  const existing = await supabaseServiceRequest(
+    `billing_customers?user_id=eq.${encodeURIComponent(user.id)}&select=stripe_customer_id&limit=1`,
+  );
+  if (Array.isArray(existing) && existing[0]?.stripe_customer_id) return existing[0].stripe_customer_id;
+  const created = await stripeRequest('customers', {
+    method: 'POST',
+    form: stripeForm({
+      email: user.email,
+      'metadata[user_id]': user.id,
+      'metadata[app]': 'sonora-reference-studio',
+    }),
+    idempotencyKey: `sonora-customer-${user.id}`,
+  });
+  await supabaseServiceRequest('billing_customers?on_conflict=user_id', {
+    method: 'POST',
+    body: { user_id: user.id, stripe_customer_id: created.id },
+    prefer: 'resolution=merge-duplicates,return=minimal',
+  });
+  return created.id;
+}
+
+function allStripePricesConfigured() {
+  return Object.values(PRICE_IDS).every((intervals) => intervals.month && intervals.year);
+}
+
+function planForPrice(priceId) {
+  for (const [plan, intervals] of Object.entries(PRICE_IDS)) {
+    if (priceId && Object.values(intervals).includes(priceId)) return plan;
+  }
+  return null;
+}
+
+function unixDate(value) {
+  return Number.isFinite(value) ? new Date(value * 1000).toISOString() : null;
+}
+
+async function syncStripeSubscription(subscription) {
+  if (!subscription?.id || !subscription.customer) return;
+  const customerId = typeof subscription.customer === 'string' ? subscription.customer : subscription.customer.id;
+  const priceId = subscription.items?.data?.[0]?.price?.id || '';
+  const metadataUserId = subscription.metadata?.user_id;
+  const planKey = planForPrice(priceId) || subscription.metadata?.plan_key;
+  if (!metadataUserId || !['creator', 'pro', 'studio'].includes(planKey)) {
+    throw new Error('Stripe subscription is missing a valid Sonora user or plan reference.');
+  }
+  await supabaseServiceRequest('subscriptions?on_conflict=stripe_subscription_id', {
+    method: 'POST',
+    body: {
+      user_id: metadataUserId,
+      stripe_subscription_id: subscription.id,
+      stripe_customer_id: customerId,
+      stripe_price_id: priceId,
+      plan_key: planKey,
+      status: subscription.status || 'incomplete',
+      current_period_start: unixDate(subscription.current_period_start),
+      current_period_end: unixDate(subscription.current_period_end),
+      cancel_at_period_end: Boolean(subscription.cancel_at_period_end),
+      updated_at: new Date().toISOString(),
+    },
+    prefer: 'resolution=merge-duplicates,return=minimal',
+  });
+}
+
+function verifyStripeSignature(rawBody, signatureHeader) {
+  if (!process.env.STRIPE_WEBHOOK_SECRET) throw Object.assign(new Error('Stripe webhook secret is not configured.'), { statusCode: 503 });
+  if (!signatureHeader) return false;
+  const parts = signatureHeader.split(',').map((part) => part.split('='));
+  const timestamp = parts.find(([key]) => key === 't')?.[1];
+  const signatures = parts.filter(([key]) => key === 'v1').map(([, value]) => value);
+  if (!timestamp || !signatures.length || Math.abs(Date.now() / 1000 - Number(timestamp)) > 300) return false;
+  const expected = createHmac('sha256', process.env.STRIPE_WEBHOOK_SECRET)
+    .update(`${timestamp}.`)
+    .update(rawBody)
+    .digest();
+  return signatures.some((signature) => {
+    const actual = Buffer.from(signature, 'hex');
+    return actual.length === expected.length && timingSafeEqual(actual, expected);
+  });
+}
+
+async function handleStripeWebhook(request, response) {
+  const rawBody = await readRaw(request, 1024 * 1024);
+  if (!verifyStripeSignature(rawBody, request.headers['stripe-signature'])) {
+    return jsonResponse(response, 400, { error: 'Invalid Stripe webhook signature.' });
+  }
+  const event = JSON.parse(rawBody.toString('utf8'));
+  const seen = await supabaseServiceRequest(
+    `stripe_events?id=eq.${encodeURIComponent(event.id)}&select=id&limit=1`,
+  );
+  if (Array.isArray(seen) && seen.length) return jsonResponse(response, 200, { received: true, duplicate: true });
+
+  const object = event.data?.object;
+  if (event.type === 'checkout.session.completed' && object?.mode === 'subscription' && object.subscription) {
+    const subscriptionId = typeof object.subscription === 'string' ? object.subscription : object.subscription.id;
+    const subscription = await stripeRequest(`subscriptions/${encodeURIComponent(subscriptionId)}`);
+    if (object.metadata?.plan_key && !subscription.metadata?.plan_key) {
+      subscription.metadata = { ...(subscription.metadata || {}), plan_key: object.metadata.plan_key };
+    }
+    if (object.client_reference_id && !subscription.metadata?.user_id) {
+      subscription.metadata = { ...(subscription.metadata || {}), user_id: object.client_reference_id };
+    }
+    await syncStripeSubscription(subscription);
+  } else if (event.type?.startsWith('customer.subscription.') && object?.id) {
+    await syncStripeSubscription(object);
+  } else if (event.type === 'invoice.paid' || event.type === 'invoice.payment_failed') {
+    const subscriptionId = typeof object?.subscription === 'string'
+      ? object.subscription
+      : object?.parent?.subscription_details?.subscription;
+    if (subscriptionId) {
+      if (event.type === 'invoice.paid') {
+        const subscription = await stripeRequest(`subscriptions/${encodeURIComponent(subscriptionId)}`);
+        await syncStripeSubscription(subscription);
+      } else {
+        await supabaseServiceRequest(`subscriptions?stripe_subscription_id=eq.${encodeURIComponent(subscriptionId)}`, {
+          method: 'PATCH',
+          body: { status: 'past_due', updated_at: new Date().toISOString() },
+          prefer: 'return=minimal',
+        });
+      }
+    }
+  }
+
+  await supabaseServiceRequest('stripe_events?on_conflict=id', {
+    method: 'POST',
+    body: { id: event.id, event_type: event.type },
+    prefer: 'resolution=ignore-duplicates,return=minimal',
+  });
+  return jsonResponse(response, 200, { received: true });
+}
+
+async function createCheckoutSession(request, response) {
+  const user = await requireSupabaseUser(request);
+  if (!STRIPE_CONFIGURED) return jsonResponse(response, 503, { error: 'Stripe billing is not fully configured on the server.' });
+  const body = await readJson(request);
+  const plan = body.plan;
+  const interval = body.interval;
+  if (!['creator', 'pro', 'studio'].includes(plan) || !['month', 'year'].includes(interval)) {
+    return jsonResponse(response, 400, { error: 'Choose a valid Sonora plan and billing interval.' });
+  }
+  const priceId = PRICE_IDS[plan][interval];
+  if (!priceId) return jsonResponse(response, 503, { error: `The ${plan} ${interval} Stripe Price ID is not configured.` });
+  const requestId = typeof body.requestId === 'string' && /^[a-zA-Z0-9_-]{8,160}$/.test(body.requestId)
+    ? body.requestId
+    : randomUUID();
+  const customerId = await getOrCreateStripeCustomer(user);
+  const session = await stripeRequest('checkout/sessions', {
+    method: 'POST',
+    form: stripeForm({
+      mode: 'subscription',
+      customer: customerId,
+      'line_items[0][price]': priceId,
+      'line_items[0][quantity]': 1,
+      success_url: `${APP_BASE_URL}/#plans`,
+      cancel_url: `${APP_BASE_URL}/#plans`,
+      client_reference_id: user.id,
+      allow_promotion_codes: 'true',
+      'metadata[user_id]': user.id,
+      'metadata[plan_key]': plan,
+      'subscription_data[metadata][user_id]': user.id,
+      'subscription_data[metadata][plan_key]': plan,
+    }),
+    idempotencyKey: `sonora-checkout-${user.id}-${requestId}`,
+  });
+  return jsonResponse(response, 200, { url: session.url });
+}
+
+async function createBillingPortal(request, response) {
+  const user = await requireSupabaseUser(request);
+  if (!STRIPE_CONFIGURED) return jsonResponse(response, 503, { error: 'Stripe billing is not fully configured on the server.' });
+  const rows = await supabaseServiceRequest(
+    `billing_customers?user_id=eq.${encodeURIComponent(user.id)}&select=stripe_customer_id&limit=1`,
+  );
+  if (!Array.isArray(rows) || !rows[0]?.stripe_customer_id) {
+    return jsonResponse(response, 404, { error: 'No Stripe customer is linked to this account yet.' });
+  }
+  const portal = await stripeRequest('billing_portal/sessions', {
+    method: 'POST',
+    form: stripeForm({ customer: rows[0].stripe_customer_id, return_url: `${APP_BASE_URL}/#account` }),
+  });
+  return jsonResponse(response, 200, { url: portal.url });
+}
+
+async function getBillingEntitlements(request, response) {
+  const user = await requireSupabaseUser(request);
+  const rows = await supabaseServiceRequest(
+    `subscriptions?user_id=eq.${encodeURIComponent(user.id)}&select=plan_key,status,current_period_start,current_period_end,cancel_at_period_end&order=current_period_end.desc&limit=5`,
+  );
+  const current = Array.isArray(rows) ? rows.find((row) =>
+    ['active', 'trialing'].includes(row.status)
+    && row.current_period_start && new Date(row.current_period_start).getTime() <= Date.now()
+    && row.current_period_end && new Date(row.current_period_end).getTime() > Date.now()
+  ) : null;
+  const plan = current?.plan_key || 'free';
+  const periodStart = current?.current_period_start || new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString();
+  const periodEnd = current?.current_period_end || new Date(new Date().getFullYear(), new Date().getMonth() + 1, 1).toISOString();
+  const usage = await supabaseServiceRequest(
+    `ai_credit_ledger?user_id=eq.${encodeURIComponent(user.id)}&period_start=eq.${encodeURIComponent(periodStart)}&period_end=eq.${encodeURIComponent(periodEnd)}&status=in.(reserved,captured)&select=credits`,
+  );
+  const used = Array.isArray(usage) ? usage.reduce((sum, row) => sum + Number(row.credits || 0), 0) : 0;
+  const allowance = PLAN_LIMITS[plan] || PLAN_LIMITS.free;
+  return jsonResponse(response, 200, {
+    authenticated: true,
+    email: user.email,
+    plan,
+    subscriptionStatus: current?.status || null,
+    currentPeriodEnd: current?.current_period_end || null,
+    cancelAtPeriodEnd: Boolean(current?.cancel_at_period_end),
+    aiCredits: { allowance, used, remaining: Math.max(allowance - used, 0), periodEnd },
+  });
+}
+
 const TOOLS = [
   {
     type: 'function',
