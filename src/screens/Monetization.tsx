@@ -260,7 +260,7 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
           {billingReady ? (
             <div className="rounded-xl border border-accent/20 bg-accent/[.05] px-3 py-2.5 text-2xs leading-relaxed text-accent">Supabase and Stripe are configured and billing has been explicitly enabled by the server. The paid entitlement currently enforced is the monthly connected-AI allowance; local DSP, projects and exports remain available on every plan. Subscription status is activated only after a verified Stripe webhook.</div>
           ) : (
-            <StatusNote>Checkout stays disabled until Supabase Auth, server-only credentials, Stripe secrets, all six subscription Price IDs and the server-side SONORA_BILLING_ENABLED=true release switch are configured. The server enforces this switch independently of the UI.</StatusNote>
+            <StatusNote>Checkout stays disabled until Supabase Auth, server-only credentials, Stripe secrets, all six subscription Price IDs and the server-side SONORA_BILLING_ENABLED=true release switch are configured. Keep the switch false until test-mode webhook, refund and entitlement tests pass. The server enforces this switch independently of the UI.</StatusNote>
           )}
         </section>
       )}
