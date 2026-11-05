@@ -31,9 +31,12 @@ const requestsByIp = new Map();
 
 
 const SUPABASE_URL = (process.env.SUPABASE_URL || '').replace(/\\/$/, '');
-const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_PUBLISHABLE_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY || '';
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || '';
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const SUPABASE_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY);
+const SUPABASE_ADMIN_KEY = SUPABASE_SECRET_KEY || SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_USE_LEGACY_SERVICE_ROLE = !SUPABASE_SECRET_KEY && Boolean(SUPABASE_SERVICE_ROLE_KEY);
+const SUPABASE_CONFIGURED = Boolean(SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY && SUPABASE_ADMIN_KEY);
 const APP_BASE_URL = (process.env.SONORA_APP_URL || 'http://localhost:3000').replace(/\\/$/, '');
 const PRICE_IDS = {
   creator: { month: process.env.STRIPE_PRICE_CREATOR_MONTHLY || '', year: process.env.STRIPE_PRICE_CREATOR_YEARLY || '' },
@@ -59,7 +62,7 @@ async function requireSupabaseUser(request) {
   try {
     upstream = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
       headers: {
-        apikey: SUPABASE_ANON_KEY,
+        apikey: SUPABASE_PUBLISHABLE_KEY,
         Authorization: `Bearer ${accessToken}`,
         Accept: 'application/json',
       },
@@ -76,8 +79,8 @@ async function requireSupabaseUser(request) {
 async function supabaseServiceRequest(path, { method = 'GET', body, prefer } = {}) {
   if (!SUPABASE_CONFIGURED) throw Object.assign(new Error('Supabase server credentials are not configured.'), { statusCode: 503 });
   const headers = {
-    apikey: SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    apikey: SUPABASE_ADMIN_KEY,
+    ...(SUPABASE_USE_LEGACY_SERVICE_ROLE ? { Authorization: `Bearer ${SUPABASE_ADMIN_KEY}` } : {}),
     Accept: 'application/json',
     ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     ...(prefer ? { Prefer: prefer } : {}),
