@@ -56,13 +56,13 @@ export default {
         mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
       },
       fontSize: {
-        '3xs': ['9px', { lineHeight: '12px', letterSpacing: '0.04em' }],
-        '2xs': ['10px', { lineHeight: '13px', letterSpacing: '0.035em' }],
+        '3xs': ['10px', { lineHeight: '14px', letterSpacing: '0.04em' }],
+        '2xs': ['11px', { lineHeight: '15px', letterSpacing: '0.035em' }],
       },
       borderRadius: {
-        panel: '18px',
-        card: '14px',
-        control: '11px',
+        panel: '22px',
+        card: '17px',
+        control: '13px',
       },
       boxShadow: {
         panel: '0 1px 0 rgba(255,255,255,0.035) inset, 0 16px 44px -24px rgba(0,0,0,0.78)',
