@@ -47,7 +47,7 @@ export default function Presets() {
         </div>
       </header>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div data-tour="presets-filters" className="flex flex-wrap items-center justify-between gap-2">
         <Tabs
           value={category}
           onChange={setCategory}
@@ -66,7 +66,7 @@ export default function Presets() {
         />
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div data-tour="presets-list" className="grid gap-3 md:grid-cols-2">
         {filtered.map((preset) => (
           <Panel key={preset.id} title={preset.name} right={<Badge tone={preset.builtIn ? 'neutral' : 'accent'}>{preset.builtIn ? preset.category : 'user'}</Badge>}>
             <p className="text-2xs leading-relaxed text-ink-400">{preset.description}</p>
