@@ -5,8 +5,11 @@ export type BillingInterval = 'month' | 'year';
 
 export interface BillingStatus {
   authConfigured: boolean;
+  stripeConfigured: boolean;
   billingConfigured: boolean;
   configuredPlans: Record<string, { monthly: boolean; yearly: boolean }>;
+  creditPacksConfigured: Record<string, boolean>;
+  creditTopupsConfigured: boolean;
 }
 
 export interface Entitlements {
@@ -16,7 +19,7 @@ export interface Entitlements {
   subscriptionStatus: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
-  aiCredits: { allowance: number; used: number; remaining: number; periodEnd: string };
+  aiCredits: { allowance: number; used: number; remaining: number; periodEnd: string; purchased: { total: number; used: number; remaining: number } };
 }
 
 async function apiRequest<T>(path: string, options: RequestInit = {}, requireAuth = false): Promise<T> {
@@ -47,6 +50,16 @@ export async function startCheckout(plan: Exclude<PlanKey, 'free'>, interval: Bi
     true,
   );
   if (!result.url || !result.url.startsWith('https://')) throw new Error('The billing server returned an invalid checkout URL.');
+  window.location.assign(result.url);
+}
+
+export async function startCreditCheckout(credits: '100' | '500' | '1500') {
+  const result = await apiRequest<{ url: string }>(
+    '/api/billing/credits/checkout',
+    { method: 'POST', body: JSON.stringify({ credits: Number(credits), requestId: crypto.randomUUID() }) },
+    true,
+  );
+  if (!result.url || !result.url.startsWith('https://')) throw new Error('The billing server returned an invalid credit checkout URL.');
   window.location.assign(result.url);
 }
 
