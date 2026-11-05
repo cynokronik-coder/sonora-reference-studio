@@ -13,8 +13,11 @@ export interface SonoraAiResponse {
 
 export async function getSonoraAiStatus(): Promise<SonoraAiStatus> {
   const response = await fetch('/api/health', { headers: { Accept: 'application/json' } });
-  if (!response.ok) throw new Error('The Sonora AI server is not reachable.');
-  return response.json() as Promise<SonoraAiStatus>;
+  const payload = (await response.json().catch(() => null)) as SonoraAiStatus | null;
+  if (!response.ok || !payload || typeof payload.configured !== 'boolean') {
+    throw new Error('The Sonora AI server is not running. Start it locally to use the assistant.');
+  }
+  return payload;
 }
 
 export async function requestSonoraAi(
