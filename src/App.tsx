@@ -48,7 +48,10 @@ const TITLES: Record<Screen, string> = {
 
 export default function App() {
   const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError, storageError } = useApp();
-  const [showLanding, setShowLanding] = useState(() => !['#studio', '#plans', '#account'].includes(window.location.hash));
+  const [showLanding, setShowLanding] = useState(() => {
+    const hash = window.location.hash;
+    return !['#studio', '#plans', '#account'].includes(hash) && !hash.includes('access_token=');
+  });
 
   const enterStudio = () => {
     window.location.hash = 'studio';
@@ -76,10 +79,11 @@ export default function App() {
   useEffect(() => {
     const syncFromHash = () => {
       const hash = window.location.hash;
-      const inApp = hash === '#studio' || hash === '#plans' || hash === '#account';
+      const authCallback = hash.includes('access_token=');
+      const inApp = hash === '#studio' || hash === '#plans' || hash === '#account' || authCallback;
       setShowLanding(!inApp);
       if (hash === '#plans') setScreen('plans');
-      else if (hash === '#account') setScreen('account');
+      else if (hash === '#account' || authCallback) setScreen('account');
       else if (hash === '#studio') setScreen('studio');
     };
     syncFromHash();
