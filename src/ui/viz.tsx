@@ -45,7 +45,7 @@ export function Waveform({
   loopEnabled,
   onSeek,
   height = 120,
-  color = '#c8f169',
+  color = '#8957FF',
   faded,
   label,
 }: {
@@ -77,9 +77,9 @@ export function Waveform({
       if (loopEnabled && loopStart !== undefined && loopEnd !== undefined && duration > 0) {
         const x1 = (loopStart / duration) * width;
         const x2 = (loopEnd / duration) * width;
-        ctx.fillStyle = 'rgba(200,241,105,0.06)';
+        ctx.fillStyle = 'rgba(137,87,255,0.07)';
         ctx.fillRect(x1, 0, Math.max(1, x2 - x1), h);
-        ctx.fillStyle = 'rgba(200,241,105,0.4)';
+        ctx.fillStyle = 'rgba(167,122,255,0.55)';
         ctx.fillRect(x1, 0, 1, h);
         ctx.fillRect(x2 - 1, 0, 1, h);
       }
@@ -136,7 +136,7 @@ export function Waveform({
 export function LevelMeter({ db, height = 96, width = 8, peakDb }: { db: number; height?: number; width?: number; peakDb?: number }) {
   const normalized = clamp((db + 60) / 60, 0, 1);
   const peakNorm = peakDb !== undefined ? clamp((peakDb + 60) / 60, 0, 1) : null;
-  const color = db > -1 ? '#f2657a' : db > -6 ? '#f0b45a' : '#c8f169';
+  const color = db > -1 ? '#EF686D' : db > -6 ? '#E6AD3D' : '#8EDB75';
   return (
     <div className="relative overflow-hidden rounded-sm bg-ink-900 ring-1 ring-inset ring-ink-700" style={{ height, width }}>
       <div
@@ -200,8 +200,8 @@ export function BandChart({
   height = 160,
   maxDb = 6,
   minDb = -36,
-  color = '#c8f169',
-  compareColor = '#5ad1e6',
+  color = '#8957FF',
+  compareColor = '#55B7EA',
   label,
   compareLabel,
 }: {
@@ -265,7 +265,7 @@ export function BandChart({
   );
 }
 
-export function BandBars({ bands, height = 90, color = '#c8f169' }: { bands: BandLevel[]; height?: number; color?: string }) {
+export function BandBars({ bands, height = 90, color = '#8957FF' }: { bands: BandLevel[]; height?: number; color?: string }) {
   const values = bands.map((b) => b.relativeDb);
   const max = Math.max(1, ...values.map((v) => Math.abs(v)));
   return (
@@ -276,7 +276,7 @@ export function BandBars({ bands, height = 90, color = '#c8f169' }: { bands: Ban
             className="w-full rounded-sm"
             style={{
               height: `${(Math.abs(v) / max) * 45}%`,
-              background: v >= 0 ? color : '#f2657a',
+              background: v >= 0 ? color : '#EF686D',
               opacity: 0.3 + (Math.abs(v) / max) * 0.7,
             }}
           />
@@ -353,7 +353,7 @@ export function LoudnessChart({
   );
 }
 
-export function EQCurve({ params, height = 150, color = '#c8f169' }: { params: ParamValues; height?: number; color?: string }) {
+export function EQCurve({ params, height = 150, color = '#8957FF' }: { params: ParamValues; height?: number; color?: string }) {
   const [width, setWidth] = useState(500);
   const containerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {

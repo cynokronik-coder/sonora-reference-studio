@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useApp } from '../state/store';
 import type { ExportSettings } from '../state/store';
 import { Badge, Button, EmptyState, HelpTip, InfoRow, Panel, Select, Toggle } from '../ui/Primitives';
+import { Icon } from '../ui/Icon';
+import { FlyoutMenu } from '../ui/FlyoutMenu';
 import { formatBytes } from '../audio/dsp/util';
 import * as db from '../lib/db';
 import { verifyEncodedBlob } from '../state/store';
@@ -44,11 +46,11 @@ export default function Export() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-4 p-4">
-      <header className="flex flex-wrap items-end justify-between gap-3">
+    <div className="mx-auto max-w-[1500px] space-y-5 p-5 sm:p-6 lg:p-7">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-white/[.06] pb-5">
         <div>
           <p className="section-label">Delivery</p>
-          <h1 className="mt-1 text-xl text-ink-100">Export center</h1>
+          <h1 className="mt-1 text-2xl font-semibold tracking-[-.025em] text-white">Export</h1>
           <p className="mt-1 text-xs text-ink-400">
             Offline, deterministic rendering at the session rate or higher. The download is the encoded file itself — no
             additional lossy conversion.
@@ -57,8 +59,8 @@ export default function Export() {
         <Badge tone="info">{audioTracks.length} audio track{audioTracks.length === 1 ? '' : 's'}</Badge>
       </header>
 
-      <div className="grid gap-3 lg:grid-cols-[1.2fr_1fr]">
-        <Panel title="Render settings">
+      <div className="grid gap-3 xl:grid-cols-[minmax(0,1.25fr)_minmax(300px,.75fr)]">
+        <Panel dataTour="export-format" title="Render settings">
           <div className="grid gap-2 sm:grid-cols-2">
             <Select
               label="Format"
@@ -123,7 +125,7 @@ export default function Export() {
               <>
                 <label className="block">
                   <span className="mb-1 block text-2xs text-ink-400">Start (s)</span>
-                  <input type="number" step={0.1} min={0} max={endSec} value={settings.startSec} onChange={(e) => setSettings((s) => ({ ...s, startSec: Math.max(0, Number(e.target.value)) }))} className="w-full rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-ink-100" />
+                  <input type="number" step={0.1} min={0} max={endSec} value={settings.startSec} onChange={(e) => setSettings((s) => ({ ...s, startSec: Math.max(0, Number(e.target.value)) }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100 placeholder:text-ink-500 transition-colors hover:border-white/[.15]" />
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-2xs text-ink-400">End (s)</span>
@@ -133,31 +135,40 @@ export default function Export() {
             )}
           </div>
 
-          <div className="mt-2 space-y-2">
-            <Toggle checked={settings.dither} onChange={(value) => setSettings((s) => ({ ...s, dither: value }))} label="TPDF dither when reducing bit depth" description="Only applied for 16/24-bit PCM. It is never applied to 32-bit float." />
-            <Toggle checked={settings.normalize} onChange={(value) => setSettings((s) => ({ ...s, normalize: value }))} label={`Normalise peak to ${targetTp.toFixed(1)} dB`} description="A final gain safety net. It does not replace the limiter and does not loudness-normalise." />
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
+            <label className="block min-w-[200px] flex-1">
+              <span className="mb-1.5 block text-2xs font-medium text-ink-400">Filename</span>
+              <input value={settings.filename} placeholder={project.name} onChange={(event) => setSettings((current) => ({ ...current, filename: event.target.value }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100 placeholder:text-ink-500" />
+            </label>
+            <div data-tour="export-advanced"><FlyoutMenu
+              label="Advanced options"
+              icon="sliders"
+              title="Advanced export options"
+              description="Dithering, final peak handling and file metadata."
+              placement="bottom-end"
+              width="lg"
+            >
+              <Toggle checked={settings.dither} onChange={(value) => setSettings((current) => ({ ...current, dither: value }))} label="TPDF dither when reducing bit depth" description="Only applied for 16/24-bit PCM. It is never applied to 32-bit float." />
+              <Toggle checked={settings.normalize} onChange={(value) => setSettings((current) => ({ ...current, normalize: value }))} label={`Normalise peak to ${targetTp.toFixed(1)} dB`} description="A final gain safety net. It does not replace the limiter and does not loudness-normalise." />
+              <div className="space-y-2 border-t border-white/[.07] pt-3">
+                <p className="text-[9px] font-semibold uppercase tracking-[.12em] text-ink-500">Metadata</p>
+                <label className="block">
+                  <span className="mb-1 block text-2xs text-ink-400">Title</span>
+                  <input value={settings.metadata.title} placeholder={project.name} onChange={(event) => setSettings((current) => ({ ...current, metadata: { ...current.metadata, title: event.target.value } }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100" />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-2xs text-ink-400">Artist</span>
+                  <input value={settings.metadata.artist} onChange={(event) => setSettings((current) => ({ ...current, metadata: { ...current.metadata, artist: event.target.value } }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100" />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-2xs text-ink-400">Comment</span>
+                  <input value={settings.metadata.comment} onChange={(event) => setSettings((current) => ({ ...current, metadata: { ...current.metadata, comment: event.target.value } }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100" />
+                </label>
+              </div>
+            </FlyoutMenu></div>
           </div>
 
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            <label className="block">
-              <span className="mb-1 block text-2xs text-ink-400">Filename</span>
-              <input value={settings.filename} placeholder={project.name} onChange={(e) => setSettings((s) => ({ ...s, filename: e.target.value }))} className="w-full rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-ink-100" />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-2xs text-ink-400">Metadata title</span>
-              <input value={settings.metadata.title} placeholder={project.name} onChange={(e) => setSettings((s) => ({ ...s, metadata: { ...s.metadata, title: e.target.value } }))} className="w-full rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-ink-100" />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-2xs text-ink-400">Artist</span>
-              <input value={settings.metadata.artist} onChange={(e) => setSettings((s) => ({ ...s, metadata: { ...s.metadata, artist: e.target.value } }))} className="w-full rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-ink-100" />
-            </label>
-            <label className="block">
-              <span className="mb-1 block text-2xs text-ink-400">Comment</span>
-              <input value={settings.metadata.comment} onChange={(e) => setSettings((s) => ({ ...s, metadata: { ...s.metadata, comment: e.target.value } }))} className="w-full rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-ink-100" />
-            </label>
-          </div>
-
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+          <div data-tour="export-render" className="mt-3 flex flex-wrap items-center gap-2">
             <Button
               variant="primary"
               disabled={Boolean(busy) || (settings.mode === 'track' && !audioTracks.length)}
@@ -170,14 +181,14 @@ export default function Export() {
                 })
               }
             >
-              Render &amp; download
+              <Icon name="download" size={14} /> Render &amp; download
             </Button>
             <span className="text-2xs text-ink-500">
               {settings.format === 'mp3' ? 'MP3 is limited to 44.1/48 kHz and is lossy.' : settings.format === 'aiff' && settings.bitDepth === 32 ? 'AIFF does not support 32-bit float here; choose WAV.' : `${settings.format.toUpperCase()} · ${settings.sampleRate} Hz`}
             </span>
           </div>
           {busy && (
-            <div className="mt-2 rounded border border-accent/20 bg-accent/5 p-2 text-2xs text-accent">
+            <div className="mt-2 rounded-xl border border-[#A77AFF]/20 bg-[#8957FF]/[.07] p-3 text-2xs text-[#C4A2FF]">
               {busy.label} · {Math.round(busy.progress * 100)}%
               {busy.cancel && (
                 <button type="button" className="ml-2 underline" onClick={busy.cancel}>
@@ -201,13 +212,13 @@ export default function Export() {
         </Panel>
       </div>
 
-      <Panel title={`Export history (${exports.length})`} right={<Button size="sm" variant="ghost" onClick={() => void refreshExports()}>Refresh</Button>}>
+      <Panel dataTour="export-history" title={`Export history (${exports.length})`} right={<Button size="sm" variant="ghost" onClick={() => void refreshExports()}>Refresh</Button>}>
         {exports.length === 0 ? (
           <p className="text-2xs text-ink-500">No exports yet.</p>
         ) : (
-          <div className="divide-y divide-ink-700">
+          <div className="space-y-2">
             {exports.map((record) => (
-              <div key={record.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+              <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[.07] bg-[#0D0D1B]/65 px-3 py-3">
                 <div>
                   <div className="text-xs text-ink-100">{record.name}</div>
                   <div className="font-mono text-2xs text-ink-500">
@@ -231,11 +242,11 @@ export default function Export() {
         )}
       </Panel>
 
-      <Panel title="Export guarantees">
-        <div className="grid gap-3 text-2xs leading-relaxed text-ink-400 sm:grid-cols-3">
-          <p>Rendering runs the same processor graph as monitoring, block by block, in a worker. No browser playback code path is involved.</p>
-          <p>Gain reduction, limiting and clipping are deterministic. Exports do not suddenly clip or change channel count.</p>
-          <p>Stem export renders one track through its own chain with the master chain bypassed. Instrumental/vocal-only renders require separated sources, which this build does not include.</p>
+      <Panel title="Export guarantees" subtitle="What Sonora does during rendering and delivery.">
+        <div className="grid gap-2 sm:grid-cols-3">
+          <p className="rounded-xl border border-white/[.06] bg-[#0D0D1B]/60 p-3 text-2xs leading-relaxed text-ink-400">Rendering runs the same processor graph as monitoring, block by block, in a worker. No browser playback code path is involved.</p>
+          <p className="rounded-xl border border-white/[.06] bg-[#0D0D1B]/60 p-3 text-2xs leading-relaxed text-ink-400">Gain reduction, limiting and clipping are deterministic. Exports do not suddenly clip or change channel count.</p>
+          <p className="rounded-xl border border-white/[.06] bg-[#0D0D1B]/60 p-3 text-2xs leading-relaxed text-ink-400">Stem export renders one track through its own chain with the master chain bypassed. Instrumental/vocal-only renders require separated sources, which this build does not include.</p>
         </div>
       </Panel>
     </div>

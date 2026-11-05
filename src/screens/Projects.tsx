@@ -9,14 +9,14 @@ export default function Projects() {
   const filtered = projects.filter((project) => project.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="mx-auto max-w-5xl space-y-4 p-5">
+    <div className="mx-auto max-w-[1400px] space-y-5 p-5 sm:p-6 lg:p-7">
       <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="section-label">Workspace</p>
-          <h1 className="mt-1 text-xl text-ink-100">Projects</h1>
-          <p className="mt-1 text-xs text-ink-400">Stored locally in this browser, including the original audio files.</p>
+          <h1 className="mt-1 text-2xl font-semibold text-ink-100">Projects</h1>
+          <p className="mt-1 text-sm text-ink-400">Stored locally in this browser, including the original audio files.</p>
         </div>
-        <div className="flex gap-2">
+        <div data-tour="projects-create" className="flex gap-2">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -29,7 +29,7 @@ export default function Projects() {
         </div>
       </header>
 
-      <Panel>
+      <Panel dataTour="projects-list">
         {filtered.length === 0 ? (
           <EmptyState
             title={projects.length ? 'No matching projects' : 'No projects yet'}
