@@ -5,6 +5,7 @@ import { assistantSuggestions } from '../state/store';
 import { getSonoraAiStatus, type SonoraAiStatus } from '../audio/ai/client';
 import { clamp, formatTime, gainToDb } from '../audio/dsp/util';
 import { Badge, Button, HelpTip, IconButton, ParamSlider, Select } from './Primitives';
+import { Icon } from './Icon';
 import { LevelMeter, useMeters } from './viz';
 
 export function TransportBar() {
@@ -422,8 +423,8 @@ export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center justify-between gap-2 border-b border-white/[.07] px-3 py-3">
         <div className="min-w-0">
-          <div className="section-label">Sonora AI · Mixing engineer</div>
-          <div className="mt-0.5 text-2xs text-ink-500">Project-aware advice · preview-first DSP edits</div>
+          <div className="flex items-center gap-1.5 text-[11px] font-semibold text-ink-100"><Icon name="sparkles" size={15} className="text-[#A77AFF]" /> Sonora AI</div>
+          <div className="mt-0.5 text-[9px] text-ink-500">Your mixing companion · preview-first DSP edits</div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
           {aiStatus?.configured ? (
@@ -434,11 +435,11 @@ export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
           <HelpTip title="How Sonora AI works" steps={['The AI receives project metadata and measured analysis, not the raw audio file.', 'It can request local audio analysis when a report is missing.', 'It proposes real processors and parameter changes from the DSP registry.', 'Nothing is changed until you accept the proposal.']}>
             The connected model reasons about your project. If the API is not configured, Sonora uses its built-in offline command interpreter.
           </HelpTip>
-          <button type="button" onClick={() => { if (onClose) onClose(); else useApp.getState().toggleAssistant(); }} aria-label="Close assistant" className="rounded px-1.5 text-ink-500 hover:text-ink-100">×</button>
+          <button type="button" onClick={() => { if (onClose) onClose(); else useApp.getState().toggleAssistant(); }} aria-label="Close assistant" className="rounded-md px-1.5 py-1 text-ink-500 transition-colors hover:bg-white/[.05] hover:text-ink-100">×</button>
         </div>
       </div>
 
-      <div ref={scrollRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-2.5 overflow-y-auto p-3">
         {chat.length === 0 && (
           <div className="space-y-3">
             <div>
@@ -470,7 +471,7 @@ export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
                     key={suggestion}
                     type="button"
                     onClick={() => ask(suggestion)}
-                    className="rounded-full border border-ink-700 bg-ink-850 px-2.5 py-1 text-2xs text-ink-300 transition-colors hover:border-accent/40 hover:text-accent"
+                    className="rounded-full border border-white/[.08] bg-[#171727] px-2.5 py-1.5 text-2xs text-ink-300 transition-all hover:border-[#A77AFF]/40 hover:bg-[#8957FF]/10 hover:text-[#C4A2FF]"
                   >
                     {suggestion}
                   </button>
@@ -490,8 +491,8 @@ export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
             key={message.id}
             className={`rounded-xl border p-2.5 text-xs leading-relaxed ${
               message.role === 'user'
-                ? 'ml-6 border-ink-600 bg-ink-800 text-ink-100'
-                : 'mr-2 border-ink-700 bg-ink-850/70 text-ink-200'
+                ? 'ml-6 border-[#A77AFF]/20 bg-[#8957FF]/[.12] text-ink-100'
+                : 'mr-2 border-white/[.07] bg-[#171727]/85 text-ink-200'
             }`}
           >
             {message.text}
@@ -516,7 +517,7 @@ export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
         )}
 
         {assistantProposal && assistantProposal.operations.length > 0 && (
-          <div className="rounded-xl border border-accent/30 bg-accent/5 p-3">
+          <div className="rounded-xl border border-[#A77AFF]/30 bg-[#8957FF]/[.08] p-3 shadow-violet-soft">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="font-mono text-2xs uppercase tracking-wider text-accent">Preview · proposed changes</span>
               <Badge tone="accent">{Math.round(assistantProposal.confidence * 100)}% confidence</Badge>
@@ -524,7 +525,7 @@ export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
             <p className="mb-2 text-xs text-ink-200">{assistantProposal.message}</p>
             <div className="space-y-1.5">
               {assistantProposal.operations.map((op, index) => (
-                <div key={index} className="rounded-lg border border-ink-700 bg-ink-900/70 px-2 py-1.5 text-2xs leading-relaxed">
+                <div key={index} className="rounded-lg border border-white/[.07] bg-[#0D0D1B]/80 px-3 py-2 text-2xs leading-relaxed">
                   <div className="flex items-center justify-between gap-2">
                     <span className="font-medium text-ink-100">{op.label || op.processorType}</span>
                     <span className="font-mono uppercase text-accent">{op.kind}</span>
@@ -571,7 +572,7 @@ export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
       )}
 
       <form
-        className="flex gap-1.5 border-t border-ink-700 p-2"
+        className="flex gap-1.5 border-t border-white/[.07] bg-[#0D0D1B]/70 p-3"
         onSubmit={(event) => {
           event.preventDefault();
           if (!input.trim()) return;
@@ -584,7 +585,7 @@ export function AssistantPanel({ onClose }: { onClose?: () => void } = {}) {
           disabled={disabled}
           onChange={(event) => setInput(event.target.value)}
           placeholder={disabled ? 'Open a project to use Sonora AI' : 'Describe what you hear or want to improve…'}
-          className="focus-ring min-w-0 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-3 py-2 text-xs text-ink-100 placeholder:text-ink-500 disabled:opacity-50"
+          className="focus-ring min-w-0 flex-1 rounded-xl border border-white/[.09] bg-[#090914] px-3 py-2.5 text-xs text-ink-100 placeholder:text-ink-500 disabled:opacity-50"
         />
         <Button type="submit" variant="primary" size="sm" disabled={disabled || !input.trim()}>
           {isThinking ? '…' : 'Ask'}
