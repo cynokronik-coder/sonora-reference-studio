@@ -169,6 +169,7 @@ export function FlyoutMenu({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-controls={panelId}
+        aria-label={title || label || "Open settings"}
         onClick={handleTriggerClick}
         className={`focus-ring inline-flex min-h-8 items-center justify-center gap-1.5 rounded-lg border border-white/[.08] bg-[#171727]/90 px-2.5 py-1.5 text-[10px] font-medium text-ink-300 shadow-[0_1px_0_rgba(255,255,255,.025)_inset] transition-all duration-180 hover:border-[#A77AFF]/40 hover:bg-[#8957FF]/10 hover:text-[#C4A2FF] disabled:cursor-not-allowed disabled:opacity-40 ${open ? 'border-[#A77AFF]/45 bg-[#8957FF]/[.12] text-[#C4A2FF]' : ''} ${triggerClassName}`}
       >
