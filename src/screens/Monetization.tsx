@@ -8,54 +8,46 @@ const PLANS = [
   {
     key: 'free',
     name: 'Free',
-    description: 'A real way to explore Sonora before subscribing.',
+    description: 'Explore the full local audio workspace with a small connected-AI allowance.',
     monthly: 0,
     annual: 0,
     annualTotal: 0,
-    credits: '10 AI credits',
-    projects: '3 projects',
-    mastering: 'Preview only',
-    features: ['Core audio import and playback', 'Basic audio analysis', 'Local DSP processing', '3 saved projects', 'Reference-match preview', 'Community learning resources'],
+    credits: '10 AI credits / month',
+    features: ['Audio import and playback', 'All built-in local DSP processors', 'Local audio analysis and Reference Match', 'Offline rendering and export', '10 connected AI assistant credits each month'],
     cta: 'Included',
   },
   {
     key: 'creator',
     name: 'Creator',
-    description: 'For independent artists building a consistent workflow.',
+    description: 'For independent artists using Sonora AI throughout their workflow.',
     monthly: 12.9,
     annual: 10.75,
     annualTotal: 129,
     credits: '100 AI credits / month',
-    projects: '15 projects',
-    mastering: '10 AI assists / month',
-    features: ['Everything in Free', '10 mastering renders per month', 'Reference Match tools', 'Preset library access', 'Advanced export options', 'Export tools for release workflows'],
+    features: ['Everything in Free', '100 connected AI assistant credits each month', 'Account-level usage and billing dashboard', 'Optional one-time AI credit refills'],
     cta: 'Creator plan',
   },
   {
     key: 'pro',
     name: 'Pro',
-    description: 'For producers who want deeper control and repeatable results.',
+    description: 'For producers who rely on frequent AI-assisted decisions.',
     monthly: 24.9,
     annual: 20.75,
     annualTotal: 249,
     credits: '400 AI credits / month',
-    projects: 'Unlimited projects',
-    mastering: '50 AI assists / month',
-    features: ['Everything in Creator', '50 mastering renders per month', 'Advanced processing chains', 'Extended AI assistant allowance', 'Priority processing', 'Advanced reference workflows'],
+    features: ['Everything in Creator', '400 connected AI assistant credits each month', 'Optional one-time AI credit refills', 'A higher allowance for ongoing production work'],
     cta: 'Choose Pro',
     popular: true,
   },
   {
     key: 'studio',
     name: 'Studio',
-    description: 'For professional rooms and high-volume production work.',
+    description: 'For high-volume AI-assisted production and engineering workflows.',
     monthly: 49.9,
     annual: 41.58,
     annualTotal: 499,
     credits: '1,200 AI credits / month',
-    projects: 'Unlimited projects',
-    mastering: '150 AI assists / month',
-    features: ['Everything in Pro', '150 mastering renders per month', 'Higher AI usage allowance', 'Priority support queue', 'Studio-oriented usage limits', 'Team features as they become available'],
+    features: ['Everything in Pro', '1,200 connected AI assistant credits each month', 'Optional one-time AI credit refills', 'Designed for frequent professional use'],
     cta: 'Studio plan',
   },
 ] as const;
@@ -74,16 +66,13 @@ const MARKET_ITEMS = [
 
 const COMPARISON = [
   ['Audio import & playback', '✓', '✓', '✓', '✓'],
-  ['Basic DSP processing', '✓', '✓', '✓', '✓'],
-  ['Basic audio analysis', '✓', '✓', '✓', '✓'],
-  ['Saved projects', '3', '15', 'Unlimited', 'Unlimited'],
-  ['AI mastering assists', 'Preview', '10 / month', '50 / month', '150 / month'],
-  ['AI credits', '10', '100 / month', '400 / month', '1,200 / month'],
-  ['Reference Match', 'Preview', '✓', '✓', '✓'],
-  ['Advanced processing chains', '—', 'Limited', '✓', '✓'],
-  ['Advanced export', '—', '✓', '✓', '✓'],
-  ['Priority processing', '—', '—', '✓', '✓'],
-  ['Team collaboration', '—', '—', 'Planned', 'Planned'],
+  ['All local DSP processors', '✓', '✓', '✓', '✓'],
+  ['Local analysis & Reference Match', '✓', '✓', '✓', '✓'],
+  ['Offline rendering & export', '✓', '✓', '✓', '✓'],
+  ['Included connected AI credits', '10 / month', '100 / month', '400 / month', '1,200 / month'],
+  ['One-time AI credit refills', 'Available', 'Available', 'Available', 'Available'],
+  ['Cloud project sync', 'Planned', 'Planned', 'Planned', 'Planned'],
+  ['Team collaboration', 'Planned', 'Planned', 'Planned', 'Planned'],
 ];
 
 const money = (value: number) => new Intl.NumberFormat('en-FR', { style: 'currency', currency: 'EUR', minimumFractionDigits: value % 1 ? 2 : 0, maximumFractionDigits: 2 }).format(value);
@@ -184,7 +173,7 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
         <div className="max-w-2xl">
           <p className="section-label">Sonora membership</p>
           <h1 className="mt-2 text-2xl font-semibold tracking-[-.04em] text-white sm:text-3xl">Make room for your next record.</h1>
-          <p className="mt-2 max-w-xl text-sm leading-6 text-ink-400">Choose the workspace that fits your production rhythm. Local audio processing stays useful on every plan; subscriptions add higher limits and connected services.</p>
+          <p className="mt-2 max-w-xl text-sm leading-6 text-ink-400">Choose your connected-AI allowance. Every plan keeps the full local audio workspace available; subscriptions currently scale the number of authenticated AI assistant requests.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <span className={`rounded-full border px-3 py-1.5 font-mono text-[9px] uppercase tracking-[.14em] ${billingReady ? 'border-accent/25 bg-accent/[.07] text-accent' : 'border-signal-amber/25 bg-signal-amber/[.07] text-signal-amber'}`}>{billingReady ? 'Billing configured' : 'Billing setup required'}</span>
@@ -234,10 +223,9 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
                       <p className="mt-1 text-2xs text-ink-500">{plan.key === 'free' ? 'No payment required' : 'Billed monthly'}</p>
                     )}
                   </div>
-                  <div className="my-4 space-y-2 border-y border-white/[.07] py-3 text-2xs text-ink-300">
-                    <div className="flex justify-between gap-2"><span className="text-ink-500">AI allowance</span><span className="text-right">{plan.credits}</span></div>
-                    <div className="flex justify-between gap-2"><span className="text-ink-500">Projects</span><span>{plan.projects}</span></div>
-                    <div className="flex justify-between gap-2"><span className="text-ink-500">Mastering</span><span>{plan.mastering}</span></div>
+                  <div className="my-4 border-y border-white/[.07] py-3">
+                    <p className="font-mono text-[9px] uppercase tracking-[.14em] text-ink-500">Included monthly AI allowance</p>
+                    <p className="mt-1 text-sm font-medium text-white">{plan.credits}</p>
                   </div>
                   <ul className="mb-5 flex-1 space-y-2">
                     {plan.features.map((feature) => <li key={feature} className="flex gap-2 text-2xs leading-relaxed text-ink-300"><span className="text-accent">✓</span><span>{feature}</span></li>)}
@@ -270,16 +258,16 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
             </div>
           </div>
           {billingReady ? (
-            <div className="rounded-xl border border-accent/20 bg-accent/[.05] px-3 py-2.5 text-2xs leading-relaxed text-accent">Supabase authentication and Stripe billing credentials are configured. Sign in to start a secure Checkout Session. Subscription access is activated only after Stripe sends a verified webhook.</div>
+            <div className="rounded-xl border border-accent/20 bg-accent/[.05] px-3 py-2.5 text-2xs leading-relaxed text-accent">Supabase and Stripe are configured and billing has been explicitly enabled by the server. The paid entitlement currently enforced is the monthly connected-AI allowance; local DSP, projects and exports remain available on every plan. Subscription status is activated only after a verified Stripe webhook.</div>
           ) : (
-            <StatusNote>Checkout stays disabled until Supabase Auth, the server-side service-role key, Stripe secret and webhook keys, and all six monthly/yearly Stripe Price IDs are configured. The app will not accept or simulate payments without them.</StatusNote>
+            <StatusNote>Checkout stays disabled until Supabase Auth, server-only credentials, Stripe secrets, all six subscription Price IDs and the server-side SONORA_BILLING_ENABLED=true release switch are configured. The server enforces this switch independently of the UI.</StatusNote>
           )}
         </section>
       )}
 
       {section === 'credits' && (
         <section className="space-y-5">
-          <div className="max-w-2xl"><p className="section-label">Usage-based AI</p><h2 className="mt-2 text-xl font-semibold text-white">Keep expensive AI work predictable.</h2><p className="mt-2 text-sm leading-6 text-ink-400">Monthly allowances are reserved for AI analysis and assistant requests. Local audio playback, DSP processing and offline rendering should not consume AI credits.</p></div>
+          <div className="max-w-2xl"><p className="section-label">Usage-based AI</p><h2 className="mt-2 text-xl font-semibold text-white">Keep expensive AI work predictable.</h2><p className="mt-2 text-sm leading-6 text-ink-400">Monthly allowances cover authenticated connected-AI assistant requests. Local audio analysis, playback, DSP processing and offline rendering do not consume AI credits.</p></div>
           <div className="grid gap-3 md:grid-cols-3">
             {CREDIT_PACKS.map((pack) => <article key={pack.credits} className="rounded-2xl border border-white/[.08] bg-[#101318] p-5"><p className="font-mono text-[9px] uppercase tracking-[.16em] text-ink-500">Top-up pack</p><div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold text-white">{pack.credits}</span><span className="text-xs text-ink-500">credits</span></div><p className="mt-2 text-sm text-ink-300">{pack.price}</p><p className="mt-1 text-2xs text-ink-500">{pack.note}</p><button
             type="button"
