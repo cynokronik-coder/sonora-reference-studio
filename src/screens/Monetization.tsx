@@ -70,7 +70,7 @@ const COMPARISON = [
   ['Local analysis & Reference Match', '✓', '✓', '✓', '✓'],
   ['Offline rendering & export', '✓', '✓', '✓', '✓'],
   ['Included connected AI credits', '10 / month', '100 / month', '400 / month', '1,200 / month'],
-  ['One-time AI credit refills', 'Available', 'Available', 'Available', 'Available'],
+  ['One-time AI credit refills', 'When enabled', 'When enabled', 'When enabled', 'When enabled'],
   ['Cloud project sync', 'Planned', 'Planned', 'Planned', 'Planned'],
   ['Team collaboration', 'Planned', 'Planned', 'Planned', 'Planned'],
 ];
@@ -201,6 +201,7 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
             </div>
           </div>
 
+          <p className="text-2xs leading-relaxed text-ink-500">Plan differences currently apply to connected AI usage only. The full local audio engine, analysis, project editing and offline exports remain available on every plan; cloud project quotas and team entitlements are future work.</p>
           {billingError && <div role="alert" className="rounded-xl border border-signal-red/25 bg-signal-red/[.06] px-4 py-3 text-xs text-signal-red">{billingError}</div>}
           {billingMessage && <div role="status" className="rounded-xl border border-accent/20 bg-accent/[.06] px-4 py-3 text-xs text-accent">{billingMessage}</div>}
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -267,7 +268,7 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
 
       {section === 'credits' && (
         <section className="space-y-5">
-          <div className="max-w-2xl"><p className="section-label">Usage-based AI</p><h2 className="mt-2 text-xl font-semibold text-white">Keep expensive AI work predictable.</h2><p className="mt-2 text-sm leading-6 text-ink-400">Monthly allowances cover authenticated connected-AI assistant requests. Local audio analysis, playback, DSP processing and offline rendering do not consume AI credits.</p></div>
+          <div className="max-w-2xl"><p className="section-label">Usage-based AI</p><h2 className="mt-2 text-xl font-semibold text-white">Keep expensive AI work predictable.</h2><p className="mt-2 text-sm leading-6 text-ink-400">One credit is charged for each authenticated connected-AI assistant request. Local audio analysis, playback, DSP processing and offline rendering do not consume AI credits.</p></div>
           <div className="grid gap-3 md:grid-cols-3">
             {CREDIT_PACKS.map((pack) => <article key={pack.credits} className="rounded-2xl border border-white/[.08] bg-[#101318] p-5"><p className="font-mono text-[9px] uppercase tracking-[.16em] text-ink-500">Top-up pack</p><div className="mt-3 flex items-baseline gap-2"><span className="text-3xl font-semibold text-white">{pack.credits}</span><span className="text-xs text-ink-500">credits</span></div><p className="mt-2 text-sm text-ink-300">{pack.price}</p><p className="mt-1 text-2xs text-ink-500">{pack.note}</p><button
             type="button"
@@ -277,8 +278,8 @@ export default function Monetization({ onOpenAccount }: { onOpenAccount: () => v
           >{busyCreditPack === pack.credits.replace(',', '') ? 'Opening checkout…' : billingStatus?.creditTopupsConfigured ? session ? 'Buy credits' : 'Sign in to buy' : 'Credit checkout setup required'}</button></article>)}
           </div>
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border border-white/[.08] bg-[#101318] p-4"><h3 className="text-sm font-semibold text-white">What should consume credits?</h3><ul className="mt-3 space-y-2 text-xs text-ink-400"><li>• AI track analysis and interpretation</li><li>• Reference-based AI recommendations</li><li>• Conversational assistant requests</li><li>• AI-assisted processing-chain proposals</li></ul></div>
-            <div className="rounded-2xl border border-white/[.08] bg-[#101318] p-4"><h3 className="text-sm font-semibold text-white">What should stay unlimited?</h3><ul className="mt-3 space-y-2 text-xs text-ink-400"><li>• Local audio import and playback</li><li>• Built-in DSP and processor editing</li><li>• Offline rendering within plan limits</li><li>• Project editing and local measurements</li></ul></div>
+            <div className="rounded-2xl border border-white/[.08] bg-[#101318] p-4"><h3 className="text-sm font-semibold text-white">What consumes credits today?</h3><ul className="mt-3 space-y-2 text-xs text-ink-400"><li>• Each connected AI assistant request</li><li>• AI explanations and processor proposals returned by the assistant</li><li>• Follow-up assistant requests that use analysis or tool results</li></ul></div>
+            <div className="rounded-2xl border border-white/[.08] bg-[#101318] p-4"><h3 className="text-sm font-semibold text-white">What stays credit-free?</h3><ul className="mt-3 space-y-2 text-xs text-ink-400"><li>• Local audio import and playback</li><li>• Local analysis and Reference Match measurements</li><li>• Built-in DSP and processor editing</li><li>• Project editing and offline export</li></ul></div>
           </div>
           <StatusNote>Included monthly allowances are tracked on the server. Credit packs are fulfilled only after a verified Stripe payment webhook; configure the three credit-pack Price IDs to enable purchases. Local playback, DSP processing and offline rendering never consume AI credits.</StatusNote>
         </section>
