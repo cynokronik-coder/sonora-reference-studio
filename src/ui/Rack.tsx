@@ -28,6 +28,7 @@ export function Rack({
   onSelect,
   meters,
   emptyHint,
+  filterCategory,
 }: {
   scope: ChainScope;
   trackId: string | null;
@@ -36,6 +37,7 @@ export function Rack({
   onSelect: (id: string | null) => void;
   meters?: Record<string, { reduction?: number }>;
   emptyHint?: string;
+  filterCategory?: ProcessorCategory | 'effects' | null;
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -50,6 +52,17 @@ export function Rack({
       ),
     [search],
   );
+
+  const visibleProcessors = processors
+    .map((node, index) => ({ node, index, definition: getDefinition(node.type) }))
+    .filter(({ definition }) => {
+      if (!definition) return false;
+      if (!filterCategory) return true;
+      if (filterCategory === 'effects') {
+        return ['saturation', 'stereo', 'time', 'vocal', 'utility'].includes(definition.category);
+      }
+      return definition.category === filterCategory;
+    });
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -68,7 +81,7 @@ export function Rack({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {processors.length === 0 && (
+        {processors.length === 0 ? (
           <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
             <p className="text-xs text-ink-300">No processors on this chain.</p>
             <p className="max-w-xs text-2xs leading-relaxed text-ink-500">
@@ -78,9 +91,14 @@ export function Rack({
               Add the first processor
             </Button>
           </div>
-        )}
-        {processors.map((node, index) => {
-          const def = getDefinition(node.type);
+        ) : visibleProcessors.length === 0 ? (
+          <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
+            <p className="text-xs text-ink-300">No {filterCategory === 'effects' ? 'effects' : filterCategory} processors on this chain.</p>
+            <p className="max-w-xs text-2xs leading-relaxed text-ink-500">Choose another processing view or add a compatible processor.</p>
+            <Button size="sm" onClick={() => setAddOpen(true)}>Browse processors</Button>
+          </div>
+        ) : null}
+        {visibleProcessors.map(({ node, index, definition: def }) => {
           if (!def) return null;
           const isSelected = node.id === selectedId;
           const reduction = meters?.[node.id]?.reduction ?? 0;
