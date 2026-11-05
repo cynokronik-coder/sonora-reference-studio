@@ -1,3 +1,5 @@
+import { getAuthAccessToken } from '../../lib/auth';
+
 export interface SonoraAiStatus {
   configured: boolean;
   model: string;
@@ -24,10 +26,16 @@ export async function requestSonoraAi(
   input: unknown[],
   context: Record<string, unknown>,
 ): Promise<SonoraAiResponse> {
+  const accessToken = await getAuthAccessToken();
+  const requestId = crypto.randomUUID();
   const response = await fetch('/api/assistant', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ input, context }),
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+    },
+    body: JSON.stringify({ input, context, requestId }),
   });
   const payload = await response.json().catch(() => ({})) as {
     error?: string;

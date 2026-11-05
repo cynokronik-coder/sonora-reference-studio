@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 
 type LandingProps = {
   onEnterStudio: () => void;
+  onOpenPricing: () => void;
+  onOpenAccount: () => void;
 };
 
 const BAR_HEIGHTS = [18, 28, 21, 35, 30, 43, 27, 50, 38, 57, 44, 65, 50, 73, 54, 82, 62, 74, 48, 68, 42, 60, 34, 52, 29, 45, 23, 36, 19, 30, 14, 22];
@@ -150,7 +152,7 @@ function StudioPreview() {
   );
 }
 
-export default function Landing({ onEnterStudio }: LandingProps) {
+export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }: LandingProps) {
   return (
     <div className="min-h-screen overflow-hidden bg-[#080a0d] text-ink-100">
       <div className="pointer-events-none fixed inset-0 opacity-[.18]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px)', backgroundSize: '72px 72px' }} />
@@ -169,9 +171,13 @@ export default function Landing({ onEnterStudio }: LandingProps) {
             <a href="#difference" className="text-xs text-ink-400 transition hover:text-white">Why Sonora</a>
             <a href="#faq" className="text-xs text-ink-400 transition hover:text-white">FAQ</a>
           </nav>
-          <button type="button" onClick={onEnterStudio} className="group rounded-lg border border-accent/40 bg-accent px-4 py-2.5 text-[11px] font-semibold text-[#10150a] shadow-[0_0_28px_rgba(200,241,105,.12)] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">
-            Open the studio <ArrowMark />
-          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={onOpenAccount} className="rounded-lg border border-white/[.12] px-4 py-2.5 text-[11px] font-medium text-ink-300 transition hover:border-accent/30 hover:text-white">Account</button>
+            <button type="button" onClick={onOpenPricing} className="rounded-lg border border-white/[.12] px-4 py-2.5 text-[11px] font-medium text-ink-300 transition hover:border-accent/30 hover:text-white">Pricing</button>
+            <button type="button" onClick={onEnterStudio} className="group rounded-lg border border-accent/40 bg-accent px-4 py-2.5 text-[11px] font-semibold text-[#10150a] shadow-[0_0_28px_rgba(200,241,105,.12)] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">
+              Open the studio <ArrowMark />
+            </button>
+          </div>
         </div>
       </header>
 

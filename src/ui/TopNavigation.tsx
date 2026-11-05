@@ -26,6 +26,8 @@ const PRIMARY_LINKS: { label: string; screen: Screen; disabledWithoutProject?: b
 const SECONDARY_LINKS: { label: string; screen: Screen; disabledWithoutProject?: boolean }[] = [
   { label: 'Dashboard', screen: 'dashboard' },
   { label: 'Projects', screen: 'projects' },
+  { label: 'Plans & Add-ons', screen: 'plans' },
+  { label: 'Account', screen: 'account' },
   { label: 'Preset Library', screen: 'presets', disabledWithoutProject: true },
   { label: 'Audio Analysis', screen: 'analysis', disabledWithoutProject: true },
   { label: 'Export Center', screen: 'export', disabledWithoutProject: true },

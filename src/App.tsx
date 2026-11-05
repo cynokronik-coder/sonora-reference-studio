@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useApp, type Screen } from './state/store';
 import Dashboard from './screens/Dashboard';
 import Landing from './screens/Landing';
+import Monetization from './screens/Monetization';
+import Account from './screens/Account';
 import Projects from './screens/Projects';
 import Studio from './screens/Studio';
 import ReferenceMatch from './screens/ReferenceMatch';
@@ -19,6 +21,8 @@ import { realtimeHost } from './audio/engine/realtime';
 const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boolean }[] = [
   { screen: 'dashboard', label: 'Dashboard', glyph: '◫' },
   { screen: 'projects', label: 'Projects', glyph: '▤' },
+  { screen: 'plans', label: 'Plans & Add-ons', glyph: '✦' },
+  { screen: 'account', label: 'Account', glyph: '◉' },
   { screen: 'studio', label: 'Mixing Studio', glyph: '⌁', requiresProject: true },
   { screen: 'reference', label: 'Reference Match', glyph: '◎', requiresProject: true },
   { screen: 'mastering', label: 'Mastering', glyph: '▮', requiresProject: true },
@@ -33,13 +37,28 @@ const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boo
 
 export default function App() {
   const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError, storageError } = useApp();
-  const [showLanding, setShowLanding] = useState(() => window.location.hash !== '#studio');
+  const [showLanding, setShowLanding] = useState(() => {
+    const hash = window.location.hash;
+    return !['#studio', '#plans', '#account'].includes(hash) && !hash.includes('access_token=');
+  });
   const [tourOpen, setTourOpen] = useState(false);
 
   const enterStudio = () => {
     window.location.hash = 'studio';
     setShowLanding(false);
     setScreen('studio');
+  };
+
+  const openPricing = () => {
+    window.location.hash = 'plans';
+    setShowLanding(false);
+    setScreen('plans');
+  };
+
+  const openAccount = () => {
+    window.location.hash = 'account';
+    setShowLanding(false);
+    setScreen('account');
   };
 
   const openLanding = () => {
@@ -49,10 +68,15 @@ export default function App() {
 
   useEffect(() => {
     const syncFromHash = () => {
-      const inStudio = window.location.hash === '#studio';
-      setShowLanding(!inStudio);
-      if (inStudio) setScreen('studio');
+      const hash = window.location.hash;
+      const authCallback = hash.includes('access_token=');
+      const inApp = hash === '#studio' || hash === '#plans' || hash === '#account' || authCallback;
+      setShowLanding(!inApp);
+      if (hash === '#plans') setScreen('plans');
+      else if (hash === '#account' || authCallback) setScreen('account');
+      else if (hash === '#studio') setScreen('studio');
     };
+    syncFromHash();
     window.addEventListener('hashchange', syncFromHash);
     return () => window.removeEventListener('hashchange', syncFromHash);
   }, []);
@@ -90,7 +114,7 @@ export default function App() {
     return () => window.removeEventListener('keydown', handler);
   }, [undo, redo, saveNow, showLanding]);
 
-  if (showLanding) return <Landing onEnterStudio={enterStudio} />;
+  if (showLanding) return <Landing onEnterStudio={enterStudio} onOpenPricing={openPricing} onOpenAccount={openAccount} />;
 
   const active = NAV.find((item) => item.screen === screen);
   const blocked = active?.requiresProject && !project;
@@ -107,7 +131,11 @@ export default function App() {
           projectOpen={Boolean(project)}
           mode={mode}
           onModeChange={setMode}
-          onNavigate={setScreen}
+          onNavigate={(destination) => {
+            if (destination === 'plans') openPricing();
+            else if (destination === 'account') openAccount();
+            else setScreen(destination);
+          }}
           onUndo={undo}
           onRedo={redo}
           onOpenLanding={openLanding}
@@ -144,6 +172,10 @@ export default function App() {
             <Dashboard />
           ) : screen === 'projects' ? (
             <Projects />
+          ) : screen === 'plans' ? (
+            <Monetization onOpenAccount={openAccount} />
+          ) : screen === 'account' ? (
+            <Account />
           ) : screen === 'studio' ? (
             <Studio onStartTour={() => setTourOpen(true)} />
           ) : screen === 'reference' ? (
