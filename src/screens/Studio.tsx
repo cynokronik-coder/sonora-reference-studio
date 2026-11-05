@@ -15,7 +15,7 @@ type Workspace = 'arrangement' | 'mixer' | 'processing';
 
 const TRACK_KINDS: TrackKind[] = ['audio', 'vocal', 'instrument', 'drums', 'bass', 'instrumental', 'stem'];
 
-export default function Studio() {
+export default function Studio({ onStartTour }: { onStartTour?: () => void } = {}) {
   const project = useApp((s) => s.project);
   const { selectedTrackId, selectTrack, importFiles, updateTrack, removeTrack, addTrack } = useApp();
   const picker = useFilePicker();
@@ -104,6 +104,9 @@ export default function Studio() {
             Tracks <span className="ml-1 text-ink-500">{project.tracks.length}</span>
           </button>
           <Button size="sm" variant="primary" onClick={() => setAddOpen(true)}><Icon name="plus" size={14} /> Add audio</Button>
+          <button type="button" onClick={onStartTour} title="Guided tour" aria-label="Start guided tour" className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-2.5 text-[10px] font-medium text-[#C4A2FF] transition-colors hover:border-[#A77AFF]/45 hover:bg-[#8957FF]/15">
+            <Icon name="sparkles" size={13} /> <span className="hidden md:inline">Tour</span>
+          </button>
           <button type="button" onClick={() => useApp.getState().setScreen('settings')} aria-label="Settings" title="Settings" className="focus-ring hidden h-8 w-8 items-center justify-center rounded-full border border-white/[.10] bg-[#1D1D30] text-ink-300 transition-colors hover:border-[#A77AFF]/50 hover:text-white sm:inline-flex">
             <Icon name="settings" size={15} />
           </button>
@@ -111,10 +114,10 @@ export default function Studio() {
         </div>
       </header>
 
-      <TransportBar />
+      <div data-tour="studio-transport"><TransportBar /></div>
 
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[204px] shrink-0 flex-col border-r border-white/[.07] bg-[#0D0D1B]/92 sm:w-[220px]">
+        <aside data-tour="studio-tracks" className="flex w-[204px] shrink-0 flex-col border-r border-white/[.07] bg-[#0D0D1B]/92 sm:w-[220px]">
           <div className="flex h-[43px] shrink-0 items-center justify-between border-b border-white/[.07] px-3">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold text-ink-100">Tracks</span>
@@ -212,7 +215,7 @@ export default function Studio() {
             <span className="hidden text-[10px] text-ink-500 sm:inline">{workspace === 'arrangement' ? 'Arrange and edit your tracks' : workspace === 'mixer' ? 'Balance channels and buses' : 'Shape your sound'}</span>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-hidden bg-[#090914]">
+          <div data-tour="studio-timeline" className="min-h-0 flex-1 overflow-hidden bg-[#090914]">
             {workspace === 'arrangement' && (
               <Timeline onSelectTrack={chooseTrack} showTrackHeaders={false} externalScrollTop={trackScrollTop} onVerticalScroll={setTrackScrollTop} />
             )}
@@ -256,7 +259,7 @@ export default function Studio() {
             )}
           </div>
 
-          <div className="flex h-[82px] shrink-0 items-center justify-center border-t border-white/[.07] bg-[#0D0D1B]/95 px-3">
+          <div data-tour="studio-processing" className="flex h-[82px] shrink-0 items-center justify-center border-t border-white/[.07] bg-[#0D0D1B]/95 px-3">
             <div className="grid w-full max-w-[600px] grid-cols-5 gap-2">
               {[
                 { id: 'mix', label: 'Mix', icon: 'sliders' as const, action: () => setWorkspace('arrangement'), active: workspace !== 'processing' },
@@ -275,7 +278,7 @@ export default function Studio() {
         </section>
 
         {assistantOpen && (
-          <aside className="hidden w-[280px] shrink-0 border-l border-white/[.07] bg-[#0D0D1B] xl:flex 2xl:w-[310px]">
+          <aside data-tour="studio-assistant" className="hidden w-[280px] shrink-0 border-l border-white/[.07] bg-[#0D0D1B] xl:flex 2xl:w-[310px]">
             <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} /></div>
           </aside>
         )}
