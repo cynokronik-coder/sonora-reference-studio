@@ -73,7 +73,7 @@ function sessionFromPayload(payload: AuthPayload): AuthSession {
 
 async function authRequest(path: string, body?: Record<string, unknown>, accessToken?: string): Promise<AuthPayload> {
   const config = getSupabaseConfig();
-  if (!config.configured) throw new Error('Supabase Auth is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY.');
+  if (!config.configured) throw new Error('Supabase Auth is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.');
   const response = await fetch(`${config.url}/auth/v1/${path}`, {
     method: body ? 'POST' : 'GET',
     headers: {
@@ -131,6 +131,7 @@ export async function signInWithPassword(email: string, password: string): Promi
 
 export async function signUpWithPassword(email: string, password: string): Promise<{ session: AuthSession | null; confirmationRequired: boolean }> {
   const config = getSupabaseConfig();
+  if (!config.configured) throw new Error('Supabase Auth is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.');
   const response = await fetch(`${config.url}/auth/v1/signup`, {
     method: 'POST',
     headers: { apikey: config.anonKey, 'Content-Type': 'application/json', Accept: 'application/json' },
