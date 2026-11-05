@@ -128,6 +128,7 @@ export default function Account() {
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-3"><span className="text-xs text-ink-500">Subscription status</span><span className="text-xs text-ink-200">{entitlements.subscriptionStatus || 'Free plan'}</span></div>
                 <div className="flex items-center justify-between gap-3"><span className="text-xs text-ink-500">AI credits remaining</span><span className="font-mono text-sm text-white">{entitlements.aiCredits.remaining} / {entitlements.aiCredits.allowance}</span></div>
+                {entitlements.aiCredits.purchased.total > 0 && <div className="flex items-center justify-between gap-3"><span className="text-xs text-ink-500">Purchased credits remaining</span><span className="font-mono text-sm text-white">{entitlements.aiCredits.purchased.remaining}</span></div>}
                 <div className="h-1.5 overflow-hidden rounded-full bg-white/[.07]"><div className="h-full rounded-full bg-accent" style={{ width: `${entitlements.aiCredits.allowance ? Math.max(0, Math.min(100, entitlements.aiCredits.remaining / entitlements.aiCredits.allowance * 100)) : 0}%` }} /></div>
                 {entitlements.currentPeriodEnd && <p className="text-2xs text-ink-500">Current period ends {new Date(entitlements.currentPeriodEnd).toLocaleDateString()}</p>}
                 {entitlements.cancelAtPeriodEnd && <p className="text-2xs text-signal-amber">Your subscription is scheduled to end at the current period boundary.</p>}
