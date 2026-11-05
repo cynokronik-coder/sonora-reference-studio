@@ -47,13 +47,13 @@ export default function Settings() {
   }, []);
 
   return (
-    <div className="mx-auto max-w-[1200px] space-y-4 p-4 sm:p-5">
-      <header className="border-b border-white/[.06] pb-4">
+    <div className="mx-auto max-w-[1350px] space-y-5 p-5 sm:p-6 lg:p-7">
+      <header className="border-b border-white/[.06] pb-5">
         <p className="section-label">Configuration</p>
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h1 className="text-xl font-semibold tracking-[-.025em] text-white">Settings</h1>
-            <p className="mt-1 text-xs text-ink-400">Configure your workspace, audio engine and connected services.</p>
+            <h1 className="text-2xl font-semibold tracking-[-.025em] text-white">Settings</h1>
+            <p className="mt-1 text-sm text-ink-400">Configure your workspace, audio engine and connected services.</p>
           </div>
           <Badge tone="neutral">Local-first workspace</Badge>
         </div>
