@@ -1,4 +1,14 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode, type PointerEvent } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type PointerEvent,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { Icon, type SonoraIconName } from './Icon';
 
 export interface FlyoutMenuProps {
@@ -21,8 +31,9 @@ const WIDTHS = {
 
 /**
  * Contextual settings flyout.
- * Hover opens for discovery, click pins it while the user adjusts controls.
- * Touch and keyboard users open it through the button.
+ * Hover opens for discovery; click pins it during adjustment.
+ * The floating surface is portalled to the document body so scrollable panels
+ * and track lists cannot clip it.
  */
 export function FlyoutMenu({
   label = 'Settings',
@@ -37,10 +48,13 @@ export function FlyoutMenu({
 }: FlyoutMenuProps) {
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const openTimer = useRef<number | null>(null);
   const closeTimer = useRef<number | null>(null);
-  const panelId = `sonora-flyout-${useRef(Math.random().toString(36).slice(2, 9)).current}`;
+  const panelId = `sonora-flyout-${useId().replace(/:/g, '')}`;
 
   const clearTimers = useCallback(() => {
     if (openTimer.current !== null) window.clearTimeout(openTimer.current);
@@ -64,7 +78,7 @@ export function FlyoutMenu({
   const scheduleClose = (event: PointerEvent<HTMLDivElement>) => {
     if (event.pointerType !== 'mouse' || pinned) return;
     clearTimers();
-    closeTimer.current = window.setTimeout(() => setOpen(false), 180);
+    closeTimer.current = window.setTimeout(() => setOpen(false), 190);
   };
 
   const handleTriggerClick = () => {
@@ -77,10 +91,37 @@ export function FlyoutMenu({
     setOpen(true);
   };
 
+  useLayoutEffect(() => {
+    if (!open) return;
+    const updatePosition = () => {
+      const anchor = triggerRef.current?.getBoundingClientRect();
+      const panel = panelRef.current?.getBoundingClientRect();
+      if (!anchor || !panel) return;
+      const margin = 12;
+      const gap = 8;
+      let left = placement === 'bottom-end' ? anchor.right - panel.width : anchor.left;
+      left = Math.max(margin, Math.min(left, window.innerWidth - panel.width - margin));
+      let top = anchor.bottom + gap;
+      if (top + panel.height > window.innerHeight - margin) top = anchor.top - panel.height - gap;
+      top = Math.max(margin, Math.min(top, window.innerHeight - panel.height - margin));
+      setPosition({ top, left });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    window.addEventListener('scroll', updatePosition, true);
+    return () => {
+      window.removeEventListener('resize', updatePosition);
+      window.removeEventListener('scroll', updatePosition, true);
+    };
+  }, [open, placement, width, title, description]);
+
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: globalThis.PointerEvent) => {
-      if (rootRef.current && event.target instanceof Node && !rootRef.current.contains(event.target)) dismiss();
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (rootRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      dismiss();
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') dismiss();
@@ -95,14 +136,34 @@ export function FlyoutMenu({
 
   useEffect(() => () => clearTimers(), [clearTimers]);
 
-  return (
+  const flyout = open ? createPortal(
     <div
-      ref={rootRef}
-      className="relative inline-flex"
-      onPointerEnter={scheduleOpen}
+      ref={panelRef}
+      id={panelId}
+      role="dialog"
+      aria-label={title ?? label}
+      onPointerEnter={clearTimers}
       onPointerLeave={scheduleClose}
+      style={{ position: 'fixed', top: position.top, left: position.left }}
+      className={`z-[1000] ${WIDTHS[width]} rounded-xl border border-white/[.11] bg-[rgba(20,20,37,.94)] p-3 text-left shadow-floating backdrop-blur-glass animate-[sonora-flyout-in_180ms_ease-out]`}
     >
+      {(title || description) && (
+        <div className="mb-3 border-b border-white/[.07] pb-2.5">
+          {title && <p className="text-xs font-semibold text-ink-100">{title}</p>}
+          {description && <p className="mt-1 text-2xs leading-relaxed text-ink-400">{description}</p>}
+        </div>
+      )}
+      <div className="max-h-[min(60vh,480px)] space-y-3 overflow-y-auto pr-0.5">
+        {children}
+      </div>
+    </div>,
+    document.body,
+  ) : null;
+
+  return (
+    <div ref={rootRef} className="relative inline-flex" onPointerEnter={scheduleOpen} onPointerLeave={scheduleClose}>
       <button
+        ref={triggerRef}
         type="button"
         disabled={disabled}
         aria-haspopup="dialog"
@@ -114,30 +175,7 @@ export function FlyoutMenu({
         <Icon name={icon} size={14} />
         {label && <span>{label}</span>}
       </button>
-
-      <div
-        id={panelId}
-        role="dialog"
-        aria-label={title ?? label}
-        aria-hidden={!open}
-        onPointerEnter={() => {
-          clearTimers();
-        }}
-        onPointerLeave={scheduleClose}
-        className={`absolute top-[calc(100%+9px)] z-[70] origin-top ${placement === 'bottom-end' ? 'right-0' : 'left-0'} ${WIDTHS[width]} rounded-xl border border-white/[.11] bg-[rgba(20,20,37,.92)] p-3 text-left shadow-floating backdrop-blur-glass transition-[opacity,transform,visibility] duration-180 ease-out ${
-          open ? 'visible translate-y-0 scale-100 opacity-100' : 'invisible -translate-y-1 scale-[.99] opacity-0'
-        }`}
-      >
-        {(title || description) && (
-          <div className="mb-3 border-b border-white/[.07] pb-2.5">
-            {title && <p className="text-xs font-semibold text-ink-100">{title}</p>}
-            {description && <p className="mt-1 text-2xs leading-relaxed text-ink-400">{description}</p>}
-          </div>
-        )}
-        <div className="max-h-[min(60vh,480px)] space-y-3 overflow-y-auto pr-0.5">
-          {children}
-        </div>
-      </div>
+      {flyout}
     </div>
   );
 }
