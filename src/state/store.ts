@@ -139,6 +139,7 @@ interface AppState {
   lastSavedAt: number | null;
   lastRenderStats: RenderStats | null;
   engineError: string | null;
+  storageError: string | null;
   verifying: boolean;
 
   init: () => Promise<void>;
@@ -273,6 +274,11 @@ function parseAssistantToolArguments(value: unknown): Record<string, unknown> {
   return parsed as Record<string, unknown>;
 }
 
+function describeStorageError(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  return `Sonora cannot use this browser's local storage, so projects cannot be saved. Open Sonora in its own browser tab and turn off strict storage blocking. (${detail})`;
+}
+
 function emptyProject(): ProjectState {
   const project = newProject('Untitled project', 48000);
   return project;
@@ -312,16 +318,23 @@ export const useApp = create<AppState>((set, get) => ({
   lastSavedAt: null,
   lastRenderStats: null,
   engineError: null,
+  storageError: null,
   verifying: false,
 
   init: async () => {
-    const projects = await db.listProjects();
-    const userPresets = await db.listUserPresets();
-    set({
-      projects,
-      presets: [...BUILT_IN_PRESETS, ...userPresets],
-      mode: (localStorage.getItem('sonora:mode') as Mode) ?? 'advanced',
-    });
+    let mode: Mode = 'advanced';
+    try {
+      mode = (localStorage.getItem('sonora:mode') as Mode) ?? 'advanced';
+    } catch {
+      // Storage can be blocked in embedded views and strict privacy modes.
+    }
+    try {
+      const projects = await db.listProjects();
+      const userPresets = await db.listUserPresets();
+      set({ projects, presets: [...BUILT_IN_PRESETS, ...userPresets], mode, storageError: null });
+    } catch (error) {
+      set({ mode, storageError: describeStorageError(error) });
+    }
     realtimeHost.onPosition((position, playing) => {
       set((state) => ({ transport: { ...state.transport, position, playing } }));
     });
@@ -338,7 +351,11 @@ export const useApp = create<AppState>((set, get) => ({
 
   setScreen: (screen) => set({ screen }),
   setMode: (mode) => {
-    localStorage.setItem('sonora:mode', mode);
+    try {
+      localStorage.setItem('sonora:mode', mode);
+    } catch {
+      // Keep the choice for this session even when it cannot be persisted.
+    }
     set({ mode });
   },
   setToast: (toast) => set({ toast }),
@@ -356,7 +373,12 @@ export const useApp = create<AppState>((set, get) => ({
     const rate = realtimeHost.sampleRate;
     const project = newProject(name ?? 'Untitled project', rate);
     project.match = defaultMatchSettings();
-    await db.saveProject(project);
+    try {
+      await db.saveProject(project);
+    } catch (error) {
+      set({ storageError: describeStorageError(error), toast: 'Could not create the project: this browser is blocking local storage.' });
+      return;
+    }
     set({
       project,
       assets: [],

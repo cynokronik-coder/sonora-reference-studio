@@ -41,7 +41,7 @@ const TITLES: Record<Screen, string> = {
 };
 
 export default function App() {
-  const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError } = useApp();
+  const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError, storageError } = useApp();
   const [showLanding, setShowLanding] = useState(() => window.location.hash !== '#studio');
 
   const enterStudio = () => {
@@ -210,6 +210,13 @@ export default function App() {
             {project && <Button size="sm" variant="primary" onClick={() => setScreen('reference')}>Start matching ↗</Button>}
           </div>
         </header>
+
+        {storageError && (
+          <div className="flex items-center justify-between gap-2 border-b border-amber-300/30 bg-amber-300/10 px-3 py-1.5 text-2xs text-amber-200">
+            <span>{storageError}</span>
+            <button type="button" className="underline" onClick={() => useApp.setState({ storageError: null })}>dismiss</button>
+          </div>
+        )}
 
         {engineError && (
           <div className="flex items-center justify-between gap-2 border-b border-signal-red/30 bg-signal-red/10 px-3 py-1.5 text-2xs text-signal-red">

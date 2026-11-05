@@ -20,6 +20,11 @@ let dbPromise: Promise<IDBDatabase> | null = null;
 function openDatabase(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
+    if (typeof indexedDB === 'undefined' || !indexedDB) {
+      dbPromise = null;
+      reject(new Error('IndexedDB is unavailable in this browser context.'));
+      return;
+    }
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -36,7 +41,10 @@ function openDatabase(): Promise<IDBDatabase> {
       }
     };
     request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error ?? new Error('Could not open IndexedDB'));
+    request.onerror = () => {
+      dbPromise = null;
+      reject(request.error ?? new Error('Could not open IndexedDB'));
+    };
   });
   return dbPromise;
 }
