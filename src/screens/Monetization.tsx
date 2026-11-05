@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { getAuthSession, isSupabaseAuthConfigured, subscribeToAuth, type AuthSession } from '../lib/auth';
-import { getBillingStatus, getEntitlements, openBillingPortal, startCheckout, type BillingStatus, type Entitlements } from '../lib/billing';
+import { getBillingStatus, getEntitlements, openBillingPortal, startCheckout, type BillingStatus, type Entitlements, type PlanKey } from '../lib/billing';
 
 type Section = 'plans' | 'credits' | 'marketplace' | 'partners';
 
