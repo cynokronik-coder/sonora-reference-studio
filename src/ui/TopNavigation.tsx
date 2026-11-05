@@ -94,7 +94,7 @@ export default function TopNavigation({
       <nav aria-label="Primary navigation" className="no-scrollbar flex min-w-0 flex-1 items-center justify-center gap-0.5 overflow-x-auto px-1">
         {PRIMARY_LINKS.map((item, index) => {
           const disabled = Boolean(item.disabledWithoutProject && !projectOpen);
-          const selected = item.screen === screen && (item.label !== 'AI Assistant' || screen === 'studio');
+          const selected = item.label !== 'AI Assistant' && item.screen === screen;
           return (
             <button
               key={item.label}
