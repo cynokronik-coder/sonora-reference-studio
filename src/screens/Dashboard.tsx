@@ -100,7 +100,7 @@ export default function Dashboard() {
               Mix, compare against professional references and master your songs in one creative workspace.
               Start with smart suggestions, then shape every detail yourself.
             </p>
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div data-tour="dashboard-import" className="mt-5 flex flex-wrap gap-2">
               <Button variant="primary" onClick={importTarget}>＋ Import your song</Button>
               <Button onClick={() => void createProject()}>Create blank project</Button>
               {project && <Button variant="ghost" onClick={() => go('studio')}>Continue session →</Button>}
@@ -156,7 +156,7 @@ export default function Dashboard() {
         </section>
       )}
 
-      <section className="space-y-3">
+      <section data-tour="dashboard-workflow" className="space-y-3">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <div className="section-label">Your workflow</div>
@@ -192,7 +192,7 @@ export default function Dashboard() {
         </div>
       </section>
 
-      <section className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]">
+      <section data-tour="dashboard-workspaces" className="grid gap-4 xl:grid-cols-[1.2fr_.8fr]">
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
