@@ -76,10 +76,11 @@ export interface SonoraIconProps extends Omit<SVGProps<SVGSVGElement>, 'name'> {
 
 /** Compact, consistent outline icon primitive for Sonora's interface. */
 export function Icon({ name, size = 18, title, className = '', ...props }: SonoraIconProps) {
+  const displaySize = Math.round(size * 1.14);
   return (
     <svg
-      width={size}
-      height={size}
+      width={displaySize}
+      height={displaySize}
       viewBox="0 0 24 24"
       fill="none"
       stroke="currentColor"
