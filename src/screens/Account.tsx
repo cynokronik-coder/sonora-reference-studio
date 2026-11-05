@@ -137,7 +137,7 @@ export default function Account() {
               <p className="text-xs leading-5 text-ink-500">Membership details are not available yet. Confirm the database migration has been applied and refresh this panel.</p>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
-              {status?.billingConfigured ? <Button size="sm" onClick={() => void manageBilling()} disabled={busy}>Manage subscription ↗</Button> : <Badge tone="warn">Stripe is not configured</Badge>}
+              {status?.billingConfigured ? <Button size="sm" onClick={() => void manageBilling()} disabled={busy}>Manage subscription ↗</Button> : <Badge tone="warn">Billing not enabled</Badge>}
             </div>
           </Panel>
         </div>
