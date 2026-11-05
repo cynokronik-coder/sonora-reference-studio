@@ -9,8 +9,9 @@ The app includes a small Node HTTP server in `server/index.mjs`. Audio project s
 | `/api/billing/status` | GET | Reports whether Supabase/Stripe configuration and plan Price IDs are present. |
 | `/api/billing/entitlements` | GET | Verifies Supabase bearer token and returns server-derived plan plus monthly AI allowance and usage. |
 | `/api/billing/checkout` | POST | Authenticated; accepts a plan key and interval, maps to a server-side Stripe Price ID, and returns a Checkout URL. |
+| `/api/billing/credits/checkout` | POST | Authenticated; accepts only a fixed credit pack, resolves its Stripe Price ID server-side and returns a one-time Checkout URL. |
 | `/api/billing/portal` | POST | Authenticated; creates a Stripe customer-portal session for the account's linked customer. |
-| `/api/webhooks/stripe` | POST | Verifies Stripe signature against the raw request body, synchronizes subscription state and records event IDs. |
+| `/api/webhooks/stripe` | POST | Verifies Stripe signature against the raw request body, synchronizes subscriptions, grants credit packs after payment and revokes refunded packs. |
 | `/api/assistant` | POST | Connected AI; when Supabase is configured verifies the user and atomically reserves/captures one AI credit per successful request. |
 
 The server never accepts a Stripe Price ID or amount from the browser. It resolves the permitted plan/interval pair from environment variables. Supabase elevated keys and Stripe secrets are server-only. In production, connected AI refuses to run when Supabase authentication and usage controls are not configured.
