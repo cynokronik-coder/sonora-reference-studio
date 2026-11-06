@@ -80,7 +80,7 @@ export default function Export() {
             <Select
               label="Bit depth"
               value={settings.bitDepth}
-              options={(settings.format === 'wav' ? [16, 24, 32] : [16, 24]).map((depth) => ({ value: depth, label: depth === 32 ? '32-bit float (WAV only)' : `${depth}-bit PCM` }))}
+              options={(settings.format === 'wav' ? ([16, 24, 32] as const) : ([16, 24] as const)).map((depth) => ({ value: depth, label: depth === 32 ? '32-bit float (WAV only)' : `${depth}-bit PCM` }))}
               onChange={(value) => setSettings((s) => ({ ...s, bitDepth: value }))}
               disabled={settings.format === 'mp3'}
             />
