@@ -64,6 +64,9 @@ export class ProcessorChain {
     for (const id of this.byId.keys()) {
       if (!seen.has(id)) this.byId.delete(id);
     }
+    for (const id of this.sidechains.keys()) {
+      if (!seen.has(id)) this.sidechains.delete(id);
+    }
     this.nodes = next;
     this.order = next.map((n) => n.config.id);
   }

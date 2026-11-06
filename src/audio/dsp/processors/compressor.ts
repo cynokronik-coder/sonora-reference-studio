@@ -36,7 +36,8 @@ export class Compressor implements AudioProcessor {
   private sr = 48000;
   private values: ParamValues = {};
   private ballistics = new DbBallistics(48000, 10, 100);
-  private scFilter = new Biquad();
+  private scFilterL = new Biquad();
+  private scFilterR = new Biquad();
   private rmsState = 0;
   private grDb = 0;
   private delayL: Float32Array = new Float32Array(0);
@@ -58,7 +59,8 @@ export class Compressor implements AudioProcessor {
     this.delayR = new Float32Array(maxDelay);
     this.delayIndex = 0;
     this.ballistics.setTimes(10, 100, sampleRate);
-    this.scFilter.configure('highpass', 120, 0, 0.707, sampleRate);
+    this.scFilterL.configure('highpass', 120, 0, 0.707, sampleRate);
+    this.scFilterR.configure('highpass', 120, 0, 0.707, sampleRate);
     void maxBlock;
   }
 
@@ -70,7 +72,8 @@ export class Compressor implements AudioProcessor {
     const attack = (values.attack ?? 10) * behavior.attackScale;
     const release = (values.release ?? 100) * behavior.releaseScale;
     this.ballistics.setTimes(attack, release, this.sr);
-    this.scFilter.configure('highpass', clamp(values.scHpf ?? 120, 20, 1000), 0, 0.707, this.sr);
+    this.scFilterL.configure('highpass', clamp(values.scHpf ?? 120, 20, 1000), 0, 0.707, this.sr);
+    this.scFilterR.configure('highpass', clamp(values.scHpf ?? 120, 20, 1000), 0, 0.707, this.sr);
     const threshold = values.threshold ?? -20;
     const ratio = (values.ratio ?? 4) * behavior.ratioScale;
     const auto = (values.autoMakeup ?? 0) > 0.5;
@@ -104,20 +107,18 @@ export class Compressor implements AudioProcessor {
     for (let i = 0; i < n; i++) {
       const scL = useExternal ? this.sidechainL![i] : L[i];
       const scR = useExternal ? this.sidechainR![i] : R[i];
-      const filteredL = this.scFilter.process(scL);
-      const filteredR = this.scFilter.process(scR);
+      const filteredL = this.scFilterL.process(scL);
+      const filteredR = this.scFilterR.process(scR);
 
-      let detect = Math.max(Math.abs(filteredL), Math.abs(filteredR));
+      const peakL = Math.abs(filteredL);
+      const peakR = Math.abs(filteredR);
+      const linkedPeak = Math.max(peakL, peakR);
+      const averagePeak = (peakL + peakR) * 0.5;
+      let detect = linkedPeak * link + averagePeak * (1 - link);
       if (rmsMix > 0) {
         this.rmsState += ((filteredL * filteredL + filteredR * filteredR) * 0.5 - this.rmsState) * rmsCoeff;
         const rms = Math.sqrt(Math.max(0, this.rmsState));
         detect = detect * (1 - rmsMix) + rms * rmsMix;
-      }
-      if (link < 1) {
-        // Partial linking keeps some independent movement between channels.
-        const l = Math.abs(filteredL);
-        const r = Math.abs(filteredR);
-        detect = detect * link + Math.max(l, r) * (1 - link) * 0 + detect * (1 - link);
       }
 
       const levelDb = gainToDb(Math.max(detect, 1e-7));
@@ -166,7 +167,8 @@ export class Compressor implements AudioProcessor {
     this.delayR.fill(0);
     this.delayIndex = 0;
     this.ballistics.reset();
-    this.scFilter.reset();
+    this.scFilterL.reset();
+    this.scFilterR.reset();
     this.grDb = 0;
     this.rmsState = 0;
   }

@@ -54,27 +54,31 @@ export class RealtimeHost {
   async initialise(): Promise<void> {
     if (this.ready) return;
     if (this.initialising) return this.initialising;
-    this.initialising = (async () => {
+
+    const attempt = (async () => {
       const AudioCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtor) throw new Error('Web Audio is not supported in this browser.');
       const ctx = this.ctx ?? new AudioCtor({ latencyHint: 'interactive' });
       this.ctx = ctx;
+      if (!ctx.audioWorklet) throw new Error('AudioWorklet is not supported in this browser.');
       await ctx.audioWorklet.addModule(workletUrl);
+
       const node = new AudioWorkletNode(ctx, 'sonora-engine', {
         numberOfInputs: 0,
         numberOfOutputs: 1,
         outputChannelCount: [2],
       });
+      this.node = node;
       const comparison = ctx.createGain();
       const monitor = ctx.createGain();
+      this.comparison = comparison;
+      this.monitor = monitor;
       node.connect(comparison);
       comparison.connect(monitor);
       monitor.connect(ctx.destination);
-      this.node = node;
-      this.comparison = comparison;
-      this.monitor = monitor;
       node.port.onmessage = (event: MessageEvent) => this.handle(event.data);
       this.ready = true;
+
       if (this.pendingAssets.length) {
         this.pushAssets(this.pendingAssets);
         this.pendingAssets = [];
@@ -84,7 +88,34 @@ export class RealtimeHost {
         this.pendingProject = null;
       }
     })();
-    return this.initialising;
+
+    this.initialising = attempt;
+    try {
+      await attempt;
+    } catch (error) {
+      // A rejected initialization must not poison every future play attempt.
+      this.ready = false;
+      this.playing = false;
+      this.node?.disconnect();
+      this.node = null;
+      this.monitor?.disconnect();
+      this.comparison?.disconnect();
+      this.monitor = null;
+      this.comparison = null;
+      const context = this.ctx;
+      this.ctx = null;
+      this.loadedAssets.clear();
+      if (context && context.state !== 'closed') {
+        try {
+          await context.close();
+        } catch {
+          // Preserve the original initialization error.
+        }
+      }
+      throw error;
+    } finally {
+      if (this.initialising === attempt) this.initialising = null;
+    }
   }
 
   private handle(message: Record<string, unknown>): void {
@@ -138,15 +169,26 @@ export class RealtimeHost {
     for (const asset of assets) this.loadedAssets.add(asset.id);
   }
 
-  /** Load only assets the worklet has not already received. */
+  /** Reconcile the worklet's asset bank with the assets used by the active project. */
   loadAssets(assets: EngineAsset[]): void {
-    const fresh = assets.filter((a) => !this.loadedAssets.has(a.id));
-    if (!fresh.length) return;
+    const activeIds = new Set(assets.map((asset) => asset.id));
+
     if (!this.ready) {
+      this.pendingAssets = this.pendingAssets.filter((asset) => activeIds.has(asset.id));
+      const pendingIds = new Set(this.pendingAssets.map((asset) => asset.id));
+      const fresh = assets.filter((asset) => !this.loadedAssets.has(asset.id) && !pendingIds.has(asset.id));
       this.pendingAssets.push(...fresh);
       return;
     }
-    this.pushAssets(fresh);
+
+    const removed = [...this.loadedAssets].filter((id) => !activeIds.has(id));
+    if (removed.length && this.node) {
+      this.node.port.postMessage({ type: 'removeAssets', ids: removed });
+      for (const id of removed) this.loadedAssets.delete(id);
+    }
+
+    const fresh = assets.filter((asset) => !this.loadedAssets.has(asset.id));
+    if (fresh.length) this.pushAssets(fresh);
   }
 
   pushProject(project: ProjectState): void {
@@ -212,6 +254,15 @@ export class RealtimeHost {
   }
 
   async close(): Promise<void> {
+    const pendingInitialisation = this.initialising;
+    if (pendingInitialisation) {
+      try {
+        await pendingInitialisation;
+      } catch {
+        // The failed initialization has already released its partial resources.
+      }
+    }
+    this.initialising = null;
     this.ready = false;
     this.node?.disconnect();
     this.node = null;
@@ -222,6 +273,8 @@ export class RealtimeHost {
     await this.ctx?.close();
     this.ctx = null;
     this.loadedAssets.clear();
+    this.pendingAssets = [];
+    this.pendingProject = null;
   }
 }
 

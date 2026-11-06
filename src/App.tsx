@@ -40,7 +40,9 @@ export default function App() {
   const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError, storageError } = useApp();
   const [showLanding, setShowLanding] = useState(() => {
     const hash = window.location.hash;
-    return !['#studio', '#plans', '#account'].includes(hash) && !hash.includes('access_token=');
+    const route = hash.slice(1) as Screen;
+    const knownRoute = NAV.some((item) => item.screen === route);
+    return !knownRoute && !hash.includes('access_token=');
   });
   const [tourOpen, setTourOpen] = useState(false);
   const [assistantFullScreen, setAssistantFullScreen] = useState(false);
@@ -79,16 +81,30 @@ export default function App() {
     const syncFromHash = () => {
       const hash = window.location.hash;
       const authCallback = hash.includes('access_token=');
-      const inApp = hash === '#studio' || hash === '#plans' || hash === '#account' || authCallback;
-      setShowLanding(!inApp);
-      if (hash === '#plans') setScreen('plans');
-      else if (hash === '#account' || authCallback) setScreen('account');
-      else if (hash === '#studio') setScreen('studio');
+      const route = hash.slice(1) as Screen;
+      const knownRoute = NAV.some((item) => item.screen === route);
+      if (authCallback) {
+        setShowLanding(false);
+        setScreen('account');
+      } else if (knownRoute) {
+        setShowLanding(false);
+        setScreen(route);
+      } else {
+        setShowLanding(true);
+      }
     };
     syncFromHash();
     window.addEventListener('hashchange', syncFromHash);
     return () => window.removeEventListener('hashchange', syncFromHash);
   }, []);
+
+  useEffect(() => {
+    if (showLanding || window.location.hash.includes('access_token=')) return;
+    const nextHash = `#${screen}`;
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`);
+    }
+  }, [screen, showLanding]);
 
   useEffect(() => {
     if (showLanding) return;
@@ -167,7 +183,7 @@ export default function App() {
           </div>
         )}
 
-        <main className={`relative z-0 min-h-0 flex-1 overflow-y-auto rounded-b-[26px] ${screen === 'studio' ? '' : 'p-4 sm:p-6 lg:p-8'}`}>
+        <main className="relative z-0 min-h-0 flex-1 overflow-y-auto rounded-b-[26px]">
           {blocked ? (
             <div className="p-5">
               <Panel>
