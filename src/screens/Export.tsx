@@ -23,11 +23,13 @@ export default function Export() {
     metadata: { title: '', artist: '', comment: '' },
   });
   const [verifyingId, setVerifyingId] = useState<string | null>(null);
+  const [rangeMode, setRangeMode] = useState<'full' | 'custom'>('full');
   if (!project) return <div className="p-5"><Panel><EmptyState title="No project open" description="Open a project to render and export." /></Panel></div>;
 
   const duration = Math.max(0, ...project.tracks.flatMap((t) => t.clips.map((c) => c.start + c.duration)));
   const audioTracks = project.tracks.filter((t) => t.clips.length > 0 && t.kind !== 'reference');
-  const endSec = settings.endSec > 0 ? Math.min(settings.endSec, duration) : duration;
+  const endSec = rangeMode === 'full' ? duration : Math.min(settings.endSec, duration);
+  const validRange = duration > 0 && endSec > settings.startSec;
   const targetLufs = project.targetLufs ?? -14;
   const targetTp = project.targetTruePeak ?? -1;
 
@@ -78,7 +80,7 @@ export default function Export() {
             <Select
               label="Bit depth"
               value={settings.bitDepth}
-              options={[{ value: 16, label: '16-bit PCM' }, { value: 24, label: '24-bit PCM' }, { value: 32, label: '32-bit float (WAV only)' }]}
+              options={(settings.format === 'wav' ? [16, 24, 32] : [16, 24]).map((depth) => ({ value: depth, label: depth === 32 ? '32-bit float (WAV only)' : `${depth}-bit PCM` }))}
               onChange={(value) => setSettings((s) => ({ ...s, bitDepth: value }))}
               disabled={settings.format === 'mp3'}
             />
@@ -92,11 +94,6 @@ export default function Export() {
             {settings.format === 'mp3' && (
               <p className="text-2xs leading-relaxed text-signal-amber/90 sm:col-span-2">
                 MP3 encoding is limited to 44.1/48 kHz. Choose WAV for high-resolution delivery.
-              </p>
-            )}
-            {settings.format === 'aiff' && settings.bitDepth === 32 && (
-              <p className="text-2xs leading-relaxed text-signal-amber/90 sm:col-span-2">
-                AIFF supports 16/24-bit here; switch to WAV for 32-bit float.
               </p>
             )}
             <Select
@@ -115,21 +112,32 @@ export default function Export() {
             )}
             <Select
               label="Range"
-              value={endSec === duration ? 'full' : 'custom'}
+              value={rangeMode}
               options={[{ value: 'full', label: 'Full song' }, { value: 'custom', label: 'Selected region' }]}
-              onChange={(value) =>
-                setSettings((s) => ({ ...s, startSec: 0, endSec: value === 'full' ? 0 : Math.min(duration, s.startSec + 30) }))
-              }
+              onChange={(value) => {
+                setRangeMode(value);
+                setSettings((s) => ({
+                  ...s,
+                  startSec: 0,
+                  endSec: value === 'full' ? 0 : Math.min(duration, 30),
+                }));
+              }}
             />
-            {endSec !== duration && (
+            {rangeMode === 'custom' && (
               <>
                 <label className="block">
                   <span className="mb-1 block text-2xs text-ink-400">Start (s)</span>
-                  <input type="number" step={0.1} min={0} max={endSec} value={settings.startSec} onChange={(e) => setSettings((s) => ({ ...s, startSec: Math.max(0, Number(e.target.value)) }))} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100 placeholder:text-ink-500 transition-colors hover:border-white/[.15]" />
+                  <input type="number" step={0.1} min={0} max={endSec} value={settings.startSec} onChange={(e) => {
+                    const next = Math.min(endSec, Math.max(0, Number(e.target.value) || 0));
+                    setSettings((s) => ({ ...s, startSec: next }));
+                  }} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100 placeholder:text-ink-500 transition-colors hover:border-white/[.15]" />
                 </label>
                 <label className="block">
                   <span className="mb-1 block text-2xs text-ink-400">End (s)</span>
-                  <input type="number" step={0.1} min={settings.startSec} max={duration} value={endSec} onChange={(e) => setSettings((s) => ({ ...s, endSec: Math.max(s.startSec, Number(e.target.value)) }))} className="w-full rounded border border-ink-600 bg-ink-900 px-2 py-1 text-xs text-ink-100" />
+                  <input type="number" step={0.1} min={settings.startSec} max={duration} value={endSec} onChange={(e) => {
+                    const next = Math.min(duration, Math.max(settings.startSec, Number(e.target.value) || 0));
+                    setSettings((s) => ({ ...s, endSec: next }));
+                  }} className="focus-ring w-full rounded-control border border-white/[.09] bg-[#0D0D1B] px-3 py-2 text-xs text-ink-100" />
                 </label>
               </>
             )}
@@ -171,7 +179,7 @@ export default function Export() {
           <div data-tour="export-render" className="mt-3 flex flex-wrap items-center gap-2">
             <Button
               variant="primary"
-              disabled={Boolean(busy) || (settings.mode === 'track' && !audioTracks.length)}
+              disabled={Boolean(busy) || !validRange || (settings.mode === 'track' && !audioTracks.length)}
               onClick={() =>
                 void exportMix({
                   ...settings,
@@ -187,6 +195,8 @@ export default function Export() {
               {settings.format === 'mp3' ? 'MP3 is limited to 44.1/48 kHz and is lossy.' : settings.format === 'aiff' && settings.bitDepth === 32 ? 'AIFF does not support 32-bit float here; choose WAV.' : `${settings.format.toUpperCase()} · ${settings.sampleRate} Hz`}
             </span>
           </div>
+          {rangeMode === 'custom' && !validRange && <p className="mt-2 text-2xs text-signal-amber">Choose an end time after the start time and within the song.</p>}
+          {duration <= 0 && <p className="mt-2 text-2xs text-signal-amber">Add an audio clip to the timeline before exporting.</p>}
           {busy && (
             <div className="mt-2 rounded-xl border border-[#A77AFF]/20 bg-[#8957FF]/[.07] p-3 text-2xs text-[#C4A2FF]">
               {busy.label} · {Math.round(busy.progress * 100)}%

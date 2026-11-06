@@ -105,6 +105,80 @@ describe('biquad and EQ', () => {
 });
 
 describe('dynamics', () => {
+  it('keeps the compressor sidechain filter independent between stereo channels', () => {
+    const process = (left: Float32Array, right: Float32Array) => {
+      const comp = new Compressor();
+      comp.prepare(SR, 512);
+      comp.setValues({
+        ...createDefaultParams('compressor'),
+        threshold: -36,
+        ratio: 8,
+        attack: 2,
+        release: 100,
+        knee: 0,
+        lookahead: 0,
+        scHpf: 120,
+        style: 0,
+        link: 100,
+        mix: 100,
+        makeup: 0,
+        autoMakeup: 0,
+      });
+      const L = left.slice();
+      const R = right.slice();
+      for (let i = 0; i < L.length; i += 512) {
+        const n = Math.min(512, L.length - i);
+        comp.process(L.subarray(i, i + n), R.subarray(i, i + n), n);
+      }
+      return { L, R };
+    };
+    const input = stereoBuffer(
+      1,
+      (t) => 0.45 * Math.sin(2 * Math.PI * 180 * t) + 0.08 * Math.sin(2 * Math.PI * 900 * t),
+      (t) => 0.12 * Math.sin(2 * Math.PI * 4200 * t + 0.2),
+    );
+    const normal = process(input.L, input.R);
+    const swapped = process(input.R, input.L);
+    let error = 0;
+    for (let i = 0; i < input.n; i++) {
+      error = Math.max(error, Math.abs(normal.L[i] - swapped.R[i]), Math.abs(normal.R[i] - swapped.L[i]));
+    }
+    expect(error).toBeLessThan(1e-5);
+  });
+
+  it('uses the Stereo Link control to blend peak-linked and average detection', () => {
+    const renderQuietChannel = (link: number) => {
+      const comp = new Compressor();
+      comp.prepare(SR, 512);
+      comp.setValues({
+        ...createDefaultParams('compressor'),
+        threshold: -30,
+        ratio: 8,
+        attack: 1,
+        release: 100,
+        knee: 0,
+        lookahead: 0,
+        scHpf: 20,
+        style: 0,
+        link,
+        mix: 100,
+        makeup: 0,
+        autoMakeup: 0,
+      });
+      const { L, R } = stereoBuffer(
+        2,
+        (t) => 0.8 * Math.sin(2 * Math.PI * 1000 * t),
+        (t) => 0.08 * Math.sin(2 * Math.PI * 1000 * t),
+      );
+      for (let i = 0; i < L.length; i += 512) {
+        const n = Math.min(512, L.length - i);
+        comp.process(L.subarray(i, i + n), R.subarray(i, i + n), n);
+      }
+      return rmsOf(R);
+    };
+    expect(renderQuietChannel(0)).toBeGreaterThan(renderQuietChannel(100) * 1.1);
+  });
+
   it('reduces a signal above threshold and reports gain reduction', () => {
     const comp = new Compressor();
     comp.prepare(SR, 512);

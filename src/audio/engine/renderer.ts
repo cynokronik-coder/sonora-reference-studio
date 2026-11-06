@@ -365,10 +365,9 @@ export class ProjectRenderer {
         }
       }
       for (const processor of track.processors) {
-        if (processor.sidechainFrom) {
-          const key = this.rawKeys.get(processor.sidechainFrom);
-          path.chain.setSidechain(processor.id, key?.L ?? null, key?.R ?? null);
-        }
+        // Always refresh the key, including clearing it when a sidechain route is removed.
+        const key = processor.sidechainFrom ? this.rawKeys.get(processor.sidechainFrom) : undefined;
+        path.chain.setSidechain(processor.id, key?.L ?? null, key?.R ?? null);
       }
       // Automation must be applied after the structural sync and immediately
       // before processing, otherwise the base parameter values overwrite it.

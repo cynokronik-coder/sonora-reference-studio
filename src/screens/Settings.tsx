@@ -11,7 +11,7 @@ const NOT_IMPLEMENTED = [
   ['AI stem separation', 'Separating a stereo mix into vocals/drums/bass/other requires a source-separation model. Not included.'],
   ['Instrumental / vocal-only export', 'Depends on stem separation, so it is deliberately disabled rather than faked.'],
   ['Batch mastering', 'The export pipeline is single-project. A queue is not implemented.'],
-  ['Collaboration, comments, sharing', 'No accounts or multi-user storage exist in this local build.'],
+  ['Cloud project sync and collaboration', 'Projects, audio assets and exports remain local to this browser. Shared workspaces and multi-user editing are not included.'],
   ['DAW session import', 'Only WAV/AIFF/FLAC/MP3/AAC/OGG imports and individual stems are supported.'],
   ['Hardware inserts', 'Not possible in a browser engine.'],
 ];
@@ -233,8 +233,8 @@ export default function Settings() {
               ) : <Button variant="danger" onClick={() => setConfirmClear(true)}>Delete all local data</Button>}
             </div>
           </Panel>
-          <Panel title="Accounts and privacy" subtitle="This build runs locally; multi-user access is not implemented.">
-            <p className="text-xs leading-relaxed text-ink-400">There is no account system or server-side user table in this local build. Reference tracks remain stored in the current browser profile. Multi-user access control, sharing and server-side retention policies are deployment concerns, not simulated features.</p>
+          <Panel title="Accounts and privacy" subtitle="Account and billing services are separate from local project storage.">
+            <p className="text-xs leading-relaxed text-ink-400">Sign-in, subscription management and billing are implemented when Supabase and Stripe are configured. Project files, original audio, analyses and exports remain stored in this browser profile. Cloud project sync, collaboration and shared workspaces are not enabled.</p>
             <div className="mt-3 flex items-center gap-2"><Icon name="check" size={16} className="text-signal-green" /><span className="text-2xs text-ink-400">Original audio remains local unless you explicitly export it or configure a connected service.</span></div>
           </Panel>
         </div>
