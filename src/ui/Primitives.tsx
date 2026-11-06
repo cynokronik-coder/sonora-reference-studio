@@ -56,7 +56,7 @@ export function Button({
 }) {
   const base =
     'inline-flex items-center justify-center gap-2 rounded-control border font-semibold tracking-[.005em] transition-all duration-180 focus-ring disabled:cursor-not-allowed disabled:opacity-40 active:scale-[.985]';
-  const sizes = size === 'sm' ? 'min-h-10 px-4 py-2 text-xs' : 'min-h-11 px-5 py-2.5 text-sm';
+  const sizes = size === 'sm' ? 'min-h-11 px-5 py-2.5 text-sm' : 'min-h-13 px-7 py-3 text-base';
   const variants: Record<string, string> = {
     primary: 'border-[#A77AFF]/55 bg-gradient-to-br from-[#8957FF] to-[#7545EA] text-white shadow-violet hover:brightness-110 hover:shadow-violet-soft',
     secondary: 'border-white/[.09] bg-[#1D1D30]/90 text-ink-100 shadow-[0_1px_0_rgba(255,255,255,.035)_inset] hover:border-white/[.16] hover:bg-[#252538]',
