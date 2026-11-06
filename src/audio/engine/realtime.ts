@@ -169,15 +169,26 @@ export class RealtimeHost {
     for (const asset of assets) this.loadedAssets.add(asset.id);
   }
 
-  /** Load only assets the worklet has not already received. */
+  /** Reconcile the worklet's asset bank with the assets used by the active project. */
   loadAssets(assets: EngineAsset[]): void {
-    const fresh = assets.filter((a) => !this.loadedAssets.has(a.id));
-    if (!fresh.length) return;
+    const activeIds = new Set(assets.map((asset) => asset.id));
+
     if (!this.ready) {
+      this.pendingAssets = this.pendingAssets.filter((asset) => activeIds.has(asset.id));
+      const pendingIds = new Set(this.pendingAssets.map((asset) => asset.id));
+      const fresh = assets.filter((asset) => !this.loadedAssets.has(asset.id) && !pendingIds.has(asset.id));
       this.pendingAssets.push(...fresh);
       return;
     }
-    this.pushAssets(fresh);
+
+    const removed = [...this.loadedAssets].filter((id) => !activeIds.has(id));
+    if (removed.length && this.node) {
+      this.node.port.postMessage({ type: 'removeAssets', ids: removed });
+      for (const id of removed) this.loadedAssets.delete(id);
+    }
+
+    const fresh = assets.filter((asset) => !this.loadedAssets.has(asset.id));
+    if (fresh.length) this.pushAssets(fresh);
   }
 
   pushProject(project: ProjectState): void {
@@ -262,6 +273,8 @@ export class RealtimeHost {
     await this.ctx?.close();
     this.ctx = null;
     this.loadedAssets.clear();
+    this.pendingAssets = [];
+    this.pendingProject = null;
   }
 }
 

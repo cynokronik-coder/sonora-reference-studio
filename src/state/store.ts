@@ -563,7 +563,12 @@ export const useApp = create<AppState>((set, get) => ({
 
       const assets = [...get().assets, ...createdAssets];
       const buffers = { ...get().assetBuffers, ...newBuffers };
-      set({ assets, assetBuffers: buffers });
+      set({
+        assets,
+        assetBuffers: buffers,
+        matchPlan: null,
+        matchPreview: null,
+      });
 
       get().mutate((next) => {
         for (const meta of createdAssets) {
