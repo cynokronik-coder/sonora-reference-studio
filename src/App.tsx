@@ -16,6 +16,7 @@ import Learn from './screens/Learn';
 import { Button, EmptyState, Panel, ProgressBar } from './ui/Primitives';
 import TopNavigation from './ui/TopNavigation';
 import { GuidedTour } from './ui/GuidedTour';
+import { AssistantPanel } from './ui/Mixer';
 import { realtimeHost } from './audio/engine/realtime';
 
 const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boolean }[] = [
@@ -42,6 +43,7 @@ export default function App() {
     return !['#studio', '#plans', '#account'].includes(hash) && !hash.includes('access_token=');
   });
   const [tourOpen, setTourOpen] = useState(false);
+  const [assistantFullScreen, setAssistantFullScreen] = useState(false);
 
   const enterStudio = () => {
     window.location.hash = 'studio';
@@ -64,6 +66,13 @@ export default function App() {
   const openLanding = () => {
     window.location.hash = '';
     setShowLanding(true);
+  };
+
+  const openAssistantFullScreen = () => {
+    window.location.hash = 'studio';
+    setShowLanding(false);
+    setScreen('studio');
+    setAssistantFullScreen(true);
   };
 
   useEffect(() => {
@@ -120,17 +129,18 @@ export default function App() {
   const blocked = active?.requiresProject && !project;
 
   return (
-    <div className="relative flex h-screen w-full overflow-hidden bg-sonora-canvas p-2 text-ink-100 sm:p-3 lg:p-4">
+    <div className="relative flex h-screen w-full overflow-hidden bg-sonora-canvas p-3 text-ink-100 sm:p-5 lg:p-7">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_82%_0%,rgba(117,69,234,.12),transparent_35%),radial-gradient(ellipse_at_50%_100%,rgba(137,87,255,.065),transparent_40%)]" />
 
 
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[24px] border border-white/[.12] bg-[#0D0D1B]/80 shadow-[0_24px_80px_rgba(0,0,0,.48)]">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col overflow-hidden rounded-[30px] border border-white/[.12] bg-[#0D0D1B]/80 shadow-[0_24px_80px_rgba(0,0,0,.48)]">
         <TopNavigation
           screen={screen}
           projectName={project?.name}
           projectOpen={Boolean(project)}
           mode={mode}
           onModeChange={setMode}
+          onOpenAssistant={openAssistantFullScreen}
           onNavigate={(destination) => {
             if (destination === 'plans') openPricing();
             else if (destination === 'account') openAccount();
@@ -157,7 +167,7 @@ export default function App() {
           </div>
         )}
 
-        <main className="relative z-0 min-h-0 flex-1 overflow-y-auto rounded-b-[22px]">
+        <main className={`relative z-0 min-h-0 flex-1 overflow-y-auto rounded-b-[26px] ${screen === 'studio' ? '' : 'p-4 sm:p-6 lg:p-8'}`}>
           {blocked ? (
             <div className="p-5">
               <Panel>
@@ -177,7 +187,7 @@ export default function App() {
           ) : screen === 'account' ? (
             <Account />
           ) : screen === 'studio' ? (
-            <Studio onStartTour={() => setTourOpen(true)} />
+            <Studio onStartTour={() => setTourOpen(true)} onExpandAssistant={openAssistantFullScreen} />
           ) : screen === 'reference' ? (
             <ReferenceMatch />
           ) : screen === 'mastering' ? (
@@ -215,6 +225,14 @@ export default function App() {
       )}
 
       <GuidedTour open={tourOpen} screen={screen} onClose={() => setTourOpen(false)} />
+
+      {assistantFullScreen && (
+        <div className="fixed inset-0 z-[100] flex bg-[#070710]/95 p-3 backdrop-blur-xl sm:p-5 lg:p-7">
+          <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-[30px] border border-white/[.12] bg-[#0D0D1B] shadow-[0_28px_100px_rgba(0,0,0,.68)]">
+            <AssistantPanel onClose={() => setAssistantFullScreen(false)} />
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div className="fixed bottom-4 left-1/2 z-50 max-w-xl -translate-x-1/2 rounded-xl border border-white/[.10] bg-[#151426]/95 px-4 py-2.5 text-xs text-ink-100 shadow-floating backdrop-blur-xl">

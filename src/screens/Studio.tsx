@@ -15,7 +15,7 @@ type Workspace = 'arrangement' | 'mixer' | 'processing';
 
 const TRACK_KINDS: TrackKind[] = ['audio', 'vocal', 'instrument', 'drums', 'bass', 'instrumental', 'stem'];
 
-export default function Studio({ onStartTour }: { onStartTour?: () => void } = {}) {
+export default function Studio({ onStartTour, onExpandAssistant }: { onStartTour?: () => void; onExpandAssistant?: () => void } = {}) {
   const project = useApp((s) => s.project);
   const { selectedTrackId, selectTrack, importFiles, updateTrack, removeTrack, addTrack } = useApp();
   const picker = useFilePicker();
@@ -70,8 +70,8 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
 
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-sonora-canvas text-ink-100">
-      <header className="relative z-30 flex h-[72px] shrink-0 items-center justify-between gap-4 border-b border-white/[.07] bg-[#0D0D1B]/92 px-4 shadow-[0_8px_28px_rgba(0,0,0,.16)] backdrop-blur-xl sm:px-5">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-sonora-canvas text-ink-100">
+      <header className="relative z-30 flex h-[88px] shrink-0 items-center justify-between gap-5 border-b border-white/[.07] bg-[#0D0D1B]/92 px-6 shadow-[0_8px_28px_rgba(0,0,0,.16)] backdrop-blur-xl sm:px-8">
         <div className="flex min-w-0 items-center gap-2.5">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-[#A77AFF]/35 bg-gradient-to-br from-[#8957FF]/25 to-[#7545EA]/10 text-[#C4A2FF] shadow-violet-soft">
             <Icon name="audio-lines" size={24} />
@@ -114,9 +114,9 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
         </div>
       </header>
 
-      <div data-tour="studio-transport"><TransportBar /></div>
+      <div data-tour="studio-transport" className="shrink-0"><TransportBar /></div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <aside data-tour="studio-tracks" className="hidden w-[220px] shrink-0 flex-col border-r border-white/[.07] bg-[#0D0D1B]/92 lg:flex xl:w-[240px]">
           <div className="flex h-[50px] shrink-0 items-center justify-between border-b border-white/[.07] px-3">
             <div className="flex items-center gap-2">
@@ -203,8 +203,8 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
           </div>
         </aside>
 
-        <section className="flex min-w-0 flex-1 flex-col">
-          <div className="flex h-[43px] shrink-0 items-center justify-between gap-2 border-b border-white/[.07] bg-[#11111F] px-3">
+        <section className="relative z-0 flex min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-white/[.07] bg-[#11111F] px-5">
             <div className="flex items-center gap-1 rounded-xl border border-white/[.07] bg-black/20 p-1">
               {(['arrangement', 'mixer', 'processing'] as Workspace[]).map((tab) => (
                 <button key={tab} type="button" onClick={() => setWorkspace(tab)} className={`rounded-lg px-3 py-1.5 text-[10px] font-medium capitalize transition-all ${workspace === tab ? 'bg-[#8957FF]/20 text-[#C4A2FF] shadow-violet-soft' : 'text-ink-500 hover:text-ink-200'}`}>
@@ -212,7 +212,7 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
                 </button>
               ))}
             </div>
-            <span className="hidden text-[10px] text-ink-500 sm:inline">{workspace === 'arrangement' ? 'Arrange and edit your tracks' : workspace === 'mixer' ? 'Balance channels and buses' : 'Shape your sound'}</span>
+            <span className="hidden w-[240px] shrink-0 whitespace-nowrap text-right text-xs text-ink-500 sm:inline">{workspace === 'arrangement' ? 'Arrange and edit your tracks' : workspace === 'mixer' ? 'Balance channels and buses' : 'Shape your sound'}</span>
           </div>
 
           <div data-tour="studio-timeline" className="min-h-0 flex-1 overflow-hidden bg-[#090914]">
@@ -259,8 +259,8 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
             )}
           </div>
 
-          <div data-tour="studio-processing" className="flex h-[76px] shrink-0 items-center justify-center border-t border-white/[.07] bg-[#0D0D1B]/95 px-2 sm:h-[92px] sm:px-4">
-            <div className="grid w-full max-w-[600px] grid-cols-5 gap-2">
+          <div data-tour="studio-processing" className="flex h-[92px] shrink-0 items-center justify-center border-t border-white/[.07] bg-[#0D0D1B]/95 px-3 sm:h-[104px] sm:px-6">
+            <div className="grid w-full max-w-[760px] grid-cols-5 gap-3">
               {[
                 { id: 'mix', label: 'Mix', icon: 'sliders' as const, action: () => setWorkspace('arrangement'), active: workspace !== 'processing' },
                 { id: 'effects', label: 'Effects', icon: 'sparkles' as const, action: () => { setWorkspace('processing'); setProcessingCategory('effects'); }, active: workspace === 'processing' && processingCategory === 'effects' },
@@ -268,9 +268,9 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
                 { id: 'dynamics', label: 'Dynamics', icon: 'activity' as const, action: () => { setWorkspace('processing'); setProcessingCategory('dynamics'); }, active: workspace === 'processing' && processingCategory === 'dynamics' },
                 { id: 'export', label: 'Export', icon: 'download' as const, action: () => useApp.getState().setScreen('export'), active: false },
               ].map((item) => (
-                <button key={item.id} type="button" onClick={item.action} aria-pressed={item.active} className={`group flex h-[64px] flex-col items-center justify-center gap-1 rounded-xl border transition-all duration-180 sm:h-[74px] sm:gap-2 ${item.active ? 'border-[#A77AFF]/55 bg-[#8957FF]/15 text-white shadow-violet-soft' : 'border-white/[.055] bg-[#171727]/70 text-ink-400 hover:border-white/[.14] hover:bg-[#1D1D30] hover:text-ink-100'}`}>
+                <button key={item.id} type="button" onClick={item.action} aria-pressed={item.active} className={`group flex h-[76px] flex-col items-center justify-center gap-2 rounded-2xl border transition-colors duration-150 sm:h-[84px] sm:gap-2.5 ${item.active ? 'border-[#A77AFF]/55 bg-[#8957FF]/15 text-white shadow-violet-soft' : 'border-white/[.055] bg-[#171727]/70 text-ink-400 hover:border-white/[.14] hover:bg-[#1D1D30] hover:text-ink-100'}`}>
                   <Icon name={item.icon} size={24} className={item.active ? 'text-[#C4A2FF]' : 'text-ink-400 group-hover:text-ink-100'} />
-                  <span className="text-[9px] font-medium sm:text-[10px]">{item.label}</span>
+                  <span className="text-xs font-semibold sm:text-sm">{item.label}</span>
                 </button>
               ))}
             </div>
@@ -279,16 +279,16 @@ export default function Studio({ onStartTour }: { onStartTour?: () => void } = {
 
         {assistantOpen && (
           <>
-            <aside data-tour="studio-assistant" className="hidden w-[300px] shrink-0 border-l border-white/[.07] bg-[#0D0D1B] xl:flex 2xl:w-[320px]">
-              <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} /></div>
+            <aside data-tour="studio-assistant" className="absolute inset-y-0 right-0 z-40 hidden w-[420px] max-w-[44%] border-l border-white/[.10] bg-[#0D0D1B] shadow-floating xl:flex 2xl:w-[480px]">
+              <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
             </aside>
             <div className="fixed inset-0 z-[70] bg-[#05050c]/65 backdrop-blur-sm xl:hidden" onClick={() => setAssistantOpen(false)}>
               <aside
                 data-tour="studio-assistant"
-                className="absolute inset-y-0 right-0 flex w-[min(360px,94vw)] flex-col border-l border-white/[.10] bg-[#0D0D1B] shadow-floating"
+                className="absolute inset-y-0 right-0 flex w-[min(520px,96vw)] flex-col border-l border-white/[.10] bg-[#0D0D1B] shadow-floating"
                 onClick={(event) => event.stopPropagation()}
               >
-                <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} /></div>
+                <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
               </aside>
             </div>
           </>

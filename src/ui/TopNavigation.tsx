@@ -10,6 +10,7 @@ interface TopNavigationProps {
   mode: Mode;
   onModeChange: (mode: Mode) => void;
   onNavigate: (screen: Screen) => void;
+  onOpenAssistant: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onOpenLanding: () => void;
@@ -42,6 +43,7 @@ export default function TopNavigation({
   mode,
   onModeChange,
   onNavigate,
+  onOpenAssistant,
   onUndo,
   onRedo,
   onOpenLanding,
@@ -77,7 +79,7 @@ export default function TopNavigation({
   };
 
   return (
-    <header className="relative z-30 flex h-[76px] shrink-0 items-center justify-between gap-3 border-b border-white/[.07] bg-[#0D0D1B]/88 px-5 shadow-[0_8px_30px_rgba(0,0,0,.14)] backdrop-blur-xl sm:px-6 lg:px-7">
+    <header className="relative z-30 flex h-[88px] shrink-0 items-center justify-between gap-4 border-b border-white/[.07] bg-[#0D0D1B]/88 px-6 shadow-[0_8px_30px_rgba(0,0,0,.14)] backdrop-blur-xl sm:px-8 lg:px-10">
       <div className="flex min-w-0 shrink-0 items-center gap-2.5">
         <button
           type="button"
@@ -104,9 +106,9 @@ export default function TopNavigation({
               key={item.label}
               type="button"
               disabled={disabled}
-              onClick={() => navigate(item.screen)}
+              onClick={() => { if (item.label === 'AI Assistant') { onOpenAssistant(); setMoreOpen(false); } else navigate(item.screen); }}
               aria-current={selected ? 'page' : undefined}
-              className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium transition-all duration-180 disabled:cursor-not-allowed disabled:opacity-35 sm:px-5 sm:text-sm ${
+              className={`relative flex h-12 shrink-0 items-center gap-2.5 rounded-xl px-5 text-sm font-semibold transition-all duration-180 disabled:cursor-not-allowed disabled:opacity-35 sm:px-6 sm:text-base ${
                 selected
                   ? 'bg-[#8957FF]/15 text-white shadow-[0_4px_18px_rgba(117,69,234,.12)]'
                   : 'text-ink-400 hover:bg-white/[.04] hover:text-ink-100'
@@ -128,14 +130,14 @@ export default function TopNavigation({
             aria-haspopup="menu"
             aria-expanded={moreOpen}
             onClick={() => setMoreOpen((open) => !open)}
-            className={`flex h-11 items-center gap-1.5 rounded-xl px-4 text-sm font-medium transition-colors ${
+            className={`flex h-12 items-center gap-2 rounded-xl px-5 text-base font-semibold transition-colors ${
               moreOpen ? 'bg-white/[.06] text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-ink-100'
             }`}
           >
             More <Icon name="chevron-down" size={14} />
           </button>
           {moreOpen && (
-            <div role="menu" className="absolute right-0 top-[calc(100%+12px)] z-50 w-64 rounded-2xl border border-white/[.10] bg-[#151426]/95 p-2 shadow-floating backdrop-blur-xl">
+            <div role="menu" className="absolute right-0 top-[calc(100%+12px)] z-50 w-72 rounded-2xl border border-white/[.10] bg-[#151426]/95 p-3 shadow-floating backdrop-blur-xl">
               <div className="px-3 pb-2 pt-2.5 text-[10px] font-semibold uppercase tracking-[.16em] text-ink-500">Workspace</div>
               {SECONDARY_LINKS.map((item) => {
                 const disabled = Boolean(item.disabledWithoutProject && !projectOpen);
@@ -146,7 +148,7 @@ export default function TopNavigation({
                     role="menuitem"
                     disabled={disabled}
                     onClick={() => navigate(item.screen)}
-                    className={`flex w-full items-center rounded-xl px-3 py-3 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+                    className={`flex w-full items-center rounded-xl px-4 py-4 text-left text-base font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
                       screen === item.screen ? 'bg-[#8957FF]/15 text-[#C4A2FF]' : 'text-ink-300 hover:bg-white/[.05] hover:text-white'
                     }`}
                   >
