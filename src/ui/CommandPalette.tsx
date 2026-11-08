@@ -129,6 +129,11 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
 
   const activeCommand = filtered[activeIndex];
 
+  useEffect(() => {
+    if (!open || !activeCommand || typeof document === 'undefined') return;
+    document.getElementById(`sonora-command-${activeCommand.id}`)?.scrollIntoView({ block: 'nearest' });
+  }, [activeCommand, open]);
+
   return createPortal(
     <div
       className="fixed inset-0 z-[1300] flex items-start justify-center overflow-y-auto bg-[#05050D]/75 px-4 pb-8 pt-[min(18vh,150px)] backdrop-blur-md"
