@@ -133,8 +133,14 @@ async function recoverSessionFromRedirect(): Promise<AuthSession | null> {
 
 export async function getAuthSession(): Promise<AuthSession | null> {
   if (currentSession === undefined) {
-    currentSession = readStoredSession();
-    if (!currentSession) await recoverSessionFromRedirect();
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    const isRecoveryCallback = hash.includes('type=recovery') || hash.includes('access_token=') && hash.includes('type=recovery');
+    if (isRecoveryCallback) {
+      await recoverSessionFromRedirect();
+    } else {
+      currentSession = readStoredSession();
+      if (!currentSession) await recoverSessionFromRedirect();
+    }
   }
   const session = currentSession;
   if (!session) return null;
