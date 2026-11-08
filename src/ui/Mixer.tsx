@@ -42,13 +42,13 @@ export function TransportBar() {
           {lastSavedAt ? 'saved ' + new Date(lastSavedAt).toLocaleTimeString() : project?.autosave ? 'autosave on' : 'unsaved'}
         </span>
         <div className="relative">
-          <Button size="sm" variant={toolsOpen ? 'secondary' : 'ghost'} onClick={() => setToolsOpen((open) => !open)}>
-            Tools {toolsOpen ? '↑' : '↓'}
+          <Button size="sm" variant={toolsOpen ? 'secondary' : 'ghost'} onClick={() => setToolsOpen((open) => !open)} aria-haspopup="dialog" aria-expanded={toolsOpen}>
+            More {toolsOpen ? '↑' : '↓'}
           </Button>
           {toolsOpen && (
             <div className="absolute right-0 top-full z-50 mt-2 w-[min(340px,calc(100vw-24px))] rounded-xl border border-white/[.10] bg-[#151426]/95 p-3 text-left shadow-floating backdrop-blur-xl">
               <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-ink-100">Playback tools</p>
+                <p className="text-xs font-semibold text-ink-100">More playback tools</p>
                 <button type="button" onClick={() => setToolsOpen(false)} className="rounded px-1 text-ink-500 hover:text-ink-100" aria-label="Close playback tools">×</button>
               </div>
               <div className="mt-3">
