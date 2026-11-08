@@ -17,6 +17,7 @@ import { Button, EmptyState, Panel, ProgressBar } from './ui/Primitives';
 import TopNavigation from './ui/TopNavigation';
 import { GuidedTour } from './ui/GuidedTour';
 import { AssistantPanel } from './ui/Mixer';
+import { CommandPalette } from './ui/CommandPalette';
 import { realtimeHost } from './audio/engine/realtime';
 
 const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boolean }[] = [
@@ -46,6 +47,7 @@ export default function App() {
   });
   const [tourOpen, setTourOpen] = useState(false);
   const [assistantFullScreen, setAssistantFullScreen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   const enterStudio = () => {
     window.location.hash = 'studio';
@@ -75,6 +77,17 @@ export default function App() {
     setShowLanding(false);
     setScreen('studio');
     setAssistantFullScreen(true);
+  };
+
+  const navigateToScreen = (destination: Screen) => {
+    setCommandPaletteOpen(false);
+    if (destination === 'plans') openPricing();
+    else if (destination === 'account') openAccount();
+    else if (destination === 'studio') enterStudio();
+    else {
+      setShowLanding(false);
+      setScreen(destination);
+    }
   };
 
   useEffect(() => {
@@ -123,6 +136,11 @@ export default function App() {
     const handler = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null;
       const typing = target && ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setCommandPaletteOpen(true);
+        return;
+      }
       if (typing) return;
       if (event.code === 'Space') {
         event.preventDefault();
@@ -158,11 +176,8 @@ export default function App() {
           mode={mode}
           onModeChange={setMode}
           onOpenAssistant={openAssistantFullScreen}
-          onNavigate={(destination) => {
-            if (destination === 'plans') openPricing();
-            else if (destination === 'account') openAccount();
-            else setScreen(destination);
-          }}
+          onOpenCommandPalette={() => setCommandPaletteOpen(true)}
+          onNavigate={navigateToScreen}
           onUndo={undo}
           onRedo={redo}
           onOpenLanding={openLanding}
@@ -242,6 +257,8 @@ export default function App() {
       )}
 
       <GuidedTour open={tourOpen} screen={screen} onClose={() => setTourOpen(false)} />
+
+      <CommandPalette open={commandPaletteOpen} hasProject={Boolean(project)} onClose={() => setCommandPaletteOpen(false)} onNavigate={navigateToScreen} />
 
       {assistantFullScreen && (
         <div className="fixed inset-0 z-[100] flex bg-[#070710]/95 p-3 backdrop-blur-xl sm:p-5 lg:p-7">
