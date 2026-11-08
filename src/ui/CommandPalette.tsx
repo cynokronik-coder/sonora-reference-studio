@@ -104,6 +104,13 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
     };
   }, [open]);
 
+  const activeCommand = filtered[activeIndex];
+
+  useEffect(() => {
+    if (!open || !activeCommand || typeof document === 'undefined') return;
+    document.getElementById(`sonora-command-${activeCommand.id}`)?.scrollIntoView({ block: 'nearest' });
+  }, [activeCommand, open]);
+
   if (!open || typeof document === 'undefined') return null;
 
   const choose = (command: Command) => {
@@ -126,13 +133,6 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
       if (selected) choose(selected);
     }
   };
-
-  const activeCommand = filtered[activeIndex];
-
-  useEffect(() => {
-    if (!open || !activeCommand || typeof document === 'undefined') return;
-    document.getElementById(`sonora-command-${activeCommand.id}`)?.scrollIntoView({ block: 'nearest' });
-  }, [activeCommand, open]);
 
   return createPortal(
     <div
