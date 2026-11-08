@@ -45,6 +45,7 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
   const [query, setQuery] = useState('');
   const [activeIndex, setActiveIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const dialogRef = useRef<HTMLElement | null>(null);
   const onCloseRef = useRef(onClose);
   const onNavigateRef = useRef(onNavigate);
 
@@ -70,16 +71,35 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
 
-    const handleEscape = (event: globalThis.KeyboardEvent) => {
+    const handleDialogKeys = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+      ) ?? []);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialogRef.current?.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (document.activeElement === last || !dialogRef.current?.contains(document.activeElement))) {
+        event.preventDefault();
+        first.focus();
       }
     };
-    window.addEventListener('keydown', handleEscape);
+    window.addEventListener('keydown', handleDialogKeys);
     return () => {
       window.cancelAnimationFrame(frame);
-      window.removeEventListener('keydown', handleEscape);
+      window.removeEventListener('keydown', handleDialogKeys);
       previousFocus?.focus();
     };
   }, [open]);
@@ -93,6 +113,7 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
   };
 
   const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (filtered.length === 0) return;
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       setActiveIndex((current) => Math.min(filtered.length - 1, current + 1));
@@ -119,6 +140,8 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
         role="dialog"
         aria-modal="true"
         aria-labelledby="sonora-command-title"
+        ref={dialogRef}
+        tabIndex={-1}
         className="w-full max-w-[620px] overflow-hidden rounded-[24px] border border-white/[.13] bg-[#11111F]/[.98] shadow-[0_32px_110px_rgba(0,0,0,.7)]"
       >
         <div className="flex items-center gap-3 border-b border-white/[.08] px-5 py-4 sm:px-6">
