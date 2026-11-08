@@ -192,7 +192,7 @@ export default function TopNavigation({
         <button type="button" onClick={onUndo} title="Undo" aria-label="Undo" className="focus-ring hidden h-10 w-10 items-center justify-center rounded-lg border border-white/[.07] text-ink-400 transition-colors hover:bg-white/[.05] hover:text-ink-100 sm:inline-flex">
           <span className="text-base">↶</span>
         </button>
-        <button type="button" onClick={onRedo} title="Redo" aria-label="Redo" className="focus-ring hidden h-8 w-8 items-center justify-center rounded-lg border border-white/[.07] text-ink-400 transition-colors hover:bg-white/[.05] hover:text-ink-100 sm:inline-flex">
+        <button type="button" onClick={onRedo} title="Redo" aria-label="Redo" className="focus-ring hidden h-10 w-10 items-center justify-center rounded-lg border border-white/[.07] text-ink-400 transition-colors hover:bg-white/[.05] hover:text-ink-100 sm:inline-flex">
           <span className="text-base">↷</span>
         </button>
         <button
@@ -213,7 +213,7 @@ export default function TopNavigation({
         }`}>
           <Icon name="settings" size={18} />
         </button>
-        <span className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#A77AFF]/40 bg-gradient-to-br from-[#8957FF]/35 to-[#7545EA]/15 text-[11px] font-semibold text-white sm:flex" title="Sonora profile">S</span>
+        <button type="button" onClick={() => navigate('account')} aria-label="Open Sonora account" title="Account" className="focus-ring hidden h-10 w-10 items-center justify-center rounded-full border border-[#A77AFF]/40 bg-gradient-to-br from-[#8957FF]/35 to-[#7545EA]/15 text-[11px] font-semibold text-white transition hover:border-[#A77AFF]/70 hover:brightness-110 sm:flex">S</button>
       </div>
     </header>
   );
