@@ -42,7 +42,7 @@ export default function App() {
     const hash = window.location.hash;
     const route = hash.slice(1) as Screen;
     const knownRoute = NAV.some((item) => item.screen === route);
-    return !knownRoute && !hash.includes('access_token=');
+    return !knownRoute && hash !== '#reset-password' && !hash.includes('access_token=');
   });
   const [tourOpen, setTourOpen] = useState(false);
   const [assistantFullScreen, setAssistantFullScreen] = useState(false);
@@ -83,7 +83,8 @@ export default function App() {
       const authCallback = hash.includes('access_token=');
       const route = hash.slice(1) as Screen;
       const knownRoute = NAV.some((item) => item.screen === route);
-      if (authCallback) {
+
+      if (authCallback || hash === '#reset-password') {
         setShowLanding(false);
         setScreen('account');
       } else if (knownRoute) {
