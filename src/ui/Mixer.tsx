@@ -13,8 +13,24 @@ export function TransportBar() {
   const [loopStart, setLoopStart] = useState(transport.loopStart);
   const [loopEnd, setLoopEnd] = useState(transport.loopEnd);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const moreRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => setLoopStart(transport.loopStart), [transport.loopStart]);
   useEffect(() => setLoopEnd(transport.loopEnd), [transport.loopEnd]);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (moreRef.current && event.target instanceof Node && !moreRef.current.contains(event.target)) setToolsOpen(false);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setToolsOpen(false);
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [toolsOpen]);
   const duration = transport.duration || 0;
 
   return (
@@ -41,12 +57,19 @@ export function TransportBar() {
         <span className="hidden font-mono text-2xs text-ink-500 sm:inline">
           {lastSavedAt ? 'saved ' + new Date(lastSavedAt).toLocaleTimeString() : project?.autosave ? 'autosave on' : 'unsaved'}
         </span>
-        <div className="relative">
-          <Button size="sm" variant={toolsOpen ? 'secondary' : 'ghost'} onClick={() => setToolsOpen((open) => !open)}>
-            More {toolsOpen ? '↑' : '↓'}
-          </Button>
+        <div className="relative" ref={moreRef}>
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-expanded={toolsOpen}
+            aria-controls="transport-more-tools"
+            onClick={() => setToolsOpen((open) => !open)}
+            className={`focus-ring inline-flex min-h-11 items-center gap-2 rounded-control border px-4 text-sm font-semibold transition-all ${toolsOpen ? 'border-[#A77AFF]/40 bg-[#8957FF]/[.12] text-[#C4A2FF]' : 'border-white/[.07] bg-transparent text-ink-300 hover:border-white/[.14] hover:bg-white/[.045] hover:text-white'}`}
+          >
+            <Icon name="sliders" size={16} /> More tools <Icon name="chevron-down" size={14} className={`transition-transform ${toolsOpen ? 'rotate-180' : ''}`} />
+          </button>
           {toolsOpen && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-[min(340px,calc(100vw-24px))] rounded-xl border border-white/[.10] bg-[#151426]/95 p-3 text-left shadow-floating backdrop-blur-xl">
+            <div id="transport-more-tools" role="dialog" aria-label="More playback tools" className="absolute right-0 top-full z-50 mt-2 w-[min(360px,calc(100vw-24px))] rounded-2xl border border-white/[.10] bg-[#151426]/[.98] p-4 text-left shadow-floating backdrop-blur-xl">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-ink-100">More playback tools</p>
                 <button type="button" onClick={() => setToolsOpen(false)} className="rounded px-1 text-ink-500 hover:text-ink-100" aria-label="Close playback tools">×</button>
