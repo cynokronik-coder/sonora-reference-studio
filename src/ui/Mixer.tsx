@@ -42,7 +42,7 @@ export function TransportBar() {
           {lastSavedAt ? 'saved ' + new Date(lastSavedAt).toLocaleTimeString() : project?.autosave ? 'autosave on' : 'unsaved'}
         </span>
         <div className="relative">
-          <Button size="sm" variant={toolsOpen ? 'secondary' : 'ghost'} onClick={() => setToolsOpen((open) => !open)} aria-haspopup="dialog" aria-expanded={toolsOpen}>
+          <Button size="sm" variant={toolsOpen ? 'secondary' : 'ghost'} onClick={() => setToolsOpen((open) => !open)}>
             More {toolsOpen ? '↑' : '↓'}
           </Button>
           {toolsOpen && (
