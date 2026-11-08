@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { getAuthSession, isSupabaseAuthConfigured, signInWithPassword, signOut, signUpWithPassword, subscribeToAuth, type AuthSession } from '../lib/auth';
+import { getAuthSession, isSupabaseAuthConfigured, signInWithPassword, signOut, signUpWithPassword, requestPasswordReset, updatePassword, subscribeToAuth, type AuthSession } from '../lib/auth';
 import { getBillingStatus, getEntitlements, openBillingPortal, type BillingStatus, type Entitlements } from '../lib/billing';
 import { Badge, Button, Panel } from '../ui/Primitives';
 
@@ -7,7 +7,7 @@ export default function Account() {
   const [session, setSession] = useState<AuthSession | null>(null);
   const [status, setStatus] = useState<BillingStatus | null>(null);
   const [entitlements, setEntitlements] = useState<Entitlements | null>(null);
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  const [mode, setMode] = useState<'signin' | 'signup' | 'recovery' | 'reset'>(() => typeof window !== 'undefined' && window.location.hash === '#reset-password' ? 'reset' : 'signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -50,7 +50,16 @@ export default function Account() {
     setError(null);
     setMessage(null);
     try {
-      if (mode === 'signin') {
+      if (mode === 'recovery') {
+        await requestPasswordReset(email);
+        setMessage('If an account exists for that email, a password recovery link has been sent. Check your inbox.');
+      } else if (mode === 'reset') {
+        await updatePassword(password);
+        setPassword('');
+        setMode('signin');
+        window.location.hash = 'account';
+        setMessage('Your password has been updated. You can continue using Sonora.');
+      } else if (mode === 'signin') {
         const active = await signInWithPassword(email, password);
         setSession(active);
         setMessage('You are signed in. Your account and billing status have been refreshed.');
@@ -65,7 +74,7 @@ export default function Account() {
           setMessage('Check your inbox to confirm your email, then return here to sign in.');
         }
       }
-      setPassword('');
+      if (mode !== 'reset') setPassword('');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Authentication failed.');
     } finally {
@@ -111,7 +120,7 @@ export default function Account() {
           <p className="text-sm leading-6 text-ink-300">Supabase Auth is not connected to this deployment yet. Add <code className="text-accent">VITE_SUPABASE_URL</code> and <code className="text-accent">VITE_SUPABASE_ANON_KEY</code> to the frontend environment, and the matching server-side Supabase credentials to the API environment.</p>
           <p className="mt-3 text-xs leading-5 text-ink-500">Never place a Supabase service-role or secret key in a VITE_ variable, frontend source file, or browser request.</p>
         </Panel>
-      ) : session ? (
+      ) : session && mode !== 'reset' ? (
         <div className="grid gap-4 lg:grid-cols-[1.1fr_.9fr]">
           <Panel title="Signed-in account" right={<Badge tone="accent">Authenticated</Badge>}>
             <div className="space-y-3">
@@ -143,15 +152,23 @@ export default function Account() {
         </div>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_.8fr]">
-          <Panel title={mode === 'signin' ? 'Welcome back' : 'Create your Sonora account'} right={<Badge tone="accent">Supabase Auth</Badge>}>
-            <form className="space-y-3" onSubmit={(event) => void submit(event)}>
-              <label className="block"><span className="mb-1.5 block text-xs text-ink-400">Email address</span><input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-lg border border-white/[.1] bg-black/25 px-3 py-2.5 text-sm text-white outline-none transition focus:border-accent/50" placeholder="you@example.com" /></label>
-              <label className="block"><span className="mb-1.5 block text-xs text-ink-400">Password</span><input required minLength={8} type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-lg border border-white/[.1] bg-black/25 px-3 py-2.5 text-sm text-white outline-none transition focus:border-accent/50" placeholder="At least 8 characters" /></label>
-              <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}</Button>
-            </form>
+          <Panel title={mode === 'signin' ? 'Welcome back' : mode === 'signup' ? 'Create your Sonora account' : mode === 'recovery' ? 'Reset your password' : 'Choose a new password'} right={<Badge tone="accent">Supabase Auth</Badge>}>
+            {mode === 'reset' && !session ? (
+              <div className="space-y-3 text-sm text-ink-300">
+                <p>This recovery link is invalid or has expired. Request a fresh link to continue.</p>
+                <button type="button" className="text-accent hover:text-white" onClick={() => { setMode('recovery'); setError(null); setMessage(null); window.location.hash = 'account'; }}>Request another link</button>
+              </div>
+            ) : (
+              <form className="space-y-3" onSubmit={(event) => void submit(event)}>
+                {mode !== 'reset' && <label className="block"><span className="mb-1.5 block text-xs text-ink-400">Email address</span><input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-lg border border-white/[.1] bg-black/25 px-3 py-2.5 text-sm text-white outline-none transition focus:border-accent/50" placeholder="you@example.com" /></label>}
+                {(mode === 'signin' || mode === 'signup' || mode === 'reset') && <label className="block"><span className="mb-1.5 block text-xs text-ink-400">{mode === 'reset' ? 'New password' : 'Password'}</span><input required minLength={8} type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-lg border border-white/[.1] bg-black/25 px-3 py-2.5 text-sm text-white outline-none transition focus:border-accent/50" placeholder="At least 8 characters" /></label>}
+                {mode === 'signin' && <div className="-mt-1 text-right"><button type="button" className="text-xs text-accent hover:text-white" onClick={() => { setMode('recovery'); setError(null); setMessage(null); }}>Forgot password?</button></div>}
+                <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : mode === 'recovery' ? 'Send recovery link' : 'Update password'}</Button>
+              </form>
+            )}
             <div className="mt-4 border-t border-white/[.07] pt-3 text-xs text-ink-500">
-              {mode === 'signin' ? 'New to Sonora? ' : 'Already have an account? '}
-              <button type="button" className="text-accent hover:text-white" onClick={() => { setMode(mode === 'signin' ? 'signup' : 'signin'); setError(null); setMessage(null); }}>{mode === 'signin' ? 'Create an account' : 'Sign in'}</button>
+              {mode === 'signin' ? 'New to Sonora? ' : mode === 'signup' ? 'Already have an account? ' : 'Remembered your password? '}
+              <button type="button" className="text-accent hover:text-white" onClick={() => { setMode(mode === 'signin' || mode === 'signup' ? (mode === 'signin' ? 'signup' : 'signin') : 'signin'); setError(null); setMessage(null); setPassword(''); }}>{mode === 'signin' ? 'Create an account' : 'Sign in'}</button>
             </div>
           </Panel>
           <Panel title="Why create an account?">
