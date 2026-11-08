@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { KeyboardEvent } from 'react';
+import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { Screen } from '../state/store';
 import { Icon, type SonoraIconName } from './Icon';
 
@@ -70,7 +70,7 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
 
-    const handleEscape = (event: KeyboardEvent) => {
+    const handleEscape = (event: globalThis.KeyboardEvent) => {
       if (event.key === 'Escape') {
         event.preventDefault();
         onCloseRef.current();
@@ -92,7 +92,7 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
     onCloseRef.current();
   };
 
-  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  const handleInputKeyDown = (event: ReactKeyboardEvent<HTMLInputElement>) => {
     if (event.key === 'ArrowDown') {
       event.preventDefault();
       setActiveIndex((current) => Math.min(filtered.length - 1, current + 1));
