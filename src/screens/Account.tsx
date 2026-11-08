@@ -10,6 +10,7 @@ export default function Account() {
   const [mode, setMode] = useState<'signin' | 'signup' | 'recovery' | 'reset'>(() => typeof window !== 'undefined' && window.location.hash === '#reset-password' ? 'reset' : 'signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -54,8 +55,10 @@ export default function Account() {
         await requestPasswordReset(email);
         setMessage('If an account exists for that email, a password recovery link has been sent. Check your inbox.');
       } else if (mode === 'reset') {
+        if (password !== confirmPassword) throw new Error('The passwords do not match.');
         await updatePassword(password);
         setPassword('');
+        setConfirmPassword('');
         setMode('signin');
         window.location.hash = 'account';
         setMessage('Your password has been updated. You can continue using Sonora.');
@@ -162,6 +165,7 @@ export default function Account() {
               <form className="space-y-3" onSubmit={(event) => void submit(event)}>
                 {mode !== 'reset' && <label className="block"><span className="mb-1.5 block text-xs text-ink-400">Email address</span><input required type="email" autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} className="w-full rounded-lg border border-white/[.1] bg-black/25 px-3 py-2.5 text-sm text-white outline-none transition focus:border-accent/50" placeholder="you@example.com" /></label>}
                 {(mode === 'signin' || mode === 'signup' || mode === 'reset') && <label className="block"><span className="mb-1.5 block text-xs text-ink-400">{mode === 'reset' ? 'New password' : 'Password'}</span><input required minLength={8} type="password" autoComplete={mode === 'signin' ? 'current-password' : 'new-password'} value={password} onChange={(event) => setPassword(event.target.value)} className="w-full rounded-lg border border-white/[.1] bg-black/25 px-3 py-2.5 text-sm text-white outline-none transition focus:border-accent/50" placeholder="At least 8 characters" /></label>}
+                {mode === 'reset' && <label className="block"><span className="mb-1.5 block text-xs text-ink-400">Confirm new password</span><input required minLength={8} type="password" autoComplete="new-password" value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} className="w-full rounded-lg border border-white/[.1] bg-black/25 px-3 py-2.5 text-sm text-white outline-none transition focus:border-accent/50" placeholder="Enter the new password again" /></label>}
                 {mode === 'signin' && <div className="-mt-1 text-right"><button type="button" className="text-xs text-accent hover:text-white" onClick={() => { setMode('recovery'); setError(null); setMessage(null); }}>Forgot password?</button></div>}
                 <Button type="submit" className="w-full" disabled={busy}>{busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : mode === 'signup' ? 'Create account' : mode === 'recovery' ? 'Send recovery link' : 'Update password'}</Button>
               </form>
