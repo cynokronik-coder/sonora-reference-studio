@@ -71,11 +71,11 @@ function sessionFromPayload(payload: AuthPayload): AuthSession {
   };
 }
 
-async function authRequest(path: string, body?: Record<string, unknown>, accessToken?: string): Promise<AuthPayload> {
+async function authRequest(path: string, body?: Record<string, unknown>, accessToken?: string, method: 'POST' | 'PUT' = 'POST'): Promise<AuthPayload> {
   const config = getSupabaseConfig();
   if (!config.configured) throw new Error('Supabase Auth is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.');
   const response = await fetch(`${config.url}/auth/v1/${path}`, {
-    method: body ? 'POST' : 'GET',
+    method: body ? method : 'GET',
     headers: {
       apikey: config.anonKey,
       'Content-Type': 'application/json',
@@ -206,7 +206,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
 export async function updatePassword(password: string): Promise<void> {
   const session = await getAuthSession();
   if (!session) throw new Error('This password reset link is invalid or expired. Request a new one.');
-  await authRequest('user', { password }, session.access_token);
+  await authRequest('user', { password }, session.access_token, 'PUT');
 }
 
 export async function signOut(): Promise<void> {
