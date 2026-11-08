@@ -121,10 +121,12 @@ async function recoverSessionFromRedirect(): Promise<AuthSession | null> {
     };
     persistSession(session);
     // Remove tokens from the URL and browser history after validation.
-    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}#account`);
+    const destination = params.get('type') === 'recovery' ? '#reset-password' : '#account';
+    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}${destination}`);
     return session;
   } catch {
-    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}#account`);
+    const destination = params.get('type') === 'recovery' ? '#reset-password' : '#account';
+    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}${destination}`);
     return null;
   }
 }
@@ -186,6 +188,19 @@ export async function signUpWithPassword(email: string, password: string): Promi
     return { session, confirmationRequired: false };
   }
   return { session: null, confirmationRequired: true };
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  const config = getSupabaseConfig();
+  if (!config.configured) throw new Error('Supabase Auth is not configured.');
+  const redirectTo = `${window.location.origin}/#reset-password`;
+  await authRequest(`recover?redirect_to=${encodeURIComponent(redirectTo)}`, { email: email.trim() });
+}
+
+export async function updatePassword(password: string): Promise<void> {
+  const session = await getAuthSession();
+  if (!session) throw new Error('This password reset link is invalid or expired. Request a new one.');
+  await authRequest('user', { password }, session.access_token);
 }
 
 export async function signOut(): Promise<void> {
