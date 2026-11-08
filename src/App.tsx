@@ -187,7 +187,7 @@ export default function App() {
           ) : screen === 'account' ? (
             <Account />
           ) : screen === 'studio' ? (
-            <Studio onStartTour={() => setTourOpen(true)} onExpandAssistant={openAssistantFullScreen} />
+            <Studio onStartTour={() => setTourOpen(true)} onExpandAssistant={openAssistantFullScreen} onOpenAccount={openAccount} />
           ) : screen === 'reference' ? (
             <ReferenceMatch />
           ) : screen === 'mastering' ? (
