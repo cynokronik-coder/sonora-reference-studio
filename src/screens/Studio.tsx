@@ -110,7 +110,7 @@ export default function Studio({ onStartTour, onExpandAssistant }: { onStartTour
           <button type="button" onClick={() => useApp.getState().setScreen('settings')} aria-label="Settings" title="Settings" className="focus-ring hidden h-8 w-8 items-center justify-center rounded-full border border-white/[.10] bg-[#1D1D30] text-ink-300 transition-colors hover:border-[#A77AFF]/50 hover:text-white sm:inline-flex">
             <Icon name="settings" size={15} />
           </button>
-          <span className="hidden h-8 w-8 items-center justify-center rounded-full border border-[#A77AFF]/40 bg-gradient-to-br from-[#8957FF]/35 to-[#7545EA]/15 text-[11px] font-semibold text-white sm:flex" title="Sonora profile">S</span>
+          <button type="button" onClick={() => useApp.getState().setScreen('account')} aria-label="Open Sonora account" title="Account" className="focus-ring hidden h-9 w-9 items-center justify-center rounded-full border border-[#A77AFF]/40 bg-gradient-to-br from-[#8957FF]/35 to-[#7545EA]/15 text-[11px] font-semibold text-white transition hover:border-[#A77AFF]/70 hover:brightness-110 sm:flex">S</button>
         </div>
       </header>
 
