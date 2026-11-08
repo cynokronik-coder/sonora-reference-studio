@@ -40,7 +40,7 @@ export default function App() {
   const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError, storageError } = useApp();
   const [showLanding, setShowLanding] = useState(() => {
     const hash = window.location.hash;
-    return !['#studio', '#plans', '#account'].includes(hash) && !hash.includes('access_token=');
+    return !['#studio', '#plans', '#account', '#reset-password'].includes(hash) && !hash.includes('access_token=');
   });
   const [tourOpen, setTourOpen] = useState(false);
   const [assistantFullScreen, setAssistantFullScreen] = useState(false);
@@ -79,10 +79,10 @@ export default function App() {
     const syncFromHash = () => {
       const hash = window.location.hash;
       const authCallback = hash.includes('access_token=');
-      const inApp = hash === '#studio' || hash === '#plans' || hash === '#account' || authCallback;
+      const inApp = hash === '#studio' || hash === '#plans' || hash === '#account' || hash === '#reset-password' || authCallback;
       setShowLanding(!inApp);
       if (hash === '#plans') setScreen('plans');
-      else if (hash === '#account' || authCallback) setScreen('account');
+      else if (hash === '#account' || hash === '#reset-password' || authCallback) setScreen('account');
       else if (hash === '#studio') setScreen('studio');
     };
     syncFromHash();
