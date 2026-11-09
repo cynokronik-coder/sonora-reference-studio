@@ -323,4 +323,4 @@ export const STEREO_PRESETS: StereoPreset[] = [
   stereoPreset('mono-check', 'Mono check', 'Collapses all frequency bands to mono for a compatibility audition.', {
     width: 0, lowWidth: 0, highWidth: 0, monoMaker: 1, haas: 0, haasMix: 0,
   }),
-};
+];
