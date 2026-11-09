@@ -18,7 +18,6 @@ interface Allpass {
 }
 
 interface ReverbStyleSettings {
-  decayScale: number;
   dampingScale: number;
   diffusion: number;
   defaultPredelay: number;
@@ -136,15 +135,15 @@ export class Reverb implements AudioProcessor {
     const style = clamp(Math.round(values.style ?? 1), 0, 3);
     switch (style) {
       case 0: // Room: shorter, more damped and less diffuse.
-        return { decayScale: 0.75, dampingScale: 1.1, diffusion: 0.6, defaultPredelay: 5 };
+        return { dampingScale: 1.1, diffusion: 0.6, defaultPredelay: 5 };
       case 1: // Hall: longer and more diffuse.
-        return { decayScale: 1.25, dampingScale: 0.8, diffusion: 0.75, defaultPredelay: 20 };
+        return { dampingScale: 0.8, diffusion: 0.75, defaultPredelay: 20 };
       case 2: // Plate: bright, dense and moderately long.
-        return { decayScale: 1.05, dampingScale: 0.55, diffusion: 0.86, defaultPredelay: 0 };
-      case 3: // Spring: shorter and more modulated in character through its tuning.
-        return { decayScale: 0.85, dampingScale: 0.45, diffusion: 0.45, defaultPredelay: 12 };
+        return { dampingScale: 0.55, diffusion: 0.86, defaultPredelay: 0 };
+      case 3: // Spring-style algorithmic character: brighter, shorter and less diffuse.
+        return { dampingScale: 0.45, diffusion: 0.45, defaultPredelay: 12 };
       default:
-        return { decayScale: 1, dampingScale: 1, diffusion: 0.7, defaultPredelay: 10 };
+        return { dampingScale: 1, diffusion: 0.7, defaultPredelay: 10 };
     }
   }
 
@@ -188,9 +187,10 @@ export class Reverb implements AudioProcessor {
   setValues(values: ParamValues): void {
     this.values = values;
     const style = this.styleSettings(values);
-    const targetDecay = clamp((values.decay ?? 2.4) * style.decayScale, 0.2, 15);
+    // Decay is a real RT60 time in seconds regardless of character preset.
+    const targetDecay = clamp(values.decay ?? 2.4, 0.2, 10);
     const targetDamping = clamp((values.damping ?? 0.35) * style.dampingScale, 0, 0.95);
-    const targetDiffusion = clamp(style.diffusion, 0.2, 0.95);
+    const targetDiffusion = clamp((values.diffusion ?? 0.75) * (style.diffusion / 0.75), 0.2, 0.95);
     const targetPredelay = clamp(values.predelay ?? style.defaultPredelay, 0, 250) * 0.001 * this.sr;
     const targetWet = clamp((values.mix ?? 25) / 100, 0, 1);
     const targetWidth = clamp((values.width ?? 100) / 100, 0, 1.5);
