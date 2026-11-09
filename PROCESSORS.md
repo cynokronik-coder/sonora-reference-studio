@@ -85,8 +85,14 @@ dry/wet and output are editable. Output gain and dry/wet changes are smoothed. L
 independently. Factory starting points include Gentle expander, Tight drum gate, Vocal noise control and Strong cleanup.
 
 ### Clipper
-Soft cubic, hard or tanh clipping with drive, ceiling, mix and output. Intended before the limiter to shave isolated
-peaks; it genuinely adds harmonics.
+Three transfer curves: Soft (odd cubic, unity slope at zero and zero-slope transition at the internal ceiling), Hard
+(exact sample-domain clamp at the internal ceiling) and Tanh (rounded asymptotic curve). Drive and clip ceiling are
+ramped over 20 ms; style crossfades, dry/wet and output changes are smoothed. 1x/2x/4x oversampling is selectable.
+The IIR oversampler reduces aliasing but is not linear-phase and has frequency-dependent phase shift. A matched
+oversampled dry reference is maintained for parallel blends; at settled 0% wet the original samples are returned
+exactly. Left/right processing and peak/reduction meters are independent. The clip ceiling applies before post-clip
+output trim, so positive output gain can exceed it; use the downstream limiter for a final dBTP ceiling. Factory
+starting points include Soft peak rounding, Drum impact, Tanh smoothness, Mastering peak shave and Hard creative clip.
 
 ### Limiter
 Look-ahead brickwall. A monotonic sliding maximum over the lookahead window computes the required gain before the
