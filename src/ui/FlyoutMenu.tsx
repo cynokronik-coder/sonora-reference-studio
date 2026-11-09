@@ -48,7 +48,7 @@ export function FlyoutMenu({
 }: FlyoutMenuProps) {
   const [open, setOpen] = useState(false);
   const [pinned, setPinned] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [position, setPosition] = useState({ top: 0, left: 0, transformOrigin: '0px 0px' });
   const rootRef = useRef<HTMLDivElement | null>(null);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
@@ -110,7 +110,9 @@ export function FlyoutMenu({
       let top = anchor.bottom + gap;
       if (top + panel.height > window.innerHeight - margin) top = anchor.top - panel.height - gap;
       top = Math.max(margin, Math.min(top, window.innerHeight - panel.height - margin));
-      setPosition({ top, left });
+      const originX = Math.max(0, Math.min(panel.width, anchor.left + anchor.width / 2 - left));
+      const opensBelow = top >= anchor.bottom;
+      setPosition({ top, left, transformOrigin: `${originX}px ${opensBelow ? 0 : panel.height}px` });
     };
     updatePosition();
     window.addEventListener('resize', updatePosition);
@@ -156,8 +158,8 @@ export function FlyoutMenu({
       onPointerEnter={clearTimers}
       onPointerLeave={scheduleClose}
       onPointerDown={() => setPinned(true)}
-      style={{ position: 'fixed', top: position.top, left: position.left }}
-      className={`z-[1000] ${WIDTHS[width]} rounded-2xl border border-white/[.11] bg-[rgba(20,20,37,.96)] p-4 text-left shadow-floating backdrop-blur-glass animate-[sonora-flyout-in_180ms_ease-out]`}
+      style={{ position: 'fixed', top: position.top, left: position.left, transformOrigin: position.transformOrigin }}
+      className={`sonora-flyout-surface sonora-flyout-motion z-[1000] ${WIDTHS[width]} rounded-2xl border border-white/[.11] bg-[rgba(20,20,37,.96)] p-4 text-left shadow-floating backdrop-blur-glass`}
     >
       {(title || description) && (
         <div className="mb-3 border-b border-white/[.07] pb-2.5">
