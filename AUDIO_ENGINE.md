@@ -90,7 +90,7 @@ only for parameters that actually have lanes. Structural parameter sync happens 
 
 ## Latency compensation
 
-The linear-phase EQ's 512-tap FIR has 256 samples of group delay. `ProjectRenderer` computes the maximum track/bus
+The linear-phase EQ uses a 513-tap symmetric FIR with exactly 256 samples of group delay. `ProjectRenderer` computes the maximum track/bus
 latency and inserts integer delays on the other paths, including the intermediate bus stage. Offline export renders
 `totalLatency` extra frames and discards the head. All paths therefore remain sample-aligned.
 
