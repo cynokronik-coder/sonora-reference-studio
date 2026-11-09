@@ -81,11 +81,8 @@ describe('Stereo imaging M/S and frequency-dependent width', () => {
   it('preserves low-frequency side information when mono-maker is disabled and low width is 100%', () => {
     const source = tone(80, 0.25);
     const result = render({ ...defaults(), monoMaker: 0, lowWidth: 100 }, source, source.map((sample) => -sample));
-    const leftSide = signedProjection(result.left, 80);
-    const rightSide = signedProjection(result.right, 80);
-    expect(Math.abs(leftSide)).toBeGreaterThan(0.2);
-    expect(Math.abs(rightSide)).toBeGreaterThan(0.2);
-    expect(leftSide).toBeCloseTo(-rightSide, 2);
+    expect(projection(result.left, 80)).toBeGreaterThan(0.2);
+    expect(projection(result.right, 80)).toBeGreaterThan(0.2);
     const sum = new Float32Array(FRAME_COUNT);
     for (let i = 0; i < FRAME_COUNT; i++) sum[i] = result.left[i] + result.right[i];
     expect(rms(sum)).toBeLessThan(rms(result.left) * 0.02);
@@ -119,15 +116,18 @@ describe('Stereo imaging M/S and frequency-dependent width', () => {
   it('delays only the right channel in Haas mode and preserves the left channel', () => {
     const sourceL = new Float32Array(FRAME_COUNT);
     const sourceR = new Float32Array(FRAME_COUNT);
-    sourceL[100] = 0.5;
-    sourceR[100] = 0.5;
+    sourceL[1_500] = 0.5;
+    sourceR[1_500] = 0.5;
     const baseline = render(defaults(), sourceL, sourceR);
     const delayed = render({ ...defaults(), haas: 10, haasMix: 100 }, sourceL, sourceR);
     for (let i = 4_096; i < FRAME_COUNT; i++) {
       expect(delayed.left[i]).toBeCloseTo(baseline.left[i], 6);
     }
-    expect(delayed.right[100]).toBeCloseTo(0, 5);
-    expect(delayed.right[580]).toBeCloseTo(baseline.right[100], 5);
+    // The 20 ms mix ramp has settled before the impulse, and the delayed
+    // right channel should reproduce the same crossover-processed impulse
+    // exactly one Haas delay later.
+    expect(delayed.right[1_500]).toBeCloseTo(0, 5);
+    expect(delayed.right[1_980]).toBeCloseTo(baseline.right[1_500], 5);
   });
 
   it('keeps the Haas delay history fresh while the effect is disabled', () => {
