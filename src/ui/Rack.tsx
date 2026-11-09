@@ -10,6 +10,7 @@ import { clamp } from '../audio/dsp/util';
 import { COMPRESSOR_PRESETS } from '../audio/dsp/processors/compressor';
 import { MULTIBAND_COMP_PRESETS } from '../audio/dsp/processors/multiband';
 import { EQ_PRESETS } from '../audio/dsp/processors/eq';
+import { DYNAMIC_EQ_PRESETS } from '../audio/dsp/processors/dynamicEq';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -188,6 +189,25 @@ export function Rack({
                     </div>
                   )}
 
+                  {node.type === 'dynamicEq' && meter?.bands && (
+                    <div className="mb-3 grid grid-cols-4 gap-2">
+                      {meter.bands.map((value, bandIndex) => {
+                        const reductionDb = Math.abs(value);
+                        return (
+                          <div key={bandIndex} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">Band {bandIndex + 1}</span>
+                              <span className="font-mono text-[10px] text-signal-amber">{reductionDb > 0.05 ? `-${reductionDb.toFixed(1)}` : '0.0'} dB</span>
+                            </div>
+                            <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
+                              <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {node.type === 'multibandComp' && meter?.bands && (
                     <div className="mb-3 grid grid-cols-3 gap-2">
                       {(['Low', 'Mid', 'High'] as const).map((label, bandIndex) => {
@@ -209,7 +229,7 @@ export function Rack({
 
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
-                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'deesser' || node.type === 'limiter') && (
+                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'deesser' || node.type === 'limiter') && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-2xs text-ink-500">Gain reduction</span>
                       <GainReductionMeter reductionDb={reduction} height={8} />
@@ -317,7 +337,8 @@ function ProcessorParams({
   const [compressorPreset, setCompressorPreset] = useState('');
   const [multibandPreset, setMultibandPreset] = useState('');
   const [eqPreset, setEqPreset] = useState('');
-  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); }, [node.id]);
+  const [dynamicEqPreset, setDynamicEqPreset] = useState('');
+  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -331,6 +352,7 @@ function ProcessorParams({
     if (node.type === 'compressor') setCompressorPreset('');
     if (node.type === 'multibandComp') setMultibandPreset('');
     if (node.type === 'eq') setEqPreset('');
+    if (node.type === 'dynamicEq') setDynamicEqPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
@@ -351,8 +373,29 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setEqPreset(preset.id);
   };
+  const applyDynamicEqPreset = (presetId: string) => {
+    const preset = DYNAMIC_EQ_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setDynamicEqPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
+      {node.type === 'dynamicEq' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Dynamic EQ starting point"
+            value={dynamicEqPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...DYNAMIC_EQ_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyDynamicEqPreset}
+          />
+          {dynamicEqPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {DYNAMIC_EQ_PRESETS.find((preset) => preset.id === dynamicEqPreset)?.description} All bands remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'eq' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
