@@ -477,8 +477,10 @@ export class ProjectRenderer {
       }
     }
 
-    // 4. Master chain and fader.
+    // 4. Master chain and fader. Master dynamics may use a raw track as an
+    // external key just like track and bus chains.
     if (this.masterChain) {
+      this.syncSidechains(project.master.processors, this.masterChain);
       this.masterChain.process(outL, outR, frames);
       const g = dbToGain(project.master.volumeDb);
       if (g !== 1) {
