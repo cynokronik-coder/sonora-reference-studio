@@ -30,7 +30,12 @@ describe('BS.1770-5 integrated and EBU time-window loudness', () => {
     expect(report.integratedLufs).toBeLessThanOrEqual(-19.9);
     expect(report.momentaryMaxLufs).toBeGreaterThanOrEqual(-20.1);
     expect(report.shortTermMaxLufs).toBeGreaterThanOrEqual(-20.1);
+    expect(report.momentaryMaxLufs).toBeLessThanOrEqual(-19.9);
+    expect(report.shortTermMaxLufs).toBeLessThanOrEqual(-19.9);
     expect(report.samplePeakDb).toBeGreaterThanOrEqual(-20.1);
+    expect(report.samplePeakDb).toBeLessThanOrEqual(-19.9);
+    expect(report.truePeakDb).toBeGreaterThanOrEqual(-20.1);
+    expect(report.truePeakDb).toBeLessThanOrEqual(-19.9);
   });
 
   it('uses only complete 400 ms blocks for integrated loudness', () => {
@@ -69,6 +74,34 @@ describe('BS.1770-5 integrated and EBU time-window loudness', () => {
     const report = analyzeLoudness(left, right, SAMPLE_RATE);
     expect(report.lra).toBeGreaterThanOrEqual(9);
     expect(report.lra).toBeLessThanOrEqual(11);
+  });
+
+  it('passes the EBU 5 LU range minimum-requirements test', () => {
+    const first = stereoTone(1_000, -20, 20);
+    const second = stereoTone(1_000, -15, 20, 20);
+    const left = new Float32Array(SAMPLE_RATE * 40);
+    const right = new Float32Array(left.length);
+    left.set(first.left);
+    right.set(first.right);
+    left.set(second.left.subarray(SAMPLE_RATE * 20), SAMPLE_RATE * 20);
+    right.set(second.right.subarray(SAMPLE_RATE * 20), SAMPLE_RATE * 20);
+    const report = analyzeLoudness(left, right, SAMPLE_RATE);
+    expect(report.lra).toBeGreaterThanOrEqual(4);
+    expect(report.lra).toBeLessThanOrEqual(6);
+  });
+
+  it('passes the EBU 20 LU range minimum-requirements test', () => {
+    const first = stereoTone(1_000, -40, 20);
+    const second = stereoTone(1_000, -20, 20, 20);
+    const left = new Float32Array(SAMPLE_RATE * 40);
+    const right = new Float32Array(left.length);
+    left.set(first.left);
+    right.set(first.right);
+    left.set(second.left.subarray(SAMPLE_RATE * 20), SAMPLE_RATE * 20);
+    right.set(second.right.subarray(SAMPLE_RATE * 20), SAMPLE_RATE * 20);
+    const report = analyzeLoudness(left, right, SAMPLE_RATE);
+    expect(report.lra).toBeGreaterThanOrEqual(19);
+    expect(report.lra).toBeLessThanOrEqual(21);
   });
 
   it('applies the absolute gate to silent programme and returns no invented loudness', () => {
