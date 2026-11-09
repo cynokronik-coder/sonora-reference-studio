@@ -9,6 +9,7 @@ import { EQCurve, GainReductionMeter } from './viz';
 import { clamp } from '../audio/dsp/util';
 import { COMPRESSOR_PRESETS } from '../audio/dsp/processors/compressor';
 import { MULTIBAND_PRESETS } from '../audio/dsp/processors/multiband';
+import { EQ_PRESETS } from '../audio/dsp/processors/eq';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -44,7 +45,7 @@ export function Rack({
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const { addProcessor, moveProcessor, mode } = useApp();
+  const { addProcessor, moveProcessor, mode, project } = useApp();
   const selected = processors.find((p) => p.id === selectedId) ?? null;
 
   const visibleDefinitions = useMemo(
@@ -182,7 +183,7 @@ export function Rack({
 
                   {node.type === 'eq' && (
                     <div className="mb-2">
-                      <EQCurve params={node.params} height={120} />
+                      <EQCurve params={node.params} sampleRate={project?.sampleRate ?? 48000} height={120} />
                     </div>
                   )}
 
@@ -345,6 +346,7 @@ function ProcessorParams({
 }) {
   const [compressorPreset, setCompressorPreset] = useState('');
   const [multibandPreset, setMultibandPreset] = useState('');
+  const [eqPreset, setEqPreset] = useState('');
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -357,6 +359,7 @@ function ProcessorParams({
   const update = (key: string, value: number) => {
     if (node.type === 'compressor') setCompressorPreset('');
     if (node.type === 'multibandComp') setMultibandPreset('');
+    if (node.type === 'eq') setEqPreset('');
     const patch: Record<string, number> = { [key]: value };
     // Keep the two crossover points in a valid 2:1 relationship and update
     // the paired control together, so the UI never disagrees with the DSP.
@@ -365,7 +368,21 @@ function ProcessorParams({
     } else if (node.type === 'multibandComp' && key === 'xHigh') {
       patch.xLow = Math.min(node.params.xLow ?? 200, value / 2);
     }
+    const eqTypeMatch = node.type === 'eq' ? /^b(\\d+)_type$/.exec(key) : null;
+    if (eqTypeMatch) {
+      const band = Number(eqTypeMatch[1]);
+      const currentQ = node.params[`b${band}_q`] ?? 1;
+      patch[`b${band}_q`] = value === 1 || value === 2
+        ? clamp(currentQ, 0.1, 1)
+        : clamp(currentQ, 0.2, 18);
+    }
     useApp.getState().updateProcessorParams(scope, trackId, node.id, patch);
+  };
+  const applyEqPreset = (presetId: string) => {
+    const preset = EQ_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setEqPreset(preset.id);
   };
   const applyCompressorPreset = (presetId: string) => {
     const preset = COMPRESSOR_PRESETS.find((item) => item.id === presetId);
@@ -381,6 +398,21 @@ function ProcessorParams({
   };
   return (
     <div className="space-y-2">
+      {node.type === 'eq' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="EQ starting point"
+            value={eqPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...EQ_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyEqPreset}
+          />
+          {eqPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {EQ_PRESETS.find((preset) => preset.id === eqPreset)?.description} Every band remains editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'compressor' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
@@ -420,7 +452,11 @@ function ProcessorParams({
           </summary>
           <div className="grid gap-x-3 gap-y-2 px-2 pb-2 sm:grid-cols-2">
             {specs.map((spec) => {
-              const value = node.params[spec.key] ?? spec.default;
+              const rawValue = node.params[spec.key] ?? spec.default;
+              const eqQMatch = node.type === 'eq' ? /^b(\\d+)_q$/.exec(spec.key) : null;
+              const eqBandType = eqQMatch ? Math.round(node.params[`b${eqQMatch[1]}_type`] ?? 0) : -1;
+              const isShelfSlope = Boolean(eqQMatch && (eqBandType === 1 || eqBandType === 2));
+              const value = isShelfSlope ? clamp(rawValue, 0.1, 1) : rawValue;
               if (spec.kind === 'bool') {
                 return (
                   <div key={spec.key} className="pt-1">
@@ -442,10 +478,10 @@ function ProcessorParams({
               return (
                 <div key={spec.key} className="min-w-0">
                   <ParamSlider
-                    label={spec.label}
+                    label={isShelfSlope ? 'Shelf slope (S)' : spec.label}
                     value={value}
-                    min={spec.min ?? 0}
-                    max={spec.max ?? 1}
+                    min={isShelfSlope ? 0.1 : spec.min ?? 0}
+                    max={isShelfSlope ? 1 : spec.max ?? 1}
                     step={spec.step ?? 0.01}
                     unit={spec.unit}
                     logarithmic={spec.scale === 'log'}
@@ -457,6 +493,11 @@ function ProcessorParams({
                         : undefined
                     }
                   />
+                  {isShelfSlope && (
+                    <p className="mt-1 text-[10px] leading-relaxed text-ink-500">
+                      RBJ shelf slope S is limited to 1 for a stable monotonic shelf response.
+                    </p>
+                  )}
                   {node.type === 'compressor' && spec.key === 'link' && (
                     <p className="mt-1 text-[10px] leading-relaxed text-ink-500">
                       0% compresses left and right independently. 100% uses the louder detector for shared stereo gain reduction.
