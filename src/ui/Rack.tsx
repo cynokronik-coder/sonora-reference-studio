@@ -368,7 +368,7 @@ function ProcessorParams({
     } else if (node.type === 'multibandComp' && key === 'xHigh') {
       patch.xLow = Math.min(node.params.xLow ?? 200, value / 2);
     }
-    const eqTypeMatch = node.type === 'eq' ? /^b(\\d+)_type$/.exec(key) : null;
+    const eqTypeMatch = node.type === 'eq' ? /^b(\d+)_type$/.exec(key) : null;
     if (eqTypeMatch) {
       const band = Number(eqTypeMatch[1]);
       const currentQ = node.params[`b${band}_q`] ?? 1;
@@ -453,7 +453,7 @@ function ProcessorParams({
           <div className="grid gap-x-3 gap-y-2 px-2 pb-2 sm:grid-cols-2">
             {specs.map((spec) => {
               const rawValue = node.params[spec.key] ?? spec.default;
-              const eqQMatch = node.type === 'eq' ? /^b(\\d+)_q$/.exec(spec.key) : null;
+              const eqQMatch = node.type === 'eq' ? /^b(\d+)_q$/.exec(spec.key) : null;
               const eqBandType = eqQMatch ? Math.round(node.params[`b${eqQMatch[1]}_type`] ?? 0) : -1;
               const isShelfSlope = Boolean(eqQMatch && (eqBandType === 1 || eqBandType === 2));
               const value = isShelfSlope ? clamp(rawValue, 0.1, 1) : rawValue;
