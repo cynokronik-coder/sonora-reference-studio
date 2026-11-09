@@ -90,6 +90,7 @@ export class Reverb implements AudioProcessor {
   private outputRemaining = 0;
   private peakL = 0;
   private peakR = 0;
+  private hasProcessed = false;
 
   prepare(sampleRate: number, maxBlock: number): void {
     this.sr = sampleRate;
@@ -196,38 +197,52 @@ export class Reverb implements AudioProcessor {
     const targetWidth = clamp((values.width ?? 100) / 100, 0, 1.5);
     const targetOutput = dbToGain(clamp(values.output ?? 0, -12, 12));
 
-    if (targetDecay !== this.decayTarget) this.setScalarRamp(this.decaySeconds, targetDecay, 'decay');
-    if (targetDamping !== this.dampingTarget) this.setScalarRamp(this.damping, targetDamping, 'damping');
-    if (targetDiffusion !== this.diffusionTarget) this.setScalarRamp(this.diffusion, targetDiffusion, 'diffusion');
-    if (targetPredelay !== this.predelayTarget) this.setScalarRamp(this.predelaySamples, targetPredelay, 'predelay');
-    if (targetWet !== this.wetTarget) this.setScalarRamp(this.wet, targetWet, 'wet');
-    if (targetWidth !== this.widthTarget) this.setScalarRamp(this.width, targetWidth, 'width');
-    if (targetOutput !== this.outputTarget) this.setScalarRamp(this.output, targetOutput, 'output');
+    // The first parameter snapshot arrives after prepare() in the normal
+    // processor-chain lifecycle. Apply that initial state immediately so a
+    // source impulse is not lost while a pre-delay glide moves its read head.
+    // Subsequent automation/UI edits use 20 ms ramps.
+    const immediate = !this.hasProcessed;
+    if (immediate) {
+      this.decaySeconds = this.decayTarget = targetDecay;
+      this.damping = this.dampingTarget = targetDamping;
+      this.diffusion = this.diffusionTarget = targetDiffusion;
+      this.predelaySamples = this.predelayTarget = targetPredelay;
+      this.wet = this.wetTarget = targetWet;
+      this.width = this.widthTarget = targetWidth;
+      this.output = this.outputTarget = targetOutput;
+      this.decayRemaining = this.dampingRemaining = this.diffusionRemaining = 0;
+      this.predelayRemaining = this.wetRemaining = this.widthRemaining = this.outputRemaining = 0;
+    } else {
+      if (targetDecay !== this.decayTarget) this.setScalarRamp(this.decaySeconds, targetDecay, 'decay');
+      if (targetDamping !== this.dampingTarget) this.setScalarRamp(this.damping, targetDamping, 'damping');
+      if (targetDiffusion !== this.diffusionTarget) this.setScalarRamp(this.diffusion, targetDiffusion, 'diffusion');
+      if (targetPredelay !== this.predelayTarget) this.setScalarRamp(this.predelaySamples, targetPredelay, 'predelay');
+      if (targetWet !== this.wetTarget) this.setScalarRamp(this.wet, targetWet, 'wet');
+      if (targetWidth !== this.widthTarget) this.setScalarRamp(this.width, targetWidth, 'width');
+      if (targetOutput !== this.outputTarget) this.setScalarRamp(this.output, targetOutput, 'output');
+    }
 
-    this.configureFilters(values.lowCut ?? 120, values.highCut ?? 8000);
-    this.updateCombFeedbackTargets(targetDecay);
+    this.configureFilters(values.lowCut ?? 120, values.highCut ?? 8000, immediate);
+    this.updateCombFeedbackTargets(targetDecay, immediate);
   }
 
-  private updateCombFeedbackTargets(decaySeconds: number): void {
+  private updateCombFeedbackTargets(decaySeconds: number, immediate = false): void {
     const rampSamples = Math.max(1, Math.round(this.sr * CONTROL_RAMP_MS / 1000));
-    for (const comb of this.combsL) {
+    const update = (comb: Comb) => {
       const delaySeconds = comb.buffer.length / this.sr;
       const target = clamp(Math.pow(10, (-3 * delaySeconds) / decaySeconds), 0.05, 0.9995);
-      if (target !== comb.feedbackTarget) {
-        comb.feedbackTarget = target;
+      comb.feedbackTarget = target;
+      if (immediate) {
+        comb.feedback = target;
+        comb.feedbackRemaining = 0;
+        comb.feedbackStep = 0;
+      } else {
         comb.feedbackRemaining = rampSamples;
         comb.feedbackStep = (target - comb.feedback) / rampSamples;
       }
-    }
-    for (const comb of this.combsR) {
-      const delaySeconds = comb.buffer.length / this.sr;
-      const target = clamp(Math.pow(10, (-3 * delaySeconds) / decaySeconds), 0.05, 0.9995);
-      if (target !== comb.feedbackTarget) {
-        comb.feedbackTarget = target;
-        comb.feedbackRemaining = rampSamples;
-        comb.feedbackStep = (target - comb.feedback) / rampSamples;
-      }
-    }
+    };
+    for (const comb of this.combsL) update(comb);
+    for (const comb of this.combsR) update(comb);
   }
 
   private advanceControls(): void {
@@ -262,6 +277,7 @@ export class Reverb implements AudioProcessor {
   process(L: Float32Array, R: Float32Array, n: number): void {
     if (n > this.maxBlock) throw new RangeError(`Reverb block size ${n} exceeds prepared capacity ${this.maxBlock}`);
 
+    if (n > 0) this.hasProcessed = true;
     let peakL = 0;
     let peakR = 0;
     for (let i = 0; i < n; i++) {
@@ -356,6 +372,7 @@ export class Reverb implements AudioProcessor {
     this.predelayRemaining = this.wetRemaining = this.widthRemaining = this.outputRemaining = 0;
     this.peakL = 0;
     this.peakR = 0;
+    this.hasProcessed = false;
   }
 
   meter(): ProcessorMeter {
