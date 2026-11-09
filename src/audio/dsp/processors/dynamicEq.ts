@@ -143,9 +143,26 @@ export class DynamicEq implements AudioProcessor {
     for (let bandIndex = 0; bandIndex < DYN_EQ_BANDS; bandIndex++) {
       const on = bandValue(this.values, bandIndex, 'on', 0) > 0.5;
       if (!on) {
+        const band = this.bands[bandIndex];
         this.meterBands[bandIndex] = 0;
-        this.bands[bandIndex].reductionL = 0;
-        this.bands[bandIndex].reductionR = 0;
+        band.reductionL = 0;
+        band.reductionR = 0;
+        // A disabled band must not retain detector memory or a previous bell
+        // cut. Reset only on the transition to disabled, not every audio block.
+        if (band.lastGainL !== 0 || band.lastGainR !== 0) {
+          band.detectorL.reset();
+          band.detectorR.reset();
+          band.filterL.set({ b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 });
+          band.filterR.set({ b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 });
+          band.filterL.reset();
+          band.filterR.reset();
+          band.ballisticsL.reset();
+          band.ballisticsR.reset();
+          band.rmsStateL = 0;
+          band.rmsStateR = 0;
+          band.lastGainL = 0;
+          band.lastGainR = 0;
+        }
         continue;
       }
 
