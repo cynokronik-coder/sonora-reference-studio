@@ -142,6 +142,19 @@ interface Metrics {
   lowEnergyDb: number;
   tempoBpm: number;
   bands: BandLevel[];
+  sectionFallback: boolean;
+  duration: number;
+}
+
+type ReferenceInput = { assetId: string; report: AnalysisReport; weight?: number };
+
+export interface ResolvedReferenceMetrics {
+  metrics: Metrics;
+  assetIds: string[];
+  fallbackAssetIds: string[];
+  name: string;
+  agreement: CategorySource;
+  quality: number;
 }
 
 function metricsFrom(report: AnalysisReport, section: 'full' | 'chorus' | 'verse'): Metrics {
@@ -163,16 +176,147 @@ function metricsFrom(report: AnalysisReport, section: 'full' | 'chorus' | 'verse
     highEnergyDb: report.spectrum.highEnergyDb,
     lowEnergyDb: report.spectrum.lowEnergyDb,
     tempoBpm: report.rhythm.tempoBpm,
-    bands: bandsFor(report, section),
+    bands: sec ? sec.bands : report.spectrum.bands,
+    sectionFallback: section !== 'full' && !sec,
+    duration: report.duration,
   };
 }
 
-/** Estimate the peak after a broadband gain change, before any dynamics processing. */
-export function estimatePreLimiterTruePeak(sourceTruePeakDb: number, gainChangeDb: number): number {
-  if (!Number.isFinite(sourceTruePeakDb) || !Number.isFinite(gainChangeDb)) {
-    throw new RangeError('True-peak and gain estimates must be finite numbers.');
+function weightedMean(values: number[], weights: number[]): number {
+  let sum = 0;
+  let total = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (!Number.isFinite(values[i]) || !(weights[i] > 0)) continue;
+    sum += values[i] * weights[i];
+    total += weights[i];
   }
-  return sourceTruePeakDb + gainChangeDb;
+  return total > 0 ? sum / total : -Infinity;
+}
+
+function weightedDbMean(values: number[], weights: number[], reference: 'power' | 'amplitude'): number {
+  const factor = reference === 'power' ? 10 : 20;
+  const linear = values.map((value) => Number.isFinite(value) ? Math.pow(10, value / factor) : Number.NaN);
+  const mean = weightedMean(linear, weights);
+  return mean > 0 ? factor * Math.log10(mean) : -Infinity;
+}
+
+function weightedSpread(values: number[], weights: number[], tolerance: number): number {
+  const mean = weightedMean(values, weights);
+  if (!Number.isFinite(mean)) return 0.2;
+  let variance = 0;
+  let total = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (!Number.isFinite(values[i]) || !(weights[i] > 0)) continue;
+    variance += weights[i] * Math.pow(values[i] - mean, 2);
+    total += weights[i];
+  }
+  return clamp(1 - Math.sqrt(variance / Math.max(1e-12, total)) / tolerance, 0.2, 1);
+}
+
+/**
+ * Resolve either one explicitly selected reference or a weighted consensus.
+ * A negative source index means "blend all references"; zero-weight references
+ * are excluded from that blend. If every weight is zero, equal weights are used
+ * rather than producing an empty or silent reference.
+ */
+export function resolveReferenceMetrics(
+  sourceIndex: number | undefined,
+  references: ReferenceInput[],
+  section: 'full' | 'chorus' | 'verse',
+): ResolvedReferenceMetrics {
+  if (!references.length) throw new Error('At least one analysed reference is required.');
+  const blended = sourceIndex === undefined || Math.round(sourceIndex) < 0;
+  const selected = blended ? references : [references[clamp(Math.round(sourceIndex), 0, references.length - 1)]];
+  const selectedMetrics = selected.map((entry) => metricsFrom(entry.report, section));
+  let weights = selected.map((entry) => blended && Number.isFinite(entry.weight) ? Math.max(0, entry.weight as number) : 1);
+  if (weights.every((weight) => weight <= 0)) weights = selected.map(() => 1);
+  const sum = weights.reduce((a, b) => a + b, 0);
+  weights = weights.map((weight) => weight / sum);
+
+  const first = selectedMetrics[0];
+  const numericKeys: (keyof Omit<Metrics, 'bands' | 'sectionFallback' | 'duration' | 'lufs' | 'truePeakDb'>)[] = [
+    'crestDb', 'lra', 'plrDb', 'widthDb', 'correlation', 'monoCompatibility',
+    'lowSideDb', 'punchScore', 'attackDensity', 'flatness', 'tiltDbPerOct',
+    'highEnergyDb', 'lowEnergyDb', 'tempoBpm',
+  ];
+  const metrics: Metrics = {
+    ...first,
+    lufs: weightedDbMean(selectedMetrics.map((value) => value.lufs), weights, 'power'),
+    truePeakDb: weightedDbMean(selectedMetrics.map((value) => value.truePeakDb), weights, 'amplitude'),
+    bands: [],
+    sectionFallback: selectedMetrics.some((value) => value.sectionFallback),
+    duration: weightedMean(selectedMetrics.map((value) => value.duration), weights),
+  };
+  for (const key of numericKeys) {
+    (metrics as unknown as Record<string, number>)[key] = weightedMean(
+      selectedMetrics.map((value) => value[key] as number),
+      weights,
+    );
+  }
+
+  const bandCount = Math.max(...selectedMetrics.map((value) => value.bands.length));
+  metrics.bands = Array.from({ length: bandCount }, (_, index) => {
+    const center = selectedMetrics.find((value) => value.bands[index])?.bands[index]?.center ?? 0;
+    const db = weightedDbMean(
+      selectedMetrics.map((value) => value.bands[index]?.db ?? Number.NaN),
+      weights,
+      'power',
+    );
+    return { center, db, relativeDb: 0 };
+  });
+  const averageDb = metrics.bands.reduce((total, band) => total + band.db, 0) / Math.max(1, metrics.bands.length);
+  metrics.bands.forEach((band) => { band.relativeDb = band.db - averageDb; });
+
+  const relativeByReference = selectedMetrics.map((value) => {
+    const avg = value.bands.reduce((total, band) => total + band.db, 0) / Math.max(1, value.bands.length);
+    return value.bands.map((band) => band.db - avg);
+  });
+  const tonalSpread = Math.sqrt(
+    metrics.bands.reduce((total, band, index) => {
+      const mean = band.relativeDb;
+      const variance = weightedMean(
+        relativeByReference.map((values) => Number.isFinite(values[index]) ? Math.pow(values[index] - mean, 2) : Number.NaN),
+        weights,
+      );
+      return total + (Number.isFinite(variance) ? variance : 0);
+    }, 0) / Math.max(1, metrics.bands.length),
+  );
+  const spread = (key: keyof Metrics, tolerance: number) =>
+    weightedSpread(selectedMetrics.map((value) => value[key] as number), weights, tolerance);
+  const agreement: CategorySource = {
+    frequencyBalance: clamp(1 - tonalSpread / 10, 0.2, 1),
+    loudness: spread('lufs', 6),
+    dynamics: Math.min(spread('crestDb', 6), spread('lra', 5)),
+    stereoWidth: spread('widthDb', 8),
+    punch: spread('punchScore', 0.35),
+    saturation: Math.min(spread('flatness', 0.25), spread('tiltDbPerOct', 4)),
+    character: Math.min(spread('lra', 5), spread('crestDb', 6)),
+  };
+  const quality = weightedMean(selectedMetrics.map((value) => {
+    const loudnessQuality = Number.isFinite(value.lufs) && value.lufs > -60 ? 1 : 0.55;
+    const durationQuality = clamp(Math.log10(Math.max(1, value.duration)) / Math.log10(30), 0.55, 1);
+    const sectionQuality = value.sectionFallback ? 0.9 : 1;
+    return loudnessQuality * durationQuality * sectionQuality;
+  }), weights);
+  const fallbackAssetIds = selected.filter((entry, index) => selectedMetrics[index].sectionFallback).map((entry) => entry.assetId);
+
+  return {
+    metrics,
+    assetIds: selected.map((entry) => entry.assetId),
+    fallbackAssetIds,
+    name: blended ? 'weighted reference blend' : (selected.length === 1 ? 'selected reference' : 'reference'),
+    agreement,
+    quality: Number.isFinite(quality) ? quality : 0.55,
+  };
+}
+
+function referenceFor(
+  sources: CategorySource,
+  category: keyof CategorySource,
+  references: ReferenceInput[],
+  section: 'full' | 'chorus' | 'verse',
+): ResolvedReferenceMetrics {
+  return resolveReferenceMetrics(sources[category], references, section);
 }
 
 function fmtDb(v: number, digits = 1): string {
