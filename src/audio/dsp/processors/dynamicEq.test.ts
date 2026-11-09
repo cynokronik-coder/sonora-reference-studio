@@ -113,7 +113,7 @@ describe('Dynamic EQ band detection', () => {
     processBlocks(processor, left, right);
     expect(left.every(Number.isFinite)).toBe(true);
     expect(right.every(Number.isFinite)).toBe(true);
-    expect(processor.meter().reduction).toBeFinite();
+    expect(Number.isFinite(processor.meter().reduction)).toBe(true);
   });
 
   it('resets detector memory and returns the bell to neutral when a band is disabled', () => {
