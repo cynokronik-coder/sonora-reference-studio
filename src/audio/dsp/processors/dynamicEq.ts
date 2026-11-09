@@ -268,4 +268,39 @@ export const dynamicEqDefinition: ProcessorDefinition = {
   create: () => new DynamicEq(),
 };
 
-void clamp;
+
+export interface DynamicEqPreset {
+  id: string;
+  name: string;
+  description: string;
+  values: ParamValues;
+}
+
+function dynamicEqPreset(id: string, name: string, description: string, overrides: ParamValues): DynamicEqPreset {
+  const values: ParamValues = {};
+  for (const param of dynamicEqDefinition.params) values[param.key] = param.default;
+  return { id, name, description, values: { ...values, ...overrides } };
+}
+
+/** Conservative editable starting points, not automatic resonance diagnosis. */
+export const DYNAMIC_EQ_PRESETS: DynamicEqPreset[] = [
+  dynamicEqPreset('vocal-harshness', 'Vocal harshness', 'Reduces upper-mid bite only when it builds up, with a second lighter sibilance-control band.', {
+    b0_on: 1, b0_freq: 3_600, b0_q: 2.2, b0_threshold: -30, b0_ratio: 4, b0_range: 4, b0_attack: 4, b0_release: 90,
+    b1_on: 1, b1_freq: 7_200, b1_q: 3, b1_threshold: -34, b1_ratio: 3, b1_range: 2.5, b1_attack: 1, b1_release: 70,
+  }),
+  dynamicEqPreset('low-mid-control', 'Low-mid control', 'Tames occasional boxiness and low-mid build-up without applying a constant cut.', {
+    b0_on: 1, b0_freq: 260, b0_q: 1.4, b0_threshold: -29, b0_ratio: 3, b0_range: 3, b0_attack: 18, b0_release: 180,
+    b1_on: 1, b1_freq: 480, b1_q: 1.8, b1_threshold: -32, b1_ratio: 3, b1_range: 2, b1_attack: 12, b1_release: 150,
+  }),
+  dynamicEqPreset('bass-note-control', 'Bass note control', 'Controls resonant bass notes with slower timing to avoid flattening the entire low end.', {
+    b0_on: 1, b0_freq: 95, b0_q: 1.6, b0_threshold: -30, b0_ratio: 3.5, b0_range: 4, b0_attack: 25, b0_release: 220,
+  }),
+  dynamicEqPreset('high-frequency-smoothing', 'High-frequency smoothing', 'Softens occasional top-end spikes while retaining overall brightness.', {
+    b0_on: 1, b0_freq: 8_500, b0_q: 2.8, b0_threshold: -32, b0_ratio: 3, b0_range: 3.5, b0_attack: 2, b0_release: 100,
+  }),
+  dynamicEqPreset('gentle-dynamic-balance', 'Gentle dynamic balance', 'A restrained multi-band starting point for low-mid, presence and upper-frequency variation.', {
+    b0_on: 1, b0_freq: 220, b0_q: 1.2, b0_threshold: -31, b0_ratio: 2, b0_range: 2, b0_attack: 25, b0_release: 200,
+    b1_on: 1, b1_freq: 2_800, b1_q: 1.8, b1_threshold: -32, b1_ratio: 2.2, b1_range: 1.8, b1_attack: 8, b1_release: 150,
+    b2_on: 1, b2_freq: 7_500, b2_q: 2.4, b2_threshold: -35, b2_ratio: 2, b2_range: 1.5, b2_attack: 3, b2_release: 130,
+  }),
+];
