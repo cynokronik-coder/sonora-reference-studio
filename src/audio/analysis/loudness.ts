@@ -220,6 +220,33 @@ export function analyzeLoudness(
   };
 }
 
+/**
+ * Apply one common gain to stereo PCM so its Annex 2 FIR-measured true peak
+ * reaches the requested dBTP value. The arrays are modified in place and the
+ * applied linear gain is returned. This is intended for a final PCM buffer
+ * after sample-rate conversion and before encoding.
+ */
+export function normalizeToTruePeak(L: Float32Array, R: Float32Array, targetDbTp: number): number {
+  const n = Math.min(L.length, R.length);
+  if (n === 0 || !Number.isFinite(targetDbTp)) return 1;
+
+  const meter = new Annex2TruePeakMeter();
+  let peak = 0;
+  for (let start = 0; start < n; start += 512) {
+    const end = Math.min(n, start + 512);
+    peak = Math.max(peak, meter.process(L.subarray(start, end), R.subarray(start, end), end - start));
+  }
+  peak = Math.max(peak, meter.flush());
+  if (!(peak > 0) || !Number.isFinite(peak)) return 1;
+
+  const gain = Math.pow(10, (targetDbTp - safeDb(peak)) / 20);
+  for (let i = 0; i < n; i++) {
+    L[i] *= gain;
+    R[i] *= gain;
+  }
+  return gain;
+}
+
 function downsampleSeries(points: LoudnessPoint[], maxPoints: number): LoudnessPoint[] {
   if (points.length <= maxPoints) return points;
   const step = Math.ceil(points.length / maxPoints);
