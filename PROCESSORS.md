@@ -12,11 +12,12 @@ loudness correction stage in generated chains.
 ## EQ
 
 ### Parametric EQ
-8 bands. Types: bell, low shelf, high shelf, high-pass, low-pass, notch, band-pass, tilt. Per-band frequency/gain/Q and
-routing (stereo, mid, side). Processing happens in M/S so a mid-only or side-only band behaves correctly; a stereo band
-applies identical filters to both sides. **Linear phase** mode designs a 512-tap symmetric FIR from the exact magnitude
-response of the biquad cascade (frequency sampling + inverse FFT + windowing), adding 256 samples of latency. The
-minimum-phase path is default.
+- Eight bands with bell, low shelf, high shelf, high-pass, low-pass, notch, band-pass and tilt shapes.
+- Per-band frequency, gain, Q / shelf slope and stereo, mid-only or side-only routing. The signal is processed in M/S, so a Mid-only band cannot change a purely Side signal and vice versa.
+- Shelf slope uses the RBJ Audio EQ Cookbook S parameter, clamped to 0.1–1.0. The UI labels it separately from Q; non-shelf filters retain a Q range of 0.2–18. Invalid or non-finite imported parameters are bounded before coefficients are designed.
+- The response display uses the current project sample rate and shows separate Mid and Side curves when their responses differ. One combined curve is shown when they are the same.
+- Optional linear-phase mode designs a **513-tap symmetric FIR** from the magnitude response of the biquad cascade (frequency sampling, inverse FFT and windowing). Its group delay is exactly 256 samples; at 48 kHz this is about 5.33 ms. The minimum-phase path remains the default.
+- Factory starting points include Low-end cleanup, Vocal presence, High-frequency air, Warm tonal balance, Low-mid clarity and Mid-side openness. All bands and routing values remain editable.
 
 ### Dynamic EQ
 Four bell bands whose gain is driven by a bandpass detector. Threshold, maximum cut, attack and release per band. Gain
