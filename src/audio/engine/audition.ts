@@ -51,3 +51,32 @@ export function copyAuditionBlock(
   }
   return Math.min(total, elapsed);
 }
+
+export interface AuditionBlockRenderer {
+  renderBlock(position: number, frames: number, outL: Float32Array, outR: Float32Array): void;
+}
+
+/**
+ * Render both versions for the same absolute timeline block, then select or
+ * crossfade the output. Scratch arrays are caller-owned and reused per block.
+ */
+export function renderAuditionBlock(
+  beforeRenderer: AuditionBlockRenderer,
+  afterRenderer: AuditionBlockRenderer,
+  position: number,
+  mode: AuditionMode,
+  scratch: StereoAuditionBuffers,
+  outL: Float32Array,
+  outR: Float32Array,
+  transition?: AuditionTransition,
+): number {
+  const frames = outL.length;
+  if (outR.length !== frames ||
+      scratch.beforeL.length < frames || scratch.beforeR.length < frames ||
+      scratch.afterL.length < frames || scratch.afterR.length < frames) {
+    throw new RangeError('A/B audition scratch buffers must fit the output block.');
+  }
+  beforeRenderer.renderBlock(position, frames, scratch.beforeL, scratch.beforeR);
+  afterRenderer.renderBlock(position, frames, scratch.afterL, scratch.afterR);
+  return copyAuditionBlock(scratch, mode, 0, outL, outR, transition);
+}
