@@ -13,11 +13,11 @@ The command palette result rows transition every time the keyboard-selected resu
 The current class in **src/ui/CommandPalette.tsx:208–212** is:
 
 ~~~tsx
-className={\`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 \${ 
+className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${ 
   selected
     ? 'border-[#A77AFF]/25 bg-[#8957FF]/[.13] shadow-[0_0_0_1px_rgba(137,87,255,.06)]'
     : 'border-transparent hover:border-white/[.06] hover:bg-white/[.035]'
-}\`}
+}`}
 ~~~
 
 The selected state changes when Arrow Up / Arrow Down updates activeIndex. The same transition also animates hover and selected-state paint properties.
@@ -27,11 +27,11 @@ The selected state changes when Arrow Up / Arrow Down updates activeIndex. The s
 Remove the transition from command result rows. Keep all existing selected, hover, disabled and focus visuals, but let them update immediately.
 
 ~~~tsx
-className={\`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left disabled:cursor-not-allowed disabled:opacity-40 \${ 
+className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left disabled:cursor-not-allowed disabled:opacity-40 ${ 
   selected
     ? 'border-[#A77AFF]/25 bg-[#8957FF]/[.13] shadow-[0_0_0_1px_rgba(137,87,255,.06)]'
     : 'border-transparent hover:border-white/[.06] hover:bg-white/[.035]'
-}\`}
+}`}
 ~~~
 
 Do not add a replacement transition, keyframe, spring or delayed state update. The command palette's existing instantaneous open and close behavior must remain instantaneous.
