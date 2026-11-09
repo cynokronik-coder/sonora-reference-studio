@@ -12,6 +12,7 @@ import { MULTIBAND_COMP_PRESETS } from '../audio/dsp/processors/multiband';
 import { EQ_PRESETS } from '../audio/dsp/processors/eq';
 import { DYNAMIC_EQ_PRESETS } from '../audio/dsp/processors/dynamicEq';
 import { RESONANCE_PRESETS } from '../audio/dsp/processors/resonance';
+import { DEESSER_PRESETS } from '../audio/dsp/processors/deesser';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -359,7 +360,8 @@ function ProcessorParams({
   const [eqPreset, setEqPreset] = useState('');
   const [dynamicEqPreset, setDynamicEqPreset] = useState('');
   const [resonancePreset, setResonancePreset] = useState('');
-  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); }, [node.id]);
+  const [deEsserPreset, setDeEsserPreset] = useState('');
+  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -375,6 +377,7 @@ function ProcessorParams({
     if (node.type === 'eq') setEqPreset('');
     if (node.type === 'dynamicEq') setDynamicEqPreset('');
     if (node.type === 'resonance') setResonancePreset('');
+    if (node.type === 'deesser') setDeEsserPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
@@ -407,8 +410,29 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setResonancePreset(preset.id);
   };
+  const applyDeEsserPreset = (presetId: string) => {
+    const preset = DEESSER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setDeEsserPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
+      {node.type === 'deesser' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="De-esser starting point"
+            value={deEsserPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...DEESSER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyDeEsserPreset}
+          />
+          {deEsserPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {DEESSER_PRESETS.find((preset) => preset.id === deEsserPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'resonance' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
