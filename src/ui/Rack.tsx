@@ -18,6 +18,7 @@ import { GATE_PRESETS } from '../audio/dsp/processors/gate';
 import { SATURATION_PRESETS } from '../audio/dsp/processors/saturation';
 import { EXCITER_PRESETS } from '../audio/dsp/processors/exciter';
 import { CLIPPER_PRESETS, LIMITER_PRESETS } from '../audio/dsp/processors/limiter';
+import { STEREO_PRESETS } from '../audio/dsp/processors/stereo';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
