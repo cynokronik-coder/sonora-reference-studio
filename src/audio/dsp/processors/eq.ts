@@ -302,3 +302,43 @@ export const eqDefinition: ProcessorDefinition = {
   ],
   create: () => new ParametricEq(),
 };
+
+export interface EqPreset {
+  id: string;
+  name: string;
+  description: string;
+  values: ParamValues;
+}
+
+function eqPreset(id: string, name: string, description: string, overrides: ParamValues): EqPreset {
+  const values: ParamValues = {};
+  for (const param of eqDefinition.params) values[param.key] = param.default;
+  return { id, name, description, values: { ...values, ...overrides } };
+}
+
+/** Conservative, editable starting points; not automatic corrections or genre emulations. */
+export const EQ_PRESETS: EqPreset[] = [
+  eqPreset('low-end-cleanup', 'Low-end cleanup', 'Gently removes subsonic energy while leaving the main bass region intact.', {
+    b0_on: 1, b0_type: 3, b0_freq: 28, b0_q: 0.707,
+  }),
+  eqPreset('reduce-mud', 'Reduce mud', 'A restrained low-mid cut to create space when the mix sounds congested.', {
+    b0_on: 1, b0_type: 0, b0_freq: 280, b0_gain: -2, b0_q: 1.1,
+  }),
+  eqPreset('vocal-presence', 'Vocal presence', 'A small upper-mid lift with a subtle high shelf for articulation.', {
+    b0_on: 1, b0_type: 0, b0_freq: 3_200, b0_gain: 1.2, b0_q: 0.9,
+    b1_on: 1, b1_type: 2, b1_freq: 12_000, b1_gain: 0.7, b1_q: 0.7,
+  }),
+  eqPreset('air-and-clarity', 'Air and clarity', 'A gentle high shelf for extra openness; check sibilance and noise after applying.', {
+    b0_on: 1, b0_type: 2, b0_freq: 11_000, b0_gain: 1.5, b0_q: 0.7,
+  }),
+  eqPreset('warm-balance', 'Warm balance', 'A modest low shelf with a soft high-frequency reduction.', {
+    b0_on: 1, b0_type: 1, b0_freq: 120, b0_gain: 1, b0_q: 0.7,
+    b1_on: 1, b1_type: 2, b1_freq: 9_000, b1_gain: -0.8, b1_q: 0.7,
+  }),
+  eqPreset('resonance-notch', 'Resonance notch', 'A narrow notch starting point for a known ringing frequency; move the frequency to the problem you hear.', {
+    b0_on: 1, b0_type: 5, b0_freq: 2_800, b0_gain: -12, b0_q: 6,
+  }),
+  eqPreset('gentle-master-tilt', 'Gentle master tilt', 'A very small tonal tilt around the chosen pivot frequency.', {
+    b0_on: 1, b0_type: 7, b0_freq: 800, b0_gain: 0.8, b0_q: 0.7,
+  }),
+];
