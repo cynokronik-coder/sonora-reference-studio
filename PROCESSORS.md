@@ -41,7 +41,11 @@ resonance report.
 
 ### Multiband Compressor
 Three bands from LR4 crossovers at adjustable splits. Each band runs an independent compressor with its own threshold,
-ratio, attack, release, knee, makeup, character and mix. Bands sum after compression.
+ratio, attack, release, knee, makeup, character, dry/wet mix and stereo-link amount. Band bypass preserves the split
+signal without compression; band solo auditions an individual frequency region. External sidechain audio is split
+through a separate LR4 network at the same frequencies, so each band detector listens to its corresponding key band
+rather than receiving the full-range key. The processor reports per-band gain reduction and the maximum band reduction.
+Factory starting points include Low-end control, Gentle multiband glue, Presence control and Dynamic master.
 
 ### De-esser
 LR4 split above a tunable frequency; the high band is detected and dynamically reduced. Wideband mode applies the same
