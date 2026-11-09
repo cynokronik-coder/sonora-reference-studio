@@ -137,8 +137,14 @@ eliminate aliasing.
 ## Stereo
 
 ### Stereo Imaging
-Frequency-dependent width: low band, high band and global width, with a mono-maker below the split. Mid/side trims,
-balance, output, and an optional Haas delay with its own mix (documented as a mono-compatibility trade-off).
+A Linkwitz–Riley fourth-order low/mid/high crossover feeds M/S width processing. Global width and independent low-band
+and above-split width controls scale side energy; the mono-maker collapses only the low band below the selected split,
+leaving upper-band side information intact. Mid and side trims, balance and output are smoothed over 20 ms. Crossover
+changes also ramp their biquad coefficients, and the splitter's six output buffers are prepared once rather than
+wrapped in a new object each render block. Optional Haas widening applies a delayed right-channel blend and is an
+explicit mono-compatibility/localisation trade-off. Its ring buffer keeps advancing while the effect is disabled, so
+re-enabling it does not replay stale audio. Factory starting points include Mono-safe low end, Wide highs, Narrower mix,
+Gentle width, Haas creative and Mono check. Always compare in mono and check correlation before choosing a widened setting.
 
 ## Time
 
