@@ -262,8 +262,8 @@ export class Saturator implements AudioProcessor {
         this.outGainRemaining--;
         if (this.outGainRemaining === 0) this.outGain = this.outGainTarget;
       }
-      const dryL = this.mix < 1 && this.osFactor > 1 ? this.alignedDryL[i] : this.dryL[i];
-      const dryR = this.mix < 1 && this.osFactor > 1 ? this.alignedDryR[i] : this.dryR[i];
+      const dryL = this.mix <= 0 ? this.dryL[i] : this.mix < 1 && this.osFactor > 1 ? this.alignedDryL[i] : this.dryL[i];
+      const dryR = this.mix <= 0 ? this.dryR[i] : this.mix < 1 && this.osFactor > 1 ? this.alignedDryR[i] : this.dryR[i];
       L[i] = (dryL * (1 - this.mix) + this.wetL[i] * this.mix) * this.outGain;
       R[i] = (dryR * (1 - this.mix) + this.wetR[i] * this.mix) * this.outGain;
       peakL = Math.max(peakL, Math.abs(L[i]));
