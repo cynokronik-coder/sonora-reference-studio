@@ -7,6 +7,7 @@ import type { ChainScope } from '../audio/model/project';
 import { Badge, Button, HelpTip, IconButton, Modal, ParamSlider, Select, Toggle } from './Primitives';
 import { EQCurve, GainReductionMeter } from './viz';
 import { clamp } from '../audio/dsp/util';
+import { COMPRESSOR_PRESETS } from '../audio/dsp/processors/compressor';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -42,6 +43,7 @@ export function Rack({
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [compressorPreset, setCompressorPreset] = useState('');
   const { addProcessor, moveProcessor, mode } = useApp();
   const selected = processors.find((p) => p.id === selectedId) ?? null;
 
@@ -301,10 +303,32 @@ function ProcessorParams({
     groups.get(group)!.push(spec);
   }
   const update = (key: string, value: number) => {
+    if (node.type === 'compressor') setCompressorPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
+  };
+  const applyCompressorPreset = (presetId: string) => {
+    const preset = COMPRESSOR_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setCompressorPreset(preset.id);
   };
   return (
     <div className="space-y-2">
+      {node.type === 'compressor' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Compressor starting point"
+            value={compressorPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...COMPRESSOR_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyCompressorPreset}
+          />
+          {compressorPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {COMPRESSOR_PRESETS.find((preset) => preset.id === compressorPreset)?.description} All parameters remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {[...groups.entries()].map(([group, specs], index) => (
         <details key={group} open={index === 0} className="group rounded border border-ink-700/70 bg-ink-900/40">
           <summary className="cursor-pointer list-none px-2 py-1.5 text-2xs uppercase tracking-wider text-ink-400 hover:text-ink-200">
