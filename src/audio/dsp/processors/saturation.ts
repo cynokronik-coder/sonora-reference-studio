@@ -46,6 +46,8 @@ export class Saturator implements AudioProcessor {
   private os: Oversampler | null = null;
   private dryOs: Oversampler | null = null;
   private osFactor: 1 | 2 | 4 = 1;
+  private osPreparedBlock = 0;
+  private osPreparedSampleRate = 0;
   private preFilterL = new Biquad();
   private preFilterR = new Biquad();
   private postToneL = new Biquad();
@@ -100,14 +102,16 @@ export class Saturator implements AudioProcessor {
   }
 
   private oversamplingChoice(): 1 | 2 | 4 {
-    const choice = clamp(Math.round(this.values.oversample ?? 1), 0, 2);
+    const choice = clamp(Math.round(this.values.oversample ?? 2), 0, 2);
     return choice === 0 ? 1 : choice === 1 ? 2 : 4;
   }
 
   private buildOversampler(): void {
     const chosen = this.oversamplingChoice();
-    if (chosen === this.osFactor && this.os) return;
+    if (chosen === this.osFactor && this.os && this.osPreparedBlock === this.maxBlock && this.osPreparedSampleRate === this.sr) return;
     this.osFactor = chosen;
+    this.osPreparedBlock = this.maxBlock;
+    this.osPreparedSampleRate = this.sr;
     this.os = new Oversampler(chosen, 2, this.maxBlock);
     this.dryOs = chosen > 1 ? new Oversampler(chosen, 2, this.maxBlock) : null;
     this.os.prepare(this.sr);
@@ -282,6 +286,7 @@ export class Saturator implements AudioProcessor {
     this.postToneR.reset();
     this.dcBlockL.reset();
     this.dcBlockR.reset();
+    this.configureToneFilters(true);
     this.drive = this.driveTarget;
     this.compGain = this.compGainTarget;
     this.nonlinearRemaining = 0;
