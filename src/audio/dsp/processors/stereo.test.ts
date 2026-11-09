@@ -165,6 +165,9 @@ describe('Stereo imaging M/S and frequency-dependent width', () => {
         midGain: -6 + (block % 6) * 2,
         sideGain: -5 + (block % 5) * 2,
         balance: -80 + (block % 9) * 20,
+        haas: (block % 3) * 12,
+        haasMix: (block % 4) * 25,
+        monoMaker: block % 2,
         output: -3 + (block % 6),
       });
       left.set(tone(1_000, 0.35).subarray(0, BLOCK_SIZE));
