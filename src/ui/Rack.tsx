@@ -43,7 +43,6 @@ export function Rack({
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [compressorPreset, setCompressorPreset] = useState('');
   const { addProcessor, moveProcessor, mode } = useApp();
   const selected = processors.find((p) => p.id === selectedId) ?? null;
 
@@ -293,6 +292,7 @@ function ProcessorParams({
   node: ProcessorNodeState;
   advanced: boolean;
 }) {
+  const [compressorPreset, setCompressorPreset] = useState('');
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
