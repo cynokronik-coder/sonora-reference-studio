@@ -1,10 +1,14 @@
 import { Biquad, designBiquad, designTilt, type BiquadCoeffs } from '../biquad';
 import { FirConvolver, designLinearPhaseFir } from '../fir';
 import type { AudioProcessor, ParamValues, ProcessorDefinition, ProcessorMeter } from '../types';
+import { clamp } from '../util';
 
 export const EQ_BAND_COUNT = 8;
 export const EQ_TYPES = ['Bell', 'Low shelf', 'High shelf', 'High pass', 'Low pass', 'Notch', 'Band pass', 'Tilt'] as const;
 export const EQ_ROUTING = ['Stereo', 'Mid', 'Side'] as const;
+export const EQ_LINEAR_PHASE_TAPS = 513;
+export const EQ_LINEAR_PHASE_LATENCY = (EQ_LINEAR_PHASE_TAPS - 1) / 2;
+const EQ_PARAMETER_SMOOTH_MS = 20;
 
 const TYPE_MAP = ['peak', 'lowshelf', 'highshelf', 'highpass', 'lowpass', 'notch', 'bandpass', 'peak'] as const;
 const PASSTHROUGH: BiquadCoeffs = { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
@@ -32,6 +36,9 @@ export class ParametricEq implements AudioProcessor {
   private convSide: FirConvolver | null = null;
   private preparedBlock = 0;
   private outGain = 1;
+  private outGainTarget = 1;
+  private outGainStep = 0;
+  private outGainRemaining = 0;
   private lastSignature = '';
 
   constructor() {
@@ -44,7 +51,7 @@ export class ParametricEq implements AudioProcessor {
   }
 
   get latency(): number {
-    return this.linear ? 256 : 0;
+    return this.linear ? EQ_LINEAR_PHASE_LATENCY : 0;
   }
 
   prepare(sampleRate: number, maxBlock: number): void {
@@ -56,7 +63,9 @@ export class ParametricEq implements AudioProcessor {
 
   setValues(values: ParamValues): void {
     this.values = values;
-    this.outGain = Math.pow(10, (values.output ?? 0) / 20);
+    this.outGainTarget = Math.pow(10, (values.output ?? 0) / 20);
+    this.outGainRemaining = Math.max(1, Math.round(this.sr * (EQ_PARAMETER_SMOOTH_MS / 1000)));
+    this.outGainStep = (this.outGainTarget - this.outGain) / this.outGainRemaining;
     this.linear = (values.linear ?? 0) > 0.5;
     this.rebuild();
   }
@@ -71,13 +80,13 @@ export class ParametricEq implements AudioProcessor {
     for (let b = 0; b < EQ_BAND_COUNT; b++) {
       const on = this.bandValue(this.values, b, 'on', b === 0 ? 1 : 0) > 0.5;
       if (!on) continue;
-      const route = Math.round(this.bandValue(this.values, b, 'route', 0));
+      const route = clamp(Math.round(this.bandValue(this.values, b, 'route', 0)), 0, EQ_ROUTING.length - 1);
       if (path === 'mid' && route === 2) continue;
       if (path === 'side' && route === 1) continue;
-      const type = Math.round(this.bandValue(this.values, b, 'type', 0));
-      const freq = this.bandValue(this.values, b, 'freq', 1000);
-      const gain = this.bandValue(this.values, b, 'gain', 0);
-      const q = this.bandValue(this.values, b, 'q', 1);
+      const type = clamp(Math.round(this.bandValue(this.values, b, 'type', 0)), 0, EQ_TYPES.length - 1);
+      const freq = clamp(this.bandValue(this.values, b, 'freq', 1000), 20, Math.min(20000, this.sr * 0.49));
+      const gain = clamp(this.bandValue(this.values, b, 'gain', 0), -18, 18);
+      const q = clamp(this.bandValue(this.values, b, 'q', 1), 0.2, 18);
       if (type === 7) {
         const tilt = designTilt(gain, this.sr, freq);
         out.push(tilt.low, tilt.high);
@@ -93,15 +102,16 @@ export class ParametricEq implements AudioProcessor {
     if (sig === this.lastSignature) return;
     this.lastSignature = sig;
 
+    const smoothingSamples = Math.max(1, Math.round(this.sr * (EQ_PARAMETER_SMOOTH_MS / 1000)));
     for (let b = 0; b < EQ_BAND_COUNT; b++) {
       const on = this.bandValue(this.values, b, 'on', b === 0 ? 1 : 0) > 0.5;
-      const route = Math.round(this.bandValue(this.values, b, 'route', 0));
-      const type = Math.round(this.bandValue(this.values, b, 'type', 0));
-      const freq = this.bandValue(this.values, b, 'freq', 1000);
-      const gain = this.bandValue(this.values, b, 'gain', 0);
-      const q = this.bandValue(this.values, b, 'q', 1);
-      this.applyMid[b] = on && route !== 2;
-      this.applySide[b] = on && route !== 1;
+      const route = clamp(Math.round(this.bandValue(this.values, b, 'route', 0)), 0, EQ_ROUTING.length - 1);
+      const type = clamp(Math.round(this.bandValue(this.values, b, 'type', 0)), 0, EQ_TYPES.length - 1);
+      const freq = clamp(this.bandValue(this.values, b, 'freq', 1000), 20, Math.min(20000, this.sr * 0.49));
+      const gain = clamp(this.bandValue(this.values, b, 'gain', 0), -18, 18);
+      const q = clamp(this.bandValue(this.values, b, 'q', 1), 0.2, 18);
+      const applyMidTarget = on && route !== 2;
+      const applySideTarget = on && route !== 1;
 
       const midCoeffs = on && route !== 2
         ? type === 7
@@ -115,14 +125,18 @@ export class ParametricEq implements AudioProcessor {
         : [];
 
       for (let slot = 0; slot < 2; slot++) {
-        this.midFilters[b][slot].set(midCoeffs[slot] ?? PASSTHROUGH);
-        this.sideFilters[b][slot].set(sideCoeffs[slot] ?? PASSTHROUGH);
+        this.midFilters[b][slot].setSmoothed(midCoeffs[slot] ?? PASSTHROUGH, smoothingSamples);
+        this.sideFilters[b][slot].setSmoothed(sideCoeffs[slot] ?? PASSTHROUGH, smoothingSamples);
       }
+      // Keep inactive bands in the render loop only while they finish their
+      // 20 ms transition back to a passthrough response.
+      this.applyMid[b] = applyMidTarget || this.midFilters[b].some((filter) => filter.isSmoothing);
+      this.applySide[b] = applySideTarget || this.sideFilters[b].some((filter) => filter.isSmoothing);
     }
 
     if (this.linear) {
-      const midTaps = designLinearPhaseFir(this.cascadeFor('mid'), 512);
-      const sideTaps = designLinearPhaseFir(this.cascadeFor('side'), 512);
+      const midTaps = designLinearPhaseFir(this.cascadeFor('mid'), EQ_LINEAR_PHASE_TAPS);
+      const sideTaps = designLinearPhaseFir(this.cascadeFor('side'), EQ_LINEAR_PHASE_TAPS);
       if (!this.convMid) {
         this.convMid = new FirConvolver(midTaps, 1);
         this.convSide = new FirConvolver(sideTaps, 1);
@@ -163,21 +177,27 @@ export class ParametricEq implements AudioProcessor {
       this.convSide?.process(R, R, n);
     } else {
       for (let b = 0; b < EQ_BAND_COUNT; b++) {
-        if (this.applyMid[b]) {
+        const processMid = this.applyMid[b] || this.midFilters[b].some((filter) => filter.isSmoothing);
+        const processSide = this.applySide[b] || this.sideFilters[b].some((filter) => filter.isSmoothing);
+        if (processMid) {
           this.midFilters[b][0].processBlock(L, n);
           this.midFilters[b][1].processBlock(L, n);
         }
-        if (this.applySide[b]) {
+        if (processSide) {
           this.sideFilters[b][0].processBlock(R, n);
           this.sideFilters[b][1].processBlock(R, n);
         }
       }
     }
 
-    const g = this.outGain;
     for (let i = 0; i < n; i++) {
-      const m = L[i] * g;
-      const s = R[i] * g;
+      if (this.outGainRemaining > 0) {
+        this.outGain += this.outGainStep;
+        this.outGainRemaining -= 1;
+        if (this.outGainRemaining === 0) this.outGain = this.outGainTarget;
+      }
+      const m = L[i] * this.outGain;
+      const s = R[i] * this.outGain;
       L[i] = m + s;
       R[i] = m - s;
     }
@@ -211,13 +231,13 @@ export class ParametricEq implements AudioProcessor {
     for (let i = 0; i < EQ_BAND_COUNT; i++) {
       if (onlyBand !== undefined && i !== onlyBand) continue;
       if ((values[`b${i}_on`] ?? (i === 0 ? 1 : 0)) < 0.5) continue;
-      const route = Math.round(values[`b${i}_route`] ?? 0);
+      const route = clamp(Math.round(values[`b${i}_route`] ?? 0), 0, EQ_ROUTING.length - 1);
       if (routing === 'mid' && route === 2) continue;
       if (routing === 'side' && route === 1) continue;
-      const type = Math.round(values[`b${i}_type`] ?? 0);
-      const freq = values[`b${i}_freq`] ?? 1000;
-      const gain = values[`b${i}_gain`] ?? 0;
-      const q = values[`b${i}_q`] ?? 1;
+      const type = clamp(Math.round(values[`b${i}_type`] ?? 0), 0, EQ_TYPES.length - 1);
+      const freq = clamp(values[`b${i}_freq`] ?? 1000, 20, Math.min(20000, sampleRate * 0.49));
+      const gain = clamp(values[`b${i}_gain`] ?? 0, -18, 18);
+      const q = clamp(values[`b${i}_q`] ?? 1, 0.2, 18);
       if (type === 7) {
         const tilt = designTilt(gain, sampleRate, freq);
         coeffs.push(tilt.low, tilt.high);
@@ -275,7 +295,7 @@ export const eqDefinition: ProcessorDefinition = {
     ...bandParams(0), ...bandParams(1), ...bandParams(2), ...bandParams(3),
     ...bandParams(4), ...bandParams(5), ...bandParams(6), ...bandParams(7),
     { key: 'output', label: 'Output', kind: 'float', min: -18, max: 18, step: 0.1, default: 0, unit: 'dB', group: 'Output' },
-    { key: 'linear', label: 'Linear phase (10 ms latency)', kind: 'bool', default: 0, advanced: true, group: 'Output' },
+    { key: 'linear', label: 'Linear phase (5.3 ms at 48 kHz)', kind: 'bool', default: 0, advanced: true, group: 'Output' },
   ],
   create: () => new ParametricEq(),
 };
