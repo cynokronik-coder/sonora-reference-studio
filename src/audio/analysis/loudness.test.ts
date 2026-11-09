@@ -103,7 +103,9 @@ describe('BS.1770-5 integrated and EBU time-window loudness', () => {
   });
 
   it('keeps the supplementary dynamic-range descriptor distinct from EBU LRA', () => {
-    const { left, right } = stereoTone(1_000, -20, 6);
+    // Use a longer programme so the required 1.5 s file-based LRA flush is
+    // below the 10th percentile and does not dominate a short-file result.
+    const { left, right } = stereoTone(1_000, -20, 40);
     const report = analyzeLoudness(left, right, SAMPLE_RATE);
     expect(report.lra).toBe(0);
     expect(report.dynamicRangeDb).toBeGreaterThanOrEqual(0);
