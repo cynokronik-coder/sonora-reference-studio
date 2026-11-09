@@ -41,8 +41,20 @@ export class Lr4Crossover {
 
   configure(sampleRate: number, lowFreq: number, highFreq: number): void {
     this.sr = sampleRate;
-    this.lowFreq = Math.max(30, Math.min(lowFreq, sampleRate * 0.4));
-    this.highFreq = Math.max(this.lowFreq * 2, Math.min(highFreq, sampleRate * 0.45));
+    const maxLow = sampleRate * 0.4;
+    const maxHigh = sampleRate * 0.45;
+    const requestedLow = Number.isFinite(lowFreq) ? lowFreq : 200;
+    const requestedHigh = Number.isFinite(highFreq) ? highFreq : 4_000;
+    this.lowFreq = Math.max(30, Math.min(requestedLow, maxLow));
+    // The processor's parameter value must match the actual crossover. The
+    // previous 2:1 rule silently moved valid xHigh settings (for example,
+    // 600/800 Hz became 600/1200 Hz), while an LR4 cascade reconstructs at any
+    // ordered pair of split frequencies. Keep a small safety gap instead.
+    const minimumGap = Math.max(20, sampleRate * 0.001);
+    this.highFreq = Math.max(
+      this.lowFreq + minimumGap,
+      Math.min(requestedHigh, maxHigh),
+    );
     for (const stage of this.channels) {
       stage.lp1[0].configure('lowpass', this.lowFreq, 0, 0.7071, sampleRate);
       stage.lp1[1].configure('lowpass', this.lowFreq, 0, 0.7071, sampleRate);
