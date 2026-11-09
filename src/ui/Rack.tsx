@@ -480,13 +480,13 @@ function ProcessorParams({
                   <ParamSlider
                     label={isShelfSlope ? 'Shelf slope (S)' : spec.label}
                     value={value}
-                    min={isShelfSlope ? 0.1 : spec.min ?? 0}
-                    max={isShelfSlope ? 1 : spec.max ?? 1}
+                    min={eqQMatch ? (isShelfSlope ? 0.1 : 0.2) : spec.min ?? 0}
+                    max={eqQMatch && isShelfSlope ? 1 : spec.max ?? 1}
                     step={spec.step ?? 0.01}
                     unit={spec.unit}
                     logarithmic={spec.scale === 'log'}
                     compact
-                    onChange={(next) => update(spec.key, clamp(next, spec.min ?? -Infinity, spec.max ?? Infinity))}
+                    onChange={(next) => update(spec.key, clamp(next, eqQMatch ? (isShelfSlope ? 0.1 : 0.2) : spec.min ?? -Infinity, eqQMatch && isShelfSlope ? 1 : spec.max ?? Infinity))}
                     format={
                       spec.scale === 'log' && (spec.max ?? 0) >= 1000
                         ? (v) => `${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v)} ${spec.unit ?? ''}`.trim()
