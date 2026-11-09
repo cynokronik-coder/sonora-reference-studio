@@ -1126,18 +1126,14 @@ export const useApp = create<AppState>((set, get) => ({
       const endSec = timelineDuration(projectSnapshot);
 
       const beforeResult = await renderProject(get, {
-        mode: 'master',
-        startSec: 0,
-        endSec,
-        label: 'Rendering original mix for A/B audition',
-        projectOverride: beforeProject,
+        mode: 'master', startSec: 0, endSec,
+        label: 'Measuring original mix for A/B audition',
+        projectOverride: beforeProject, statsOnly: true,
       });
       const afterResult = await renderProject(get, {
-        mode: 'master',
-        startSec: 0,
-        endSec,
-        label: 'Rendering matched mix for A/B audition',
-        projectOverride: afterProject,
+        mode: 'master', startSec: 0, endSec,
+        label: 'Measuring matched mix for A/B audition',
+        projectOverride: afterProject, statsOnly: true,
       });
 
       const current = get();
@@ -1155,20 +1151,14 @@ export const useApp = create<AppState>((set, get) => ({
       if (
         beforeResult.sampleRate !== realtimeHost.sampleRate ||
         beforeResult.sampleRate !== afterResult.sampleRate ||
-        beforeResult.L.length !== afterResult.L.length ||
-        beforeResult.R.length !== afterResult.R.length
+        Math.abs(beforeResult.stats.duration - afterResult.stats.duration) > 1 / beforeResult.sampleRate
       ) {
         throw new Error('The original and matched renders do not share the same sample timeline.');
       }
 
       realtimeHost.loadAssets(engineAssets(current.project, current.assetBuffers));
       realtimeHost.pushProject(current.project);
-      realtimeHost.setMatchAuditionBuffers({
-        beforeL: beforeResult.L,
-        beforeR: beforeResult.R,
-        afterL: afterResult.L,
-        afterR: afterResult.R,
-      });
+      realtimeHost.setMatchAuditionProjects({ before: beforeProject, after: afterProject });
       const comparisonDb = loudnessMatchedMonitorGain([
         { id: 'before', lufs: beforeResult.stats.lufs },
         { id: 'after', lufs: afterResult.stats.lufs },
@@ -1913,7 +1903,7 @@ function timelineDuration(project: ProjectState): number {
 
 async function renderProject(
   get: () => AppState,
-  options: { mode: 'master' | 'track'; trackId?: string; startSec: number; endSec: number; label?: string; projectOverride?: ProjectState },
+  options: { mode: 'master' | 'track'; trackId?: string; startSec: number; endSec: number; label?: string; projectOverride?: ProjectState; statsOnly?: boolean },
 ): Promise<{ L: Float32Array; R: Float32Array; sampleRate: number; stats: RenderStats }> {
   const state = get();
   const project = options.projectOverride ?? state.project;
@@ -1982,6 +1972,7 @@ async function renderProject(
         sampleRate: renderProjectState.sampleRate,
         startSec: options.startSec,
         endSec: options.endSec,
+        statsOnly: options.statsOnly,
       });
     });
   } finally {
