@@ -209,6 +209,25 @@ export function Rack({
                     </div>
                   )}
 
+                  {node.type === 'resonance' && meter?.bands && (
+                    <div className="mb-3 grid grid-cols-3 gap-2">
+                      {meter.bands.map((value, bandIndex) => {
+                        const reductionDb = Math.abs(value);
+                        return (
+                          <div key={bandIndex} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">Notch {bandIndex + 1}</span>
+                              <span className="font-mono text-[10px] text-signal-amber">{reductionDb > 0.05 ? `-${reductionDb.toFixed(1)}` : '0.0'} dB</span>
+                            </div>
+                            <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
+                              <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {node.type === 'multibandComp' && meter?.bands && (
                     <div className="mb-3 grid grid-cols-3 gap-2">
                       {(['Low', 'Mid', 'High'] as const).map((label, bandIndex) => {
