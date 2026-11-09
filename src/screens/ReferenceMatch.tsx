@@ -108,7 +108,7 @@ export default function ReferenceMatch() {
           <Button size="sm" onClick={() => void analyzeProjectAssets()} disabled={!targetId && referenceIds.length === 0}>
             Analyse all
           </Button>
-          <Button size="sm" variant="primary" onClick={() => void generateMatch()} disabled={!ready}>
+          <Button size="sm" variant="primary" onClick={() => void generateMatch()} disabled={!ready || Boolean(busy)}>
             <Icon name="sparkles" size={14} /> Generate chain
           </Button>
         </div>
