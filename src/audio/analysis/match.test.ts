@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { AnalysisReport } from './analyze';
-import { estimatePreLimiterTruePeak, resolveReferenceMetrics } from './match';
+import { estimatePreLimiterTruePeak, resolveReferenceMetrics, selectAnalysisSection } from './match';
 
 function report(options: {
   lufs?: number;
@@ -97,6 +97,40 @@ function report(options: {
 }
 
 describe('reference consensus resolution', () => {
+  it('selects an exact detected occurrence instead of the longest matching label', () => {
+    const source = report({ chorus: true, lufs: -18 });
+    source.sections.push({
+      ...source.sections[0],
+      index: 1,
+      start: 62,
+      end: 88,
+      lufs: -9,
+      crestDb: 4.5,
+      widthDb: -5,
+      bands: source.sections[0].bands.map((band) => ({ ...band, db: band.db + 4 })),
+    });
+
+    const exact = selectAnalysisSection(source, 'chorus', 1);
+    expect(exact?.index).toBe(1);
+    expect(exact?.start).toBe(62);
+
+    const resolved = resolveReferenceMetrics(-1, [
+      { assetId: 'reference', report: source, sectionIndex: 1 },
+    ], 'full');
+    expect(resolved.metrics.lufs).toBeCloseTo(-9, 5);
+    expect(resolved.metrics.crestDb).toBeCloseTo(4.5, 5);
+    expect(resolved.fallbackAssetIds).toEqual([]);
+  });
+
+  it('falls back to full-track metrics when an exact reference segment is missing', () => {
+    const source = report({ lufs: -16, chorus: true });
+    const resolved = resolveReferenceMetrics(-1, [
+      { assetId: 'reference', report: source, sectionIndex: 99 },
+    ], 'chorus');
+    expect(resolved.fallbackAssetIds).toEqual(['reference']);
+    expect(resolved.metrics.lufs).toBeCloseTo(-16, 5);
+  });
+
   it('blends loudness in linear power using the configured reference weights', () => {
     const resolved = resolveReferenceMetrics(-1, [
       { assetId: 'warm', report: report({ lufs: -18 }), weight: 100 },
