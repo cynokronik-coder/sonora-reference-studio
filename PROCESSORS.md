@@ -60,8 +60,12 @@ rather than receiving the full-range key. The processor reports per-band gain re
 Factory starting points include Low-end control, Gentle multiband glue, Presence control and Dynamic master.
 
 ### De-esser
-LR4 split above a tunable frequency; the high band is detected and dynamically reduced. Wideband mode applies the same
-reduction to the whole signal. Per-block gain reduction is metered.
+Fourth-order Linkwitz–Riley split above a tunable crossover. High-band detection is measured after frequency selection,
+with independent left/right envelopes or a shared linked envelope. Split-band mode attenuates only the high band;
+wideband mode applies the same reduction to the complete recombined signal. Threshold, ratio, maximum reduction,
+attack, release and stereo link are editable. Crossover changes and mix/output changes are smoothed. A preserved dry
+copy supports true parallel blending. Factory starting points include Gentle sibilance, Bright vocal, Strong
+sibilance and Wideband control.
 
 ### Transient Shaper
 Fast vs slow envelope comparison: transient energy drives attack gain, sustained energy drives sustain gain. Sensitivity,
