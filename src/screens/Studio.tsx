@@ -94,10 +94,10 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
             <Icon name="equalizer" size={15} className={workspace === 'mastering' ? 'text-[#C4A2FF]' : 'text-ink-500'} /> Mastering
             {workspace === 'mastering' && <span className="absolute inset-x-4 -bottom-[1px] h-[2px] rounded-full bg-gradient-to-r from-[#8957FF] to-[#C4A2FF]" />}
           </button>
-          <button type="button" onClick={() => useApp.getState().setScreen('reference')} className="flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-[11px] font-medium text-ink-400 transition-colors hover:bg-white/[.04] hover:text-white sm:px-4 sm:text-xs">
+          <button type="button" onClick={() => useApp.getState().setScreen('reference')} className="focus-ring flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium text-ink-400 transition-colors hover:bg-white/[.04] hover:text-white sm:px-5 sm:text-sm">
             <Icon name="audio-lines" size={15} className="text-ink-500" /> Reference
           </button>
-          <button type="button" onClick={() => setAssistantOpen((open) => !open)} aria-pressed={assistantOpen} className={`flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-[11px] font-medium transition-colors sm:px-4 sm:text-xs ${assistantOpen ? 'bg-[#8957FF]/15 text-[#C4A2FF]' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
+          <button type="button" onClick={() => setAssistantOpen((open) => !open)} aria-pressed={assistantOpen} className={`focus-ring flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium transition-colors sm:px-5 sm:text-sm ${assistantOpen ? 'bg-[#8957FF]/15 text-[#C4A2FF]' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
             <Icon name="sparkles" size={15} /> AI Assistant
           </button>
         </nav>
