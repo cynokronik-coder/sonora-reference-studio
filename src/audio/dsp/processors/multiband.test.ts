@@ -134,9 +134,14 @@ describe('Multiband external sidechain routing', () => {
     const processor = new MultibandCompressor();
     processor.prepare(sampleRate, 512);
     processor.setValues(params);
+    // Reuse fixed key buffers exactly as the realtime renderer does.
+    const keyBlockL = new Float32Array(512);
+    const keyBlockR = new Float32Array(512);
     for (let offset = 0; offset < length; offset += 512) {
       const frames = Math.min(512, length - offset);
-      processor.setSidechain(keyLeft.subarray(offset, offset + frames), keyRight.subarray(offset, offset + frames));
+      keyBlockL.set(keyLeft.subarray(offset, offset + frames));
+      keyBlockR.set(keyRight.subarray(offset, offset + frames));
+      processor.setSidechain(keyBlockL, keyBlockR);
       processor.process(left.subarray(offset, offset + frames), right.subarray(offset, offset + frames), frames);
     }
 
@@ -167,9 +172,11 @@ describe('Multiband external sidechain routing', () => {
     const processor = new MultibandCompressor();
     processor.prepare(sampleRate, 512);
     processor.setValues(params);
+    const keyBlock = new Float32Array(512);
     for (let offset = 0; offset < length / 2; offset += 512) {
       const frames = Math.min(512, length / 2 - offset);
-      processor.setSidechain(key.subarray(offset, offset + frames), key.subarray(offset, offset + frames));
+      keyBlock.set(key.subarray(offset, offset + frames));
+      processor.setSidechain(keyBlock, keyBlock);
       processor.process(left.subarray(offset, offset + frames), right.subarray(offset, offset + frames), frames);
     }
     processor.setSidechain(null, null);
