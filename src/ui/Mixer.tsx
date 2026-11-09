@@ -392,7 +392,7 @@ function MasterStrip({ selected, onSelect }: { selected: boolean; onSelect: () =
   );
 }
 
-export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; onExpand?: () => void } = {}) {
+export function AssistantPanel({ onClose, onExpand, draggable = false }: { onClose?: () => void; onExpand?: () => void; draggable?: boolean } = {}) {
   const {
     project,
     chat,
@@ -444,10 +444,10 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
 
   return (
     <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden">
-      <div data-assistant-drag-handle className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-white/[.07] px-4 py-3 xl:cursor-grab xl:touch-none xl:select-none xl:active:cursor-grabbing sm:flex-nowrap sm:items-center sm:px-5 sm:py-4">
+      <div data-assistant-drag-handle={draggable ? '' : undefined} className={`flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-white/[.07] px-4 py-3 sm:flex-nowrap sm:items-center sm:px-5 sm:py-4 ${draggable ? 'cursor-grab touch-none select-none active:cursor-grabbing' : ''}`}>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-[-.02em] text-ink-100 sm:text-lg">
-            <span aria-hidden="true" className="hidden text-xs tracking-[-.2em] text-ink-500 xl:inline">⠿</span>
+            {draggable && <span aria-hidden="true" className="text-xs tracking-[-.2em] text-ink-500">⠿</span>}
             <Icon name="sparkles" size={15} className="shrink-0 text-[#A77AFF]" />
             <span className="truncate">Sonora AI</span>
           </div>

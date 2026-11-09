@@ -70,9 +70,9 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
     };
 
     fitAssistant();
-    const observer = new ResizeObserver(fitAssistant);
-    observer.observe(stage);
-    return () => observer.disconnect();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fitAssistant);
+    observer?.observe(stage);
+    return () => observer?.disconnect();
   }, [assistantOpen]);
 
   const startAssistantPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -83,7 +83,7 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
     if (!resizing && (!dragging || target.closest('button, input, textarea, select, a'))) return;
 
     event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    if (typeof event.currentTarget.setPointerCapture === 'function') event.currentTarget.setPointerCapture(event.pointerId);
     assistantPointerRef.current = {
       pointerId: event.pointerId,
       mode: resizing ? 'resize' : 'move',
@@ -124,7 +124,7 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
   const endAssistantPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (assistantPointerRef.current?.pointerId !== event.pointerId) return;
     assistantPointerRef.current = null;
-    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+    if (typeof event.currentTarget.hasPointerCapture === 'function' && event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   };
@@ -212,8 +212,8 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
             </div>
           )}
           <Button size="sm" variant="primary" onClick={() => setAddOpen(true)}><Icon name="plus" size={14} /> Add audio</Button>
-          <button type="button" onClick={onStartTour} title="Guided tour" aria-label="Start guided tour" className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-2.5 text-[10px] font-medium text-[#C4A2FF] transition-colors hover:border-[#A77AFF]/45 hover:bg-[#8957FF]/15">
-            <Icon name="sparkles" size={13} /> <span className="hidden md:inline">Tour</span>
+          <button type="button" onClick={onStartTour} title="Guided tour" aria-label="Start guided tour" className="focus-ring inline-flex h-10 items-center gap-1.5 rounded-lg border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-3 text-xs font-medium text-[#C4A2FF] transition-colors hover:border-[#A77AFF]/45 hover:bg-[#8957FF]/15">
+            <Icon name="sparkles" size={14} /> <span className="hidden md:inline">Tour</span>
           </button>
           <button type="button" onClick={() => useApp.getState().setScreen('settings')} aria-label="Settings" title="Settings" className="focus-ring hidden h-10 w-10 items-center justify-center rounded-full border border-white/[.10] bg-[#1D1D30] text-ink-300 transition-colors hover:border-[#A77AFF]/50 hover:text-white sm:inline-flex">
             <Icon name="sliders" size={17} />
@@ -424,12 +424,31 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
                 onPointerCancel={endAssistantPointer}
                 onLostPointerCapture={() => { assistantPointerRef.current = null; }}
               >
-                <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
-                <button
+                <div className="min-h-0 flex-1"><AssistantPanel draggable onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
+                <button>
                   type="button"
                   data-assistant-resize-handle
                   aria-label="Resize Sonora AI window"
-                  title="Drag to resize"
+                  title="Drag to resize, or use arrow keys"
+                  onKeyDown={(event) => {
+                    const step = event.shiftKey ? 40 : 16;
+                    const widthDelta = event.key === 'ArrowRight' ? step : event.key === 'ArrowLeft' ? -step : 0;
+                    const heightDelta = event.key === 'ArrowDown' ? step : event.key === 'ArrowUp' ? -step : 0;
+                    if (!widthDelta && !heightDelta) return;
+                    event.preventDefault();
+                    const stage = assistantStageRef.current;
+                    if (!stage) return;
+                    setAssistantWindowRect((current) => {
+                      if (!current) return current;
+                      const maxWidth = Math.min(760, stage.clientWidth - current.x - 8);
+                      const maxHeight = Math.min(820, stage.clientHeight - current.y - 8);
+                      return {
+                        ...current,
+                        width: bound(current.width + widthDelta, Math.min(340, maxWidth), maxWidth),
+                        height: bound(current.height + heightDelta, Math.min(420, maxHeight), maxHeight),
+                      };
+                    });
+                  }}
                   className="absolute bottom-1.5 right-1.5 z-10 flex h-6 w-6 touch-none items-center justify-center rounded-md border border-white/[.10] bg-[#171727]/90 text-sm leading-none text-ink-500 shadow-lg hover:border-[#A77AFF]/45 hover:text-[#C4A2FF]"
                 >
                   ⤢
