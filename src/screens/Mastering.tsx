@@ -176,7 +176,7 @@ export default function Mastering() {
                   );
                 })}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[.07] pt-3">
-                  <p className="max-w-[240px] text-2xs leading-relaxed text-ink-500">Choose any factory or saved mastering chain. Preview it first, then load it as editable processors; the change can be undone.</p>
+                  <p className="max-w-[240px] text-2xs leading-relaxed text-ink-500">Choose a factory or saved mastering chain. Loading it replaces the current master chain with editable processors; the change can be undone.</p>
                   <Button size="sm" variant="secondary" disabled={!selectedPreset} onClick={() => selectedPreset && applyPreset(selectedPreset.id, 'master', null)}>
                     Use {selectedPreset?.name ?? 'selected style'}
                   </Button>
