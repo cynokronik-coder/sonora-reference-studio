@@ -193,6 +193,18 @@ describe('Dynamic EQ detector modes and external key', () => {
     expect(rms(programmeL) / inputRms).toBeLessThan(0.6);
   });
 
+  it('does not respond when the external key is outside the active band's frequency region', () => {
+    const programmeL = sine(0.5, 1000);
+    const programmeR = programmeL.slice();
+    const keyL = sine(0.8, 50);
+    const keyR = keyL.slice();
+    const inputRms = rms(programmeL);
+    const processor = createProcessor(params({ b0_threshold: -24, b0_range: 12 }));
+    processBlocks(processor, programmeL, programmeR, BLOCK_SIZE, keyL, keyR);
+    expect(processor.meter().reduction ?? 0).toBeLessThan(0.5);
+    expect(rms(programmeL) / inputRms).toBeGreaterThan(0.95);
+  });
+
   it('clears the external key and returns to internal detection', () => {
     const length = SAMPLE_RATE * 2;
     const programme = sine(0.02, 1000, SAMPLE_RATE, 2);
