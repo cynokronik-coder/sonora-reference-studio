@@ -182,21 +182,6 @@ export function Rack({
                     </div>
                   )}
 
-                  {node.type === 'dynamicEq' && (
-        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
-          <Select
-            label="Dynamic EQ starting point"
-            value={dynamicEqPreset}
-            options={[{ value: '', label: 'Choose a starting point…' }, ...DYNAMIC_EQ_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
-            onChange={applyDynamicEqPreset}
-          />
-          {dynamicEqPreset && (
-            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
-              {DYNAMIC_EQ_PRESETS.find((preset) => preset.id === dynamicEqPreset)?.description} Detector and band controls remain editable.
-            </p>
-          )}
-        </div>
-      )}
       {node.type === 'eq' && (
                     <div className="mb-2">
                       <EQCurve params={node.params} sampleRate={project?.sampleRate ?? 48000} height={120} />
@@ -446,6 +431,21 @@ function ProcessorParams({
   };
   return (
     <div className="space-y-2">
+      {node.type === 'dynamicEq' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Dynamic EQ starting point"
+            value={dynamicEqPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...DYNAMIC_EQ_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyDynamicEqPreset}
+          />
+          {dynamicEqPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {DYNAMIC_EQ_PRESETS.find((preset) => preset.id === dynamicEqPreset)?.description} Detector and band controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'eq' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
