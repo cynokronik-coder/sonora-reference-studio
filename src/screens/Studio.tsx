@@ -25,6 +25,7 @@ type AssistantPointer = {
 };
 
 const bound = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const ASSISTANT_TOOLBAR_CLEARANCE = 112;
 
 const TRACK_KINDS: TrackKind[] = ['audio', 'vocal', 'instrument', 'drums', 'bass', 'instrumental', 'stem'];
 
@@ -59,12 +60,12 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
       const stageHeight = Math.max(320, stage.clientHeight);
       setAssistantWindowRect((current) => {
         const width = Math.min(current?.width ?? 460, stageWidth - 24);
-        const height = Math.min(current?.height ?? 620, stageHeight - 24);
+        const height = Math.min(current?.height ?? 560, Math.max(420, stageHeight - ASSISTANT_TOOLBAR_CLEARANCE - 20));
         return {
           width,
           height,
           x: current ? bound(current.x, 8, stageWidth - width - 8) : stageWidth - width - 20,
-          y: current ? bound(current.y, 8, stageHeight - height - 8) : 20,
+          y: current ? bound(current.y, 8, Math.max(8, stageHeight - height - ASSISTANT_TOOLBAR_CLEARANCE)) : 12,
         };
       });
     };
@@ -107,13 +108,13 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
       setAssistantWindowRect({
         ...start,
         x: bound(start.x + dx, 8, stageWidth - start.width - 8),
-        y: bound(start.y + dy, 8, stageHeight - start.height - 8),
+        y: bound(start.y + dy, 8, Math.max(8, stageHeight - start.height - ASSISTANT_TOOLBAR_CLEARANCE)),
       });
       return;
     }
 
     const maxWidth = Math.min(760, stageWidth - start.x - 8);
-    const maxHeight = Math.min(820, stageHeight - start.y - 8);
+    const maxHeight = Math.max(420, Math.min(820, stageHeight - start.y - ASSISTANT_TOOLBAR_CLEARANCE));
     setAssistantWindowRect({
       ...start,
       width: bound(start.width + dx, Math.min(340, maxWidth), maxWidth),
@@ -205,12 +206,6 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
           <button type="button" data-tour="studio-tracks" onClick={() => setTracksOpen(true)} title="Manage tracks and buses" aria-label={`Open tracks, ${project.tracks.length} tracks`} className="inline-flex h-10 items-center rounded-lg border border-white/[.08] bg-white/[.025] px-2.5 text-xs text-ink-300 transition-colors hover:bg-white/[.06] hover:text-white">
             Tracks <span className="ml-1 text-ink-500">{project.tracks.length}</span>
           </button>
-          {activeTrack && (
-            <div title={`Selected track: ${activeTrack.name}`} className="hidden max-w-[132px] items-center gap-1.5 rounded-lg border border-[#A77AFF]/20 bg-[#8957FF]/[.07] px-2.5 py-2 lg:flex">
-              <Icon name="waveform" size={13} className="shrink-0 text-[#C4A2FF]" />
-              <span className="truncate text-xs text-ink-200">{activeTrack.name}</span>
-            </div>
-          )}
           <Button size="sm" variant="primary" onClick={() => setAddOpen(true)}><Icon name="plus" size={14} /> Add audio</Button>
           <button type="button" onClick={onStartTour} title="Guided tour" aria-label="Start guided tour" className="focus-ring inline-flex h-10 items-center gap-1.5 rounded-lg border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-3 text-xs font-medium text-[#C4A2FF] transition-colors hover:border-[#A77AFF]/45 hover:bg-[#8957FF]/15">
             <Icon name="sparkles" size={14} /> <span className="hidden md:inline">Tour</span>
@@ -441,7 +436,7 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
                     setAssistantWindowRect((current) => {
                       if (!current) return current;
                       const maxWidth = Math.min(760, stage.clientWidth - current.x - 8);
-                      const maxHeight = Math.min(820, stage.clientHeight - current.y - 8);
+                      const maxHeight = Math.max(420, Math.min(820, stage.clientHeight - current.y - ASSISTANT_TOOLBAR_CLEARANCE));
                       return {
                         ...current,
                         width: bound(current.width + widthDelta, Math.min(340, maxWidth), maxWidth),
