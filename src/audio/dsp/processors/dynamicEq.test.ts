@@ -123,10 +123,11 @@ describe('Dynamic EQ band detection', () => {
       b2_on: 1, b2_freq: 2500, b2_q: 1.4,
       b3_on: 1, b3_freq: 7000, b3_q: 1.4,
     });
-    const left = Float32Array.from(
-      sine(0.35, 120),
-      (sample, index) => sample + sine(0.22, 400)[index] + sine(0.18, 2500)[index] + sine(0.14, 7000)[index],
-    );
+    const low = sine(0.35, 120);
+    const lowMid = sine(0.22, 400);
+    const presence = sine(0.18, 2500);
+    const high = sine(0.14, 7000);
+    const left = Float32Array.from(low, (sample, index) => sample + lowMid[index] + presence[index] + high[index]);
     const right = left.slice();
     const processor = createProcessor(values);
     processBlocks(processor, left, right);
