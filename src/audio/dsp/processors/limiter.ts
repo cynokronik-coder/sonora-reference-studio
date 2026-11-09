@@ -246,6 +246,38 @@ export const limiterDefinition: ProcessorDefinition = {
   create: () => new Limiter(),
 };
 
+export interface LimiterPreset {
+  id: string;
+  name: string;
+  description: string;
+  values: ParamValues;
+}
+
+function limiterPreset(id: string, name: string, description: string, overrides: ParamValues): LimiterPreset {
+  const values: ParamValues = {};
+  for (const param of limiterDefinition.params) values[param.key] = param.default;
+  return { id, name, description, values: { ...values, ...overrides } };
+}
+
+/** Conservative editable starting points; output trim remains post-ceiling. */
+export const LIMITER_PRESETS: LimiterPreset[] = [
+  limiterPreset('transparent-true-peak', 'Transparent true-peak', 'A restrained final safety limiter with moderate look-ahead and a conservative ceiling.', {
+    input: 0, ceiling: -1, release: 140, lookahead: 5, truePeak: 1, output: 0,
+  }),
+  limiterPreset('punch-preservation', 'Punch preservation', 'A quicker release and shorter look-ahead for transient-rich material; monitor pumping and distortion.', {
+    input: 1.5, ceiling: -1, release: 55, lookahead: 3, truePeak: 1, output: 0,
+  }),
+  limiterPreset('loudness-push', 'Loudness push', 'A louder starting point with more input drive; judge it at matched loudness and watch gain reduction.', {
+    input: 4, ceiling: -1, release: 80, lookahead: 5, truePeak: 1, output: 0,
+  }),
+  limiterPreset('safe-delivery', 'Safe delivery', 'A lower ceiling and longer look-ahead for conservative peak management before export.', {
+    input: 0, ceiling: -2, release: 180, lookahead: 10, truePeak: 1, output: 0,
+  }),
+  limiterPreset('low-latency-sample-peak', 'Low-latency sample peak', 'Disables true-peak estimation and look-ahead for a zero-look-ahead sample-peak limiter.', {
+    input: 0, ceiling: -1, release: 80, lookahead: 0, truePeak: 0, output: 0,
+  }),
+];
+
 export const CLIPPER_MODES = ['Soft', 'Hard', 'Tanh'] as const;
 
 /**
