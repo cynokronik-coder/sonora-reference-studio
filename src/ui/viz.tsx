@@ -140,8 +140,8 @@ export function LevelMeter({ db, height = 96, width = 8, peakDb }: { db: number;
   return (
     <div className="relative overflow-hidden rounded-sm bg-ink-900 ring-1 ring-inset ring-ink-700" style={{ height, width }}>
       <div
-        className="absolute bottom-0 left-0 right-0 transition-[height] duration-75"
-        style={{ height: `${normalized * 100}%`, background: `linear-gradient(to top, ${color}55, ${color})` }}
+        className="sonora-meter-fill absolute bottom-0 left-0 right-0 h-full"
+        style={{ transform: `scaleY(${normalized})`, background: `linear-gradient(to top, ${color}55, ${color})` }}
       />
       {peakNorm !== null && (
         <div className="absolute left-0 right-0 h-px bg-white/80" style={{ bottom: `${peakNorm * 100}%` }} />
@@ -160,8 +160,8 @@ export function GainReductionMeter({ reductionDb, height = 96 }: { reductionDb: 
   return (
     <div className="relative overflow-hidden rounded-sm bg-ink-900 ring-1 ring-inset ring-ink-700" style={{ height, width: 6 }}>
       <div
-        className="absolute left-0 right-0 top-0 bg-signal-amber/80 transition-[height] duration-75"
-        style={{ height: `${amount * 100}%` }}
+        className="sonora-meter-fill sonora-meter-fill--top absolute left-0 right-0 top-0 h-full bg-signal-amber/80"
+        style={{ transform: `scaleY(${amount})` }}
       />
     </div>
   );
