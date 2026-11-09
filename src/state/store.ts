@@ -83,6 +83,7 @@ export interface ABWorkingMix {
 
 export interface MatchAuditionState {
   mode: AuditionMode;
+  loudnessMatch: boolean;
   comparisonDb: number;
   before: RenderStats;
   after: RenderStats;
@@ -218,6 +219,7 @@ interface AppState {
   generateMatch: () => Promise<void>;
   prepareMatchAudition: (proposalIds?: string[]) => Promise<void>;
   setMatchAuditionMode: (mode: AuditionMode) => void;
+  setMatchAuditionLoudnessMatch: (on: boolean) => void;
   clearMatchAudition: () => void;
   applyMatchPlan: (proposalIds?: string[]) => void;
   clearMatchPlan: () => void;
@@ -1081,6 +1083,166 @@ export const useApp = create<AppState>((set, get) => ({
       set({ busy: null, toast: error instanceof Error ? error.message : 'Matching failed.' });
     }
     void assets;
+  },
+
+  prepareMatchAudition: async (proposalIds) => {
+    const initial = get();
+    if (!initial.project || !initial.matchPlan) {
+      set({ toast: 'Generate a Reference Match processing chain first.' });
+      return;
+    }
+    if (initial.busy) {
+      set({ toast: 'Finish the current task before preparing the audio comparison.' });
+      return;
+    }
+    const selectedPlan = proposalIds
+      ? { ...initial.matchPlan, proposals: initial.matchPlan.proposals.filter((proposal) => proposalIds.includes(proposal.id)) }
+      : initial.matchPlan;
+    if (!selectedPlan.proposals.length) {
+      set({ toast: 'Select at least one proposed processor before preparing the audition.' });
+      return;
+    }
+
+    const projectSnapshot = cloneProject(initial.project);
+    const projectSignature = JSON.stringify(projectSnapshot);
+    const planSignature = JSON.stringify(initial.matchPlan);
+    const projectId = projectSnapshot.id;
+    const startPosition = initial.transport.playing ? realtimeHost.position : initial.transport.position;
+    get().clearMatchAudition();
+
+    try {
+      await realtimeHost.initialise();
+      if (realtimeHost.playing) realtimeHost.pause();
+      set((state) => ({
+        transport: { ...state.transport, playing: false, position: startPosition },
+      }));
+
+      const beforeProject = cloneProject(projectSnapshot);
+      const afterProject = cloneProject(projectSnapshot);
+      afterProject.master.processors = planToNodes(selectedPlan);
+      afterProject.match.enabled = true;
+      const endSec = timelineDuration(projectSnapshot);
+
+      const beforeResult = await renderProject(get, {
+        mode: 'master',
+        startSec: 0,
+        endSec,
+        label: 'Rendering original mix for A/B audition',
+        projectOverride: beforeProject,
+      });
+      const afterResult = await renderProject(get, {
+        mode: 'master',
+        startSec: 0,
+        endSec,
+        label: 'Rendering matched mix for A/B audition',
+        projectOverride: afterProject,
+      });
+
+      const current = get();
+      if (
+        !current.project ||
+        current.project.id !== projectId ||
+        JSON.stringify(current.project) !== projectSignature ||
+        !current.matchPlan ||
+        JSON.stringify(current.matchPlan) !== planSignature
+      ) {
+        set({ busy: null, toast: 'The project or match plan changed during rendering. Prepare the A/B audition again.' });
+        return;
+      }
+      if (
+        beforeResult.sampleRate !== afterResult.sampleRate ||
+        beforeResult.L.length !== afterResult.L.length ||
+        beforeResult.R.length !== afterResult.R.length
+      ) {
+        throw new Error('The original and matched renders do not share the same sample timeline.');
+      }
+
+      realtimeHost.loadAssets(engineAssets(current.project, current.assetBuffers));
+      realtimeHost.pushProject(current.project);
+      realtimeHost.setMatchAuditionBuffers({
+        beforeL: beforeResult.L,
+        beforeR: beforeResult.R,
+        afterL: afterResult.L,
+        afterR: afterResult.R,
+      });
+      const comparisonDb = loudnessMatchedMonitorGain([
+        { id: 'before', lufs: beforeResult.stats.lufs },
+        { id: 'after', lufs: afterResult.stats.lufs },
+      ], 'before');
+      realtimeHost.setMatchAudition(true, 'before');
+      realtimeHost.setMonitorGain(current.monitorDb);
+      realtimeHost.setComparisonGain(comparisonDb);
+      realtimeHost.setLoop(current.transport.loopEnabled, current.transport.loopStart, current.transport.loopEnd);
+      realtimeHost.seek(Math.min(startPosition, beforeResult.stats.duration));
+      set({
+        matchAudition: {
+          mode: 'before',
+          loudnessMatch: true,
+          comparisonDb,
+          before: beforeResult.stats,
+          after: afterResult.stats,
+        },
+        transport: {
+          ...get().transport,
+          playing: false,
+          position: Math.min(startPosition, beforeResult.stats.duration),
+          duration: beforeResult.stats.duration,
+        },
+        busy: null,
+        toast: 'A/B audition ready. Press Play, then switch between A (original) and B (Reference Match).',
+      });
+    } catch (error) {
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.clearMatchAuditionBuffers();
+      realtimeHost.setComparisonGain(get().comparisonDb);
+      set({
+        busy: null,
+        matchAudition: null,
+        toast: error instanceof Error ? `Could not prepare the A/B audition: ${error.message}` : 'Could not prepare the A/B audition.',
+      });
+    }
+  },
+
+  setMatchAuditionMode: (mode) => {
+    const audition = get().matchAudition;
+    if (!audition) return;
+    const comparisonDb = audition.loudnessMatch
+      ? loudnessMatchedMonitorGain([
+          { id: 'before', lufs: audition.before.lufs },
+          { id: 'after', lufs: audition.after.lufs },
+        ], mode)
+      : 0;
+    realtimeHost.setMatchAudition(true, mode);
+    realtimeHost.setComparisonGain(comparisonDb);
+    set({ matchAudition: { ...audition, mode, comparisonDb } });
+  },
+
+  setMatchAuditionLoudnessMatch: (on) => {
+    const audition = get().matchAudition;
+    if (!audition) return;
+    const comparisonDb = on
+      ? loudnessMatchedMonitorGain([
+          { id: 'before', lufs: audition.before.lufs },
+          { id: 'after', lufs: audition.after.lufs },
+        ], audition.mode)
+      : 0;
+    realtimeHost.setComparisonGain(comparisonDb);
+    set({ matchAudition: { ...audition, loudnessMatch: on, comparisonDb } });
+  },
+
+  clearMatchAudition: () => {
+    const state = get();
+    if (!state.matchAudition) return;
+    if (state.transport.playing || realtimeHost.playing) {
+      realtimeHost.pause();
+      set((current) => ({
+        transport: { ...current.transport, playing: false, position: realtimeHost.position },
+      }));
+    }
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
+    realtimeHost.setComparisonGain(state.comparisonDb);
+    set({ matchAudition: null });
   },
 
   applyMatchPlan: (proposalIds) => {
