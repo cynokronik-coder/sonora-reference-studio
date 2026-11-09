@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Compressor } from './compressor';
+import { COMPRESSOR_PRESETS, Compressor, compressorDefinition } from './compressor';
 
 const SAMPLE_RATE = 48_000;
 const FRAME_COUNT = SAMPLE_RATE;
@@ -67,6 +67,31 @@ describe('Compressor stereo detector linking', () => {
     const result = renderStereoCompression(0, 0.55, 0.55);
     for (let i = 0; i < FRAME_COUNT; i += 97) {
       expect(result.left[i]).toBeCloseTo(result.right[i], 6);
+    }
+  });
+});
+
+describe('Compressor factory starting points', () => {
+  it('contains complete parameter maps within the live processor definition', () => {
+    const specs = new Map(compressorDefinition.params.map((spec) => [spec.key, spec]));
+    for (const preset of COMPRESSOR_PRESETS) {
+      expect(Object.keys(preset.values).sort()).toEqual([...specs.keys()].sort());
+      for (const [key, value] of Object.entries(preset.values)) {
+        const spec = specs.get(key);
+        expect(spec, `unknown parameter ${key} in ${preset.name}`).toBeDefined();
+        expect(Number.isFinite(value)).toBe(true);
+        if (!spec) continue;
+        if (spec.kind === 'bool') {
+          expect([0, 1]).toContain(value);
+        } else if (spec.kind === 'enum') {
+          expect(Number.isInteger(value)).toBe(true);
+          expect(value).toBeGreaterThanOrEqual(0);
+          expect(value).toBeLessThan(spec.options?.length ?? 1);
+        } else {
+          expect(value).toBeGreaterThanOrEqual(spec.min ?? -Infinity);
+          expect(value).toBeLessThanOrEqual(spec.max ?? Infinity);
+        }
+      }
     }
   });
 });
