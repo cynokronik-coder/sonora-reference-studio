@@ -47,7 +47,9 @@ export class ProcessorChain {
         processor.prepare(this.sr, this.maxBlock);
         this.byId.set(config.id, processor);
         this.keyConfig.delete(config.id);
-      } else if (this.byId.get(config.id)?.type !== config.type) {
+      } else if (processor.type !== config.type) {
+        // A processor type replacement must not inherit a previous external key.
+        this.sidechains.delete(config.id);
         processor = createProcessor(config.type);
         processor.prepare(this.sr, this.maxBlock);
         this.byId.set(config.id, processor);
@@ -60,9 +62,13 @@ export class ProcessorChain {
       }
       next.push({ config, processor });
     }
-    // Dispose removed processors.
+    // Dispose removed processors and all per-node routing/configuration state.
     for (const id of this.byId.keys()) {
-      if (!seen.has(id)) this.byId.delete(id);
+      if (!seen.has(id)) {
+        this.byId.delete(id);
+        this.keyConfig.delete(id);
+        this.sidechains.delete(id);
+      }
     }
     this.nodes = next;
     this.order = next.map((n) => n.config.id);
