@@ -96,9 +96,17 @@ inter-sample peaks. Reports gain reduction and output peak.
 ## Saturation
 
 ### Saturation
-Six transfer functions: tape (asymmetric soft bias), tube (second-harmonic asymmetry), console (cubic), soft clip, hard
-clip and wavefold. Drive, tone, dry/wet, output and 2x/4x oversampling. The interface labels these as styles, not
-hardware models.
+Six nonlinear transfer functions: Tape (asymmetric soft saturation), Tube (asymmetric even-harmonic character), Console
+(cubic soft knee), Soft clip (tanh), Hard clip and Wavefold. Drive, pre-emphasis, post-tone shelf, output trim and dry/wet
+are available. Drive/compensation, style, tone, output and mix changes are smoothed rather than stepped abruptly.
+Left/right pre-filter, post-tone, DC-blocker and oversampler state are independent; they must never share filter history.
+The audio callback uses prepared scratch buffers rather than allocating new audio buffers per render block. 1x, 2x and 4x
+oversampling choices are exposed. The current oversampler is a cascaded IIR design: it reduces aliasing but is not
+linear-phase and has frequency-dependent phase shift. When a parallel mix is used, the dry branch follows a matching
+oversampling filter history for phase alignment; at exactly 0% wet the output remains the original dry signal.
+Factory starting points include Tape warmth, Tube density, Console glue, Soft peak rounding, Hard edge, Wavefold colour
+and Subtle mastering density. These are editable starting points, not hardware emulations. Always level-match before
+judging the effect; oversampling reduces but does not eliminate aliasing.
 
 ### Exciter
 High-band harmonic generation above a tunable crossover, with drive, style, amount and output. Never distorts the low
