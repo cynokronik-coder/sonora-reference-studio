@@ -37,6 +37,18 @@ export default function Export() {
       const blob = await db.getExportBlob(id);
       if (!blob) throw new Error('Export file not found.');
       const result = await verifyEncodedBlob(blob);
+      const record = exports.find((item) => item.id === id);
+      if (record) {
+        // Replace the earlier PCM estimate with measurements from the decoded
+        // file bytes so export history reflects the actual delivered encoding.
+        await db.saveExport({
+          ...record,
+          duration: result.duration,
+          lufs: result.lufs,
+          truePeak: result.truePeakDb,
+        }, blob);
+        await refreshExports();
+      }
       useApp.getState().setToast(`Verified decoded file: ${result.lufs.toFixed(1)} LUFS · ${result.truePeakDb.toFixed(1)} dBTP.`);
     } catch (error) {
       useApp.getState().setToast(`Verification failed: ${error instanceof Error ? error.message : String(error)}`);
