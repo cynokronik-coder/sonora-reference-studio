@@ -175,7 +175,13 @@ export class Limiter implements AudioProcessor {
 
       const abs = Math.max(Math.abs(inL), Math.abs(inR));
       const windowMax = this.sliding.push(abs, detectorWindow);
-      const effectiveCeiling = this.ceiling / truePeakRatio;
+      // Add a conservative half-dB safety margin when true-peak mode is
+      // active. The IIR interpolator is block based while programme audio is
+      // delayed by look-ahead; this guard absorbs small block-boundary and
+      // reconstruction discrepancies rather than claiming sample-perfect
+      // reconstruction from the estimate.
+      const truePeakGuard = truePeak ? dbToGain(-0.5) : 1;
+      const effectiveCeiling = this.ceiling * truePeakGuard / truePeakRatio;
       const target = windowMax > effectiveCeiling ? effectiveCeiling / windowMax : 1;
       if (target < this.env) this.env = target;
       else this.env += (target - this.env) * releaseCoeff;
