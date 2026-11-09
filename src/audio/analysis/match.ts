@@ -478,11 +478,12 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
   }
   const refFor = (category: keyof CategorySource) => {
     const resolved = referenceFor(sources, category, references, settings.referenceSection);
-    for (const assetId of resolved.fallbackAssetIds) sectionFallbackWarnings.add(assetId);
-    if (resolved.fallbackAssetIds.length) {
+    const newlyMissingSections = resolved.fallbackAssetIds.filter((assetId) => !sectionFallbackWarnings.has(assetId));
+    if (newlyMissingSections.length) {
+      newlyMissingSections.forEach((assetId) => sectionFallbackWarnings.add(assetId));
       warnings.push({
         kind: 'limitation',
-        message: `The requested reference section (“${settings.referenceSection}”) was not detected in ${resolved.fallbackAssetIds.length} selected reference(s). Full-track measurements are used for those files.`,
+        message: `The requested reference section (“${settings.referenceSection}”) was not detected in ${newlyMissingSections.length} selected reference(s). Full-track measurements are used for those files.`,
       });
     }
     return resolved;
