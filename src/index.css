@@ -278,7 +278,6 @@ input[type='range']:focus-visible::-moz-range-thumb {
 
 .sonora-workspace-motion {
   animation: sonora-workspace-enter 190ms var(--sonora-ease-out) both;
-  will-change: opacity, transform;
 }
 
 .sonora-button-motion {
