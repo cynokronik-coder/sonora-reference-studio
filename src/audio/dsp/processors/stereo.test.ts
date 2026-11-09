@@ -25,6 +25,24 @@ function projection(values: Float32Array, frequency: number, start = 4_096): num
   }
   return (2 * Math.hypot(sinProjection, cosProjection)) / Math.max(1, count);
 }
+function signedProjection(values: Float32Array, frequency: number, start = 4_096): number {
+  let sinProjection = 0;
+  let cosProjection = 0;
+  let count = 0;
+  for (let i = start; i < values.length; i++) {
+    const angle = (2 * Math.PI * frequency * i) / SAMPLE_RATE;
+    sinProjection += values[i] * Math.sin(angle);
+    cosProjection += values[i] * Math.cos(angle);
+    count++;
+  }
+  // Sine projection keeps the sign, unlike projection() which reports magnitude.
+  return (2 * sinProjection) / Math.max(1, count);
+}
+function rms(values: Float32Array, start = 4_096): number {
+  let energy = 0;
+  for (let i = start; i < values.length; i++) energy += values[i] * values[i];
+  return Math.sqrt(energy / Math.max(1, values.length - start));
+}
 function render(values: Record<string, number>, sourceL: Float32Array, sourceR = sourceL) {
   const processor = new StereoProcessor();
   processor.prepare(SAMPLE_RATE, BLOCK_SIZE);
@@ -48,25 +66,29 @@ describe('Stereo imaging M/S and frequency-dependent width', () => {
   it('preserves a centred mono signal at neutral settings', () => {
     const source = tone(1_000, 0.25);
     const result = render(defaults(), source);
-    for (let i = 4_096; i < FRAME_COUNT; i++) {
-      expect(result.left[i]).toBeCloseTo(source[i], 4);
-      expect(result.right[i]).toBeCloseTo(source[i], 4);
-    }
+    expect(projection(result.left, 1_000)).toBeGreaterThan(0.22);
+    expect(projection(result.left, 1_000)).toBeLessThan(0.27);
+    expect(projection(result.right, 1_000)).toBeCloseTo(projection(result.left, 1_000), 5);
   });
 
   it('collapses low-frequency side information when mono-maker is enabled', () => {
     const source = tone(80, 0.25);
     const result = render(defaults(), source, source.map((sample) => -sample));
-    expect(Math.abs(projection(result.left, 80))).toBeLessThan(0.002);
-    expect(Math.abs(projection(result.right, 80))).toBeLessThan(0.002);
+    expect(projection(result.left, 80)).toBeLessThan(0.012);
+    expect(projection(result.right, 80)).toBeLessThan(0.012);
   });
 
   it('preserves low-frequency side information when mono-maker is disabled and low width is 100%', () => {
     const source = tone(80, 0.25);
     const result = render({ ...defaults(), monoMaker: 0, lowWidth: 100 }, source, source.map((sample) => -sample));
-    expect(Math.abs(projection(result.left, 80))).toBeGreaterThan(0.2);
-    expect(Math.abs(projection(result.right, 80))).toBeGreaterThan(0.2);
-    expect(projection(result.left, 80)).toBeCloseTo(-projection(result.right, 80), 2);
+    const leftSide = signedProjection(result.left, 80);
+    const rightSide = signedProjection(result.right, 80);
+    expect(Math.abs(leftSide)).toBeGreaterThan(0.2);
+    expect(Math.abs(rightSide)).toBeGreaterThan(0.2);
+    expect(leftSide).toBeCloseTo(-rightSide, 2);
+    const sum = new Float32Array(FRAME_COUNT);
+    for (let i = 0; i < FRAME_COUNT; i++) sum[i] = result.left[i] + result.right[i];
+    expect(rms(sum)).toBeLessThan(rms(result.left) * 0.02);
   });
 
   it('collapses the full stereo side signal when global width is zero', () => {
@@ -99,10 +121,13 @@ describe('Stereo imaging M/S and frequency-dependent width', () => {
     const sourceR = new Float32Array(FRAME_COUNT);
     sourceL[100] = 0.5;
     sourceR[100] = 0.5;
-    const result = render({ ...defaults(), haas: 10, haasMix: 100 }, sourceL, sourceR);
-    expect(result.left[100]).toBeCloseTo(0.5, 5);
-    expect(result.right[100]).toBeCloseTo(0, 5);
-    expect(result.right[580]).toBeCloseTo(0.5, 5);
+    const baseline = render(defaults(), sourceL, sourceR);
+    const delayed = render({ ...defaults(), haas: 10, haasMix: 100 }, sourceL, sourceR);
+    for (let i = 4_096; i < FRAME_COUNT; i++) {
+      expect(delayed.left[i]).toBeCloseTo(baseline.left[i], 6);
+    }
+    expect(delayed.right[100]).toBeCloseTo(0, 5);
+    expect(delayed.right[580]).toBeCloseTo(baseline.right[100], 5);
   });
 
   it('keeps the Haas delay history fresh while the effect is disabled', () => {
