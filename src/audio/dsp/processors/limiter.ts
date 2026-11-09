@@ -395,11 +395,13 @@ export class Clipper implements AudioProcessor {
       const outL = (dryL * (1 - this.mix) + wetL * this.mix) * this.output;
       const outR = (dryR * (1 - this.mix) + wetR * this.mix) * this.output;
 
-      const reductionL = Math.abs(this.dryL[i]) > 1e-9 && Math.abs(wetL) > 1e-9
-        ? Math.max(0, 20 * Math.log10(Math.abs(this.dryL[i] * this.driveTarget) / Math.abs(wetL)))
+      const referenceL = this.osFactor > 1 ? this.alignedDryL[i] : this.dryL[i];
+      const referenceR = this.osFactor > 1 ? this.alignedDryR[i] : this.dryR[i];
+      const reductionL = Math.abs(referenceL) > 1e-9 && Math.abs(wetL) > 1e-9
+        ? Math.max(0, 20 * Math.log10(Math.abs(referenceL * this.driveTarget) / Math.abs(wetL)))
         : 0;
-      const reductionR = Math.abs(this.dryR[i]) > 1e-9 && Math.abs(wetR) > 1e-9
-        ? Math.max(0, 20 * Math.log10(Math.abs(this.dryR[i] * this.driveTarget) / Math.abs(wetR)))
+      const reductionR = Math.abs(referenceR) > 1e-9 && Math.abs(wetR) > 1e-9
+        ? Math.max(0, 20 * Math.log10(Math.abs(referenceR * this.driveTarget) / Math.abs(wetR)))
         : 0;
       maxReductionL = Math.max(maxReductionL, reductionL);
       maxReductionR = Math.max(maxReductionR, reductionR);
