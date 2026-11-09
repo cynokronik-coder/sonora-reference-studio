@@ -312,7 +312,7 @@ export function Timeline({
   };
 
   return (
-    <section className="flex min-h-[330px] min-w-0 flex-1 flex-col bg-ink-950">
+    <section className="flex min-h-0 min-w-0 flex-1 flex-col bg-ink-950">
       <div className="relative z-20 shrink-0 border-b border-ink-700 px-3 py-2">
         <div className="flex items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-2">
