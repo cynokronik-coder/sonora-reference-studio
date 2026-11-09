@@ -69,6 +69,8 @@ export interface ABSlot {
   lufs: number | null;
   /** Annex 2 true peak measured from the same offline render. */
   truePeakDb: number | null;
+  /** Measurements no longer describe the current track and bus mix. */
+  stale?: boolean;
   createdAt: number;
 }
 
@@ -703,6 +705,8 @@ export const useApp = create<AppState>((set, get) => ({
     mutator(next);
     next.updatedAt = Date.now();
     const projectContentChanged = JSON.stringify(previous) !== JSON.stringify(next);
+    const mixContextChanged = JSON.stringify(previous.tracks) !== JSON.stringify(next.tracks) ||
+      JSON.stringify(previous.buses) !== JSON.stringify(next.buses);
     const clearAudition = projectContentChanged && state.activeSlot !== null && !options?.preserveAb;
     const coalesce = options?.coalesce;
     const shouldCoalesce =
@@ -713,6 +717,7 @@ export const useApp = create<AppState>((set, get) => ({
       future: [],
       lastCoalesceKey: coalesce ?? null,
       lastCoalesceAt: Date.now(),
+      ...(mixContextChanged && state.abSlots.length ? { abSlots: state.abSlots.map((slot) => ({ ...slot, stale: true })) } : {}),
       ...(clearAudition ? { activeSlot: null, workingMix: null, comparisonDb: 0 } : {}),
     });
     if (clearAudition) realtimeHost.setComparisonGain(0);
@@ -729,6 +734,9 @@ export const useApp = create<AppState>((set, get) => ({
       history: history.slice(0, -1),
       future: [project, ...future].slice(0, 50),
       selectedProcessorId: null,
+      activeSlot: null,
+      workingMix: null,
+      comparisonDb: 0,
     });
     schedulePersist(previous);
     realtimeHost.setComparisonGain(0);
@@ -744,6 +752,9 @@ export const useApp = create<AppState>((set, get) => ({
       future: future.slice(1),
       history: [...history, project].slice(-50),
       selectedProcessorId: null,
+      activeSlot: null,
+      workingMix: null,
+      comparisonDb: 0,
     });
     schedulePersist(next);
     realtimeHost.setComparisonGain(0);
@@ -1371,15 +1382,19 @@ export const useApp = create<AppState>((set, get) => ({
       };
       const state = get();
       const nextSlots = [...state.abSlots.filter((item) => item.label !== label), slot].slice(-8);
-      const projectUnchanged = JSON.stringify(currentProject) === JSON.stringify(capturedProject);
-      const nextActiveSlot = projectUnchanged
+      const mixContextUnchanged = JSON.stringify(currentProject.tracks) === JSON.stringify(capturedProject.tracks) &&
+        JSON.stringify(currentProject.buses) === JSON.stringify(capturedProject.buses);
+      const masterUnchanged = JSON.stringify(currentProject.master) === JSON.stringify(capturedProject.master);
+      const canAutoSelect = mixContextUnchanged && masterUnchanged;
+      slot.stale = !mixContextUnchanged;
+      const nextActiveSlot = canAutoSelect
         ? slot.id
         : (nextSlots.some((item) => item.id === state.activeSlot) ? state.activeSlot : null);
-      const nextWorkingMix = state.workingMix ?? (projectUnchanged && state.activeSlot === null
+      const nextWorkingMix = state.workingMix ?? (canAutoSelect && state.activeSlot === null
         ? {
             projectId,
-            processors: structuredClone(capturedProject.master.processors),
-            volumeDb: capturedProject.master.volumeDb,
+            processors: structuredClone(currentProject.master.processors),
+            volumeDb: currentProject.master.volumeDb,
           }
         : null);
       const comparisonDb = state.loudnessMatch
@@ -1391,11 +1406,13 @@ export const useApp = create<AppState>((set, get) => ({
         activeSlot: nextActiveSlot,
         workingMix: nextWorkingMix,
         comparisonDb,
-        ...(projectUnchanged ? { lastRenderStats: result.stats } : {}),
+        ...(canAutoSelect ? { lastRenderStats: result.stats } : {}),
         busy: null,
-        toast: projectUnchanged
+        toast: canAutoSelect
           ? `Captured version ${label}: ${slot.lufs !== null ? slot.lufs.toFixed(1) + ' LUFS' : 'loudness unavailable'}.`
-          : `Version ${label} was measured and saved, but the project changed during capture. Select it to audition the captured snapshot.`,
+          : !mixContextUnchanged
+            ? `Version ${label} was saved, but the track or bus mix changed during capture. Its loudness measurement is marked stale; recapture it for level matching.`
+            : `Version ${label} was measured and saved. The live master chain changed during capture, so select the slot to audition it.`,
       });
     } catch (error) {
       set({ busy: null, toast: error instanceof Error ? `A/B capture failed: ${error.message}` : 'A/B capture failed.' });
@@ -1631,6 +1648,11 @@ export const useApp = create<AppState>((set, get) => ({
       exports: [],
       presets: [...BUILT_IN_PRESETS],
       screen: 'dashboard',
+      abSlots: [],
+      activeSlot: null,
+      workingMix: null,
+      loudnessMatch: false,
+      comparisonDb: 0,
       toast: 'All local project data was deleted.',
     });
   },
@@ -1683,7 +1705,7 @@ async function renderProject(
       useApp.setState({
         busy: {
           kind: 'render',
-          label: 'Rendering offline',
+          label: options.label ?? 'Rendering offline',
           progress: 0,
           cancel,
         },
@@ -1692,7 +1714,7 @@ async function renderProject(
         const message = event.data;
         if (message.type === 'progress') {
           useApp.setState({
-            busy: { kind: 'render', label: 'Rendering offline', progress: message.progress as number, cancel },
+            busy: { kind: 'render', label: options.label ?? 'Rendering offline', progress: message.progress as number, cancel },
           });
         } else if (message.type === 'done') {
           resolve({
