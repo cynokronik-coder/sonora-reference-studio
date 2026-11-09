@@ -208,7 +208,7 @@ describe('Dynamic EQ detector modes and external key', () => {
     expect(rms(programmeL) / inputRms).toBeLessThan(0.6);
   });
 
-  it('does not respond when the external key is outside the active band's frequency region', () => {
+  it("does not respond when the external key is outside the active band frequency region", () => {
     const programmeL = sine(0.5, 1000);
     const programmeR = programmeL.slice();
     const keyL = sine(0.8, 50);
