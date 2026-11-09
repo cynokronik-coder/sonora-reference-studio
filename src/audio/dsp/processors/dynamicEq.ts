@@ -35,12 +35,14 @@ function bandValue(values: ParamValues, band: number, key: string, fallback: num
 /** Soft-knee downward expansion in dB, with a hard maximum-cut range. */
 function targetReduction(levelDb: number, threshold: number, ratio: number, knee: number, range: number): number {
   const over = levelDb - threshold;
-  if (over <= 0 || range <= 0) return 0;
+  if (range <= 0) return 0;
   const slope = 1 - 1 / ratio;
-  const reduction = knee > 0 && over < knee
-    ? (slope * over * over) / (2 * knee)
-    : slope * over;
-  return clamp(reduction, 0, range);
+  if (knee > 0 && over < knee * 0.5) {
+    if (over <= -knee * 0.5) return 0;
+    const normalized = over + knee * 0.5;
+    return clamp((slope * normalized * normalized) / (2 * knee), 0, range);
+  }
+  return clamp(slope * over, 0, range);
 }
 
 /**
