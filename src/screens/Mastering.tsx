@@ -15,13 +15,7 @@ const DELIVERY_TARGETS = [
   { id: 'lossless', label: 'Lossless digital release', lufs: -14, tp: -1 },
 ];
 
-const MASTERING_STYLES = [
-  { id: 'master-transparent', label: 'Balanced', description: 'Clean, controlled and transparent.', detail: 'A restrained starting point with clean peak control.', color: '#8957FF' },
-  { id: 'master-warm', label: 'Warm', description: 'Weight, glue and a softer top end.', detail: 'A gentle colour-focused starting point.', color: '#E6AD3D' },
-  { id: 'master-modern-pop', label: 'Bright', description: 'Forward presence and a modern polished edge.', detail: 'A brighter, denser pop-oriented starting point.', color: '#55B7EA' },
-] as const;
-
-export default function Mastering({ embedded = false }: { embedded?: boolean } = {}) {
+export default function Mastering() {
   const {
     project,
     assets,
@@ -49,7 +43,7 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
   const meters = useMeters();
   const picker = useFilePicker();
   const [targetPreset, setTargetPreset] = useState('streaming');
-  const [selectedStyle, setSelectedStyle] = useState<(typeof MASTERING_STYLES)[number]['id']>('master-transparent');
+  const [selectedStyle, setSelectedStyle] = useState('master-transparent');
 
   if (!project) return <div className="p-5"><Panel>Open a project to use the mastering workspace.</Panel></div>;
 
@@ -62,8 +56,8 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
   const measured = lastRenderStats;
   const targetLufs = project.targetLufs ?? -14;
   const targetTp = project.targetTruePeak ?? -1;
-  const selectedPreset = presets.find((preset) => preset.id === selectedStyle);
-  const selectedStyleInfo = MASTERING_STYLES.find((style) => style.id === selectedStyle) ?? MASTERING_STYLES[0];
+  const masteringPresets = presets.filter((preset) => preset.category === 'mastering');
+  const selectedPreset = masteringPresets.find((preset) => preset.id === selectedStyle);
 
   const handleDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -77,7 +71,6 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sonora-canvas">
-      {!embedded && (
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[.07] bg-[#0D0D1B]/75 px-5 py-4 backdrop-blur-xl sm:px-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -98,12 +91,11 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
           </Button>
         </div>
       </header>
-      )}
 
-      {!embedded && <TransportBar />}
+      <TransportBar />
 
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className={`mx-auto w-full max-w-[1600px] space-y-5 ${embedded ? 'p-4 sm:p-5' : 'p-5 sm:p-6 lg:p-7'}`}>
+        <div className="mx-auto w-full max-w-[1600px] space-y-5 p-5 sm:p-6 lg:p-7">
           <section className="grid gap-3 xl:grid-cols-[1.05fr_.95fr]">
             <Panel dataTour="mastering-upload" title="Your track" subtitle="The original audio remains untouched; mastering uses the current project chain.">
               <div
@@ -154,24 +146,28 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
 
             <Panel dataTour="mastering-styles" title="Choose a style" subtitle="These are real, editable processor-chain starting points.">
               <div className="space-y-2">
-                {MASTERING_STYLES.map((style) => {
-                  const active = selectedStyle === style.id;
-                  const preset = presets.find((item) => item.id === style.id);
+                {masteringPresets.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-white/[.10] px-4 py-8 text-center">
+                    <p className="text-xs font-medium text-ink-200">No mastering styles available</p>
+                    <p className="mt-1 text-2xs text-ink-500">Create or save a mastering preset to see it here.</p>
+                  </div>
+                ) : masteringPresets.map((preset) => {
+                  const active = selectedStyle === preset.id;
                   return (
                     <button
-                      key={style.id}
+                      key={preset.id}
                       type="button"
-                      onClick={() => setSelectedStyle(style.id)}
+                      onClick={() => setSelectedStyle(preset.id)}
                       aria-pressed={active}
                       className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all duration-180 ${active ? 'border-[#A77AFF]/45 bg-[#8957FF]/[.12] shadow-violet-soft' : 'border-white/[.07] bg-[#0D0D1B]/55 hover:border-white/[.15] hover:bg-white/[.035]'}`}
                     >
-                      <span className="flex h-10 w-12 shrink-0 items-center justify-center rounded-lg border border-white/[.06] bg-black/20" style={{ color: style.color }}>
+                      <span className="flex h-10 w-12 shrink-0 items-center justify-center rounded-lg border border-white/[.06] bg-black/20 text-[#C4A2FF]">
                         <Icon name="audio-lines" size={22} />
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block text-xs font-semibold text-ink-100">{style.label}</span>
-                        <span className="mt-0.5 block text-2xs text-ink-400">{style.description}</span>
-                        <span className="mt-1 block text-[9px] text-ink-600">{preset ? `${preset.processors.length} processors · editable chain` : style.detail}</span>
+                        <span className="block text-xs font-semibold text-ink-100">{preset.name}</span>
+                        <span className="mt-0.5 block text-2xs text-ink-400">{preset.description}</span>
+                        <span className="mt-1 block text-[9px] text-ink-600">{preset.processors.length} processors · editable chain</span>
                       </span>
                       <span className={`flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border ${active ? 'border-[#A77AFF] bg-[#8957FF]' : 'border-ink-500'}`}>
                         {active && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
@@ -180,9 +176,9 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
                   );
                 })}
                 <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/[.07] pt-3">
-                  <p className="max-w-[240px] text-2xs leading-relaxed text-ink-500">Loading a starting point replaces the current master chain. You can edit every processor and undo the change.</p>
-                  <Button size="sm" variant="secondary" disabled={!selectedPreset} onClick={() => applyPreset(selectedStyle, 'master', null)}>
-                    Use {selectedStyleInfo.label}
+                  <p className="max-w-[240px] text-2xs leading-relaxed text-ink-500">Choose any factory or saved mastering chain. Preview it first, then load it as editable processors; the change can be undone.</p>
+                  <Button size="sm" variant="secondary" disabled={!selectedPreset} onClick={() => selectedPreset && applyPreset(selectedPreset.id, 'master', null)}>
+                    Use {selectedPreset?.name ?? 'selected style'}
                   </Button>
                 </div>
               </div>
