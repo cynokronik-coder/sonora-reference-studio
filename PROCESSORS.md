@@ -68,8 +68,12 @@ copy supports true parallel blending. Factory starting points include Gentle sib
 sibilance and Wideband control.
 
 ### Transient Shaper
-Fast vs slow envelope comparison: transient energy drives attack gain, sustained energy drives sustain gain. Sensitivity,
-mix and output are adjustable.
+Independent left/right fast (0.4 ms attack / 30 ms release) and slow (25 ms / 180 ms) envelope followers estimate transient
+difference and sustained body. Attack and sustain controls apply bounded dB changes (attack up to ±12 dB, sustain up
+to ±6 dB before the combined ±18 dB safety bound), avoiding negative linear gain and polarity inversion. Stereo Link
+blends each channel's envelope features towards the stronger side; 100% applies the same gain to both channels, while
+0% follows each side independently. Gain, output and dry/wet transitions are smoothed. Factory starting points include
+Punch and attack, Soften transients, Longer sustain, Drum snap and Gentle dynamics.
 
 ### Gate / Expander
 Downward expander with threshold, ratio, range, attack, hold and release.
