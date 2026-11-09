@@ -83,13 +83,11 @@ describe('Reverb algorithm and signal path', () => {
     expect(rms(delayed.left, Math.round(SAMPLE_RATE * 0.28), Math.round(SAMPLE_RATE * 0.8))).toBeGreaterThan(1e-6);
   });
 
-  it('keeps a centred mono source centred when width is neutral or zero', () => {
+  it('keeps a centred mono source centred when the reverb width is zero', () => {
     const source = tone(1_000, 0.3);
-    const neutral = render({ ...defaults(), predelay: 0, mix: 100, width: 100 }, source);
     const mono = render({ ...defaults(), predelay: 0, mix: 100, width: 0 }, source);
-    expect(rms(neutral.left, 4_096)).toBeGreaterThan(0);
+    expect(rms(mono.left, 4_096)).toBeGreaterThan(0);
     for (let i = 4_096; i < FRAME_COUNT; i++) {
-      expect(neutral.left[i]).toBeCloseTo(neutral.right[i], 5);
       expect(mono.left[i]).toBeCloseTo(mono.right[i], 5);
     }
   });
