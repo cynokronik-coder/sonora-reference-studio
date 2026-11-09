@@ -425,7 +425,7 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
                 onLostPointerCapture={() => { assistantPointerRef.current = null; }}
               >
                 <div className="min-h-0 flex-1"><AssistantPanel draggable onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
-                <button>
+                <button
                   type="button"
                   data-assistant-resize-handle
                   aria-label="Resize Sonora AI window"
