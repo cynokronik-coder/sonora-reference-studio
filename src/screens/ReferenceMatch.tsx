@@ -6,6 +6,7 @@ import { FlyoutMenu } from '../ui/FlyoutMenu';
 import { BandChart, BandBars, Waveform } from '../ui/viz';
 import { MATCH_CATEGORIES, type CategorySource } from '../audio/analysis/match';
 import type { MatchSettings } from '../audio/model/types';
+import { computeMatchPreview } from '../audio/analysis/preview';
 import { formatTime } from '../audio/dsp/util';
 
 export default function ReferenceMatch() {
@@ -51,16 +52,7 @@ export default function ReferenceMatch() {
     if (matchPlan) setExcluded(new Set());
   }, [matchPlan]);
 
-  const preview = useMemo(() => {
-    if (!targetReport || !referenceReport) return null;
-    const before = targetReport.spectrum.bands.map((b) => b.relativeDb);
-    const after = before.map((value, i) => {
-      const diff = (referenceReport.spectrum.bands[i]?.relativeDb ?? value) - value;
-      const scale = Math.pow((project?.match.intensity ?? 0) / 100, 1.25) * ((project?.match.frequencyBalance ?? 0) / 100);
-      return value + diff * scale;
-    });
-    return { before, after };
-  }, [targetReport, referenceReport, project?.match.intensity, project?.match.frequencyBalance]);
+  const preview = useMemo(() => (project ? computeMatchPreview(project, analyses) : null), [project, analyses]);
 
   if (!project) {
     return <div className="p-5"><Panel><EmptyState title="No project open" description="Open a project to start a reference match." /></Panel></div>;
@@ -325,9 +317,31 @@ export default function ReferenceMatch() {
                         <Select
                           key={category.key}
                           label={category.label}
-                          value={project.match.categorySource[category.key] ?? 0}
-                          options={analysedRefs.map((ref, index) => ({ value: index, label: `Ref ${index + 1} · ${ref.meta?.name ?? ''}`.slice(0, 40) }))}
+                          value={project.match.categorySource[category.key] ?? -1}
+                          options={[{ value: -1, label: 'Weighted blend · all references' }, ...analysedRefs.map((ref, index) => ({ value: index, label: `Ref ${index + 1} · ${ref.meta?.name ?? ''}`.slice(0, 40) }))]}
                           onChange={(value) => setMatch({ categorySource: { ...project.match.categorySource, [category.key]: value } })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {analysedRefs.length > 1 && (
+                  <div className="sm:col-span-2 rounded-xl border border-white/[.07] bg-[#0D0D1B]/70 p-3">
+                    <div className="section-label mb-1">Reference influence</div>
+                    <p className="mb-3 text-2xs leading-relaxed text-ink-500">
+                      These weights control the weighted blend. Set a reference to 0% to exclude it. A characteristic set to a specific reference ignores these weights.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {analysedRefs.map((ref, index) => (
+                        <ParamSlider
+                          key={ref.id}
+                          label={ref.meta?.name ?? `Reference ${index + 1}`}
+                          value={project.match.referenceWeights?.[ref.id] ?? 100}
+                          min={0}
+                          max={200}
+                          step={5}
+                          unit="%"
+                          onChange={(value) => setMatch({ referenceWeights: { ...(project.match.referenceWeights ?? {}), [ref.id]: value } })}
                         />
                       ))}
                     </div>
@@ -341,7 +355,7 @@ export default function ReferenceMatch() {
         <Panel title="Tonal comparison" subtitle="Relative band levels. Loudness-independent, so quiet and loud masters compare fairly." right={<HelpTip title="What is tonal balance?">This chart shows how energy is distributed across frequency bands. More bass or treble is not automatically better. Compare broad trends, then listen for muddiness, harshness, missing body or excessive brightness.</HelpTip>}>
           {preview ? (
             <>
-              <BandChart bands={preview.before} compare={referenceReport?.spectrum.bands.map((b) => b.relativeDb)} label="Target" compareLabel="Reference" height={170} />
+              <BandChart bands={preview.before} compare={preview.reference} label="Target" compareLabel="Reference" height={170} />
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <div>
                   <div className="section-label mb-1">Target buildup</div>
@@ -349,7 +363,7 @@ export default function ReferenceMatch() {
                 </div>
                 <div>
                   <div className="section-label mb-1">Reference buildup</div>
-                  <BandBars bands={referenceReport!.spectrum.bands} height={70} color="#5ad1e6" />
+                  <BandBars bands={preview.referenceBands} height={70} color="#5ad1e6" />
                 </div>
               </div>
               <div className="mt-2 space-y-1">
