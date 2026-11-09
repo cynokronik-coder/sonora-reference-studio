@@ -198,7 +198,7 @@ export const compressorDefinition: ProcessorDefinition = {
   name: 'Compressor',
   shortName: 'COMP',
   category: 'dynamics',
-  description: 'Feed-forward compressor with soft knee, five behaviour styles, sidechain filter, lookahead and dry/wet mix.',
+  description: 'Feed-forward compressor with soft knee, five behaviour styles, independent L/R detection, adjustable stereo linking, sidechain filter, lookahead and dry/wet mix.',
   purpose: 'Controls dynamic range, tightens levels and adds density. Reference Match uses it when crest factor or LRA differs from the reference.',
   params: [
     { key: 'threshold', label: 'Threshold', kind: 'float', min: -60, max: 0, step: 0.1, default: -18, unit: 'dB', group: 'Dynamics' },
