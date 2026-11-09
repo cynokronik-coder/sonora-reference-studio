@@ -110,7 +110,7 @@ export default function TopNavigation({
               disabled={disabled}
               onClick={() => { if (item.label === 'AI Assistant') { onOpenAssistant(); setMoreOpen(false); } else navigate(item.screen); }}
               aria-current={selected ? 'page' : undefined}
-              className={`relative flex h-12 shrink-0 items-center gap-2.5 rounded-xl px-5 text-sm font-semibold transition-all duration-180 disabled:cursor-not-allowed disabled:opacity-35 sm:px-6 sm:text-base ${
+              className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-semibold transition-colors duration-180 disabled:cursor-not-allowed disabled:opacity-35 sm:px-5 sm:text-sm ${
                 selected
                   ? 'bg-[#8957FF]/15 text-white shadow-[0_4px_18px_rgba(117,69,234,.12)]'
                   : 'text-ink-400 hover:bg-white/[.04] hover:text-ink-100'
@@ -132,7 +132,7 @@ export default function TopNavigation({
             aria-haspopup="menu"
             aria-expanded={moreOpen}
             onClick={() => setMoreOpen((open) => !open)}
-            className={`flex h-12 items-center gap-2 rounded-xl px-5 text-base font-semibold transition-colors ${
+            className={`flex h-11 items-center gap-2 rounded-xl px-4 text-xs font-semibold transition-colors sm:px-5 sm:text-sm ${
               moreOpen ? 'bg-white/[.06] text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-ink-100'
             }`}
           >
@@ -150,7 +150,7 @@ export default function TopNavigation({
                     role="menuitem"
                     disabled={disabled}
                     onClick={() => navigate(item.screen)}
-                    className={`flex w-full items-center rounded-xl px-4 py-4 text-left text-base font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${
+                    className={`flex w-full items-center rounded-xl px-3 py-3 text-left text-xs font-medium transition-colors sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-35 ${
                       screen === item.screen ? 'bg-[#8957FF]/15 text-[#C4A2FF]' : 'text-ink-300 hover:bg-white/[.05] hover:text-white'
                     }`}
                   >
@@ -218,7 +218,7 @@ export default function TopNavigation({
         <button type="button" onClick={() => navigate('settings')} title="Settings" aria-label="Settings" className={`focus-ring flex h-10 w-10 items-center justify-center rounded-full border transition-all ${
           screen === 'settings' ? 'border-[#A77AFF]/60 bg-[#8957FF]/20 text-[#C4A2FF]' : 'border-white/[.10] bg-[#1D1D30] text-ink-300 hover:border-white/[.2] hover:text-white'
         }`}>
-          <Icon name="settings" size={18} />
+          <Icon name="sliders" size={17} />
         </button>
         <button type="button" onClick={() => navigate('account')} aria-label="Open Sonora account" title="Account" className="focus-ring hidden h-10 w-10 items-center justify-center rounded-full border border-[#A77AFF]/40 bg-gradient-to-br from-[#8957FF]/35 to-[#7545EA]/15 text-[11px] font-semibold text-white transition hover:border-[#A77AFF]/70 hover:brightness-110 sm:flex">S</button>
       </div>

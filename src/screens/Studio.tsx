@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { PointerEvent as ReactPointerEvent } from 'react';
 import { useApp } from '../state/store';
 import { AUDIO_ACCEPT, Badge, Button, EmptyState, IconButton, Modal, Panel, ParamSlider, Toggle, useFilePicker } from '../ui/Primitives';
 import { FlyoutMenu } from '../ui/FlyoutMenu';
@@ -14,6 +15,16 @@ import Mastering from './Mastering';
 
 type Focus = { scope: 'master' | 'track' | 'bus'; id: string | null };
 type Workspace = 'arrangement' | 'mixer' | 'processing' | 'mastering';
+type AssistantWindowRect = { x: number; y: number; width: number; height: number };
+type AssistantPointer = {
+  pointerId: number;
+  mode: 'move' | 'resize';
+  startX: number;
+  startY: number;
+  startRect: AssistantWindowRect;
+};
+
+const bound = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 const TRACK_KINDS: TrackKind[] = ['audio', 'vocal', 'instrument', 'drums', 'bass', 'instrumental', 'stem'];
 
@@ -27,6 +38,9 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
   const [tracksOpen, setTracksOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [assistantOpen, setAssistantOpen] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches);
+  const assistantStageRef = useRef<HTMLDivElement | null>(null);
+  const assistantPointerRef = useRef<AssistantPointer | null>(null);
+  const [assistantWindowRect, setAssistantWindowRect] = useState<AssistantWindowRect | null>(null);
   const [trackScrollTop, setTrackScrollTop] = useState(0);
   const [processingCategory, setProcessingCategory] = useState<'effects' | 'eq' | 'dynamics' | null>('effects');
   const [newTrackKind, setNewTrackKind] = useState<TrackKind>('audio');
@@ -34,6 +48,86 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
   const selectedProcessorId = useApp((s) => s.selectedProcessorId);
   const activeTrack = project?.tracks.find((track) => track.id === selectedTrackId) ?? null;
   const setMasterVolume = useApp((s) => s.setMasterVolume);
+
+  useEffect(() => {
+    if (!assistantOpen) return;
+    const stage = assistantStageRef.current;
+    if (!stage) return;
+
+    const fitAssistant = () => {
+      const stageWidth = Math.max(320, stage.clientWidth);
+      const stageHeight = Math.max(320, stage.clientHeight);
+      setAssistantWindowRect((current) => {
+        const width = Math.min(current?.width ?? 460, stageWidth - 24);
+        const height = Math.min(current?.height ?? 620, stageHeight - 24);
+        return {
+          width,
+          height,
+          x: current ? bound(current.x, 8, stageWidth - width - 8) : stageWidth - width - 20,
+          y: current ? bound(current.y, 8, stageHeight - height - 8) : 20,
+        };
+      });
+    };
+
+    fitAssistant();
+    const observer = new ResizeObserver(fitAssistant);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, [assistantOpen]);
+
+  const startAssistantPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (!target || !assistantWindowRect) return;
+    const resizing = Boolean(target.closest('[data-assistant-resize-handle]'));
+    const dragging = Boolean(target.closest('[data-assistant-drag-handle]'));
+    if (!resizing && (!dragging || target.closest('button, input, textarea, select, a'))) return;
+
+    event.preventDefault();
+    event.currentTarget.setPointerCapture(event.pointerId);
+    assistantPointerRef.current = {
+      pointerId: event.pointerId,
+      mode: resizing ? 'resize' : 'move',
+      startX: event.clientX,
+      startY: event.clientY,
+      startRect: assistantWindowRect,
+    };
+  };
+
+  const moveAssistantPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const interaction = assistantPointerRef.current;
+    const stage = assistantStageRef.current;
+    if (!interaction || interaction.pointerId !== event.pointerId || !stage) return;
+    const dx = event.clientX - interaction.startX;
+    const dy = event.clientY - interaction.startY;
+    const start = interaction.startRect;
+    const stageWidth = stage.clientWidth;
+    const stageHeight = stage.clientHeight;
+
+    if (interaction.mode === 'move') {
+      setAssistantWindowRect({
+        ...start,
+        x: bound(start.x + dx, 8, stageWidth - start.width - 8),
+        y: bound(start.y + dy, 8, stageHeight - start.height - 8),
+      });
+      return;
+    }
+
+    const maxWidth = Math.min(760, stageWidth - start.x - 8);
+    const maxHeight = Math.min(820, stageHeight - start.y - 8);
+    setAssistantWindowRect({
+      ...start,
+      width: bound(start.width + dx, Math.min(340, maxWidth), maxWidth),
+      height: bound(start.height + dy, Math.min(420, maxHeight), maxHeight),
+    });
+  };
+
+  const endAssistantPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (assistantPointerRef.current?.pointerId !== event.pointerId) return;
+    assistantPointerRef.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+  };
 
   const effectiveFocus: Focus = useMemo(() => {
     if (focus.scope === 'track' && !(project ? findTrack(project, focus.id) : undefined)) return { scope: 'master', id: null };
@@ -83,7 +177,6 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
             <h1 className="truncate text-base font-semibold tracking-[-.02em] text-white">Sonora</h1>
             <p className="max-w-[180px] truncate text-xs text-ink-400">{project.name} · {project.tracks.length} tracks · {(project.sampleRate / 1000).toFixed(1)} kHz</p>
           </div>
-          <Badge tone="neutral" className="hidden lg:inline-flex">{project.autosave ? 'Autosave on' : 'Manual save'}</Badge>
         </div>
 
         <nav aria-label="Studio navigation" className="no-scrollbar flex min-w-0 items-center justify-center gap-0.5 overflow-x-auto px-1">
@@ -109,24 +202,30 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
             <span className="hidden text-xs font-medium xl:inline">Search</span>
             <kbd className="hidden rounded border border-white/[.1] px-1.5 py-0.5 font-mono text-[9px] text-ink-500 xl:inline">⌘K</kbd>
           </button>
-          <button type="button" data-tour="studio-tracks" onClick={() => setTracksOpen(true)} title="Manage tracks and buses" aria-label={`Open tracks, ${project.tracks.length} tracks`} className="inline-flex rounded-lg border border-white/[.08] bg-white/[.025] px-2.5 py-2 text-[10px] text-ink-300 transition-colors hover:bg-white/[.06] hover:text-white">
+          <button type="button" data-tour="studio-tracks" onClick={() => setTracksOpen(true)} title="Manage tracks and buses" aria-label={`Open tracks, ${project.tracks.length} tracks`} className="inline-flex h-10 items-center rounded-lg border border-white/[.08] bg-white/[.025] px-2.5 text-xs text-ink-300 transition-colors hover:bg-white/[.06] hover:text-white">
             Tracks <span className="ml-1 text-ink-500">{project.tracks.length}</span>
           </button>
+          {activeTrack && (
+            <div title={`Selected track: ${activeTrack.name}`} className="hidden max-w-[132px] items-center gap-1.5 rounded-lg border border-[#A77AFF]/20 bg-[#8957FF]/[.07] px-2.5 py-2 lg:flex">
+              <Icon name="waveform" size={13} className="shrink-0 text-[#C4A2FF]" />
+              <span className="truncate text-xs text-ink-200">{activeTrack.name}</span>
+            </div>
+          )}
           <Button size="sm" variant="primary" onClick={() => setAddOpen(true)}><Icon name="plus" size={14} /> Add audio</Button>
           <button type="button" onClick={onStartTour} title="Guided tour" aria-label="Start guided tour" className="focus-ring inline-flex h-8 items-center gap-1.5 rounded-lg border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-2.5 text-[10px] font-medium text-[#C4A2FF] transition-colors hover:border-[#A77AFF]/45 hover:bg-[#8957FF]/15">
             <Icon name="sparkles" size={13} /> <span className="hidden md:inline">Tour</span>
           </button>
-          <button type="button" onClick={() => useApp.getState().setScreen('settings')} aria-label="Settings" title="Settings" className="focus-ring hidden h-8 w-8 items-center justify-center rounded-full border border-white/[.10] bg-[#1D1D30] text-ink-300 transition-colors hover:border-[#A77AFF]/50 hover:text-white sm:inline-flex">
-            <Icon name="settings" size={15} />
+          <button type="button" onClick={() => useApp.getState().setScreen('settings')} aria-label="Settings" title="Settings" className="focus-ring hidden h-10 w-10 items-center justify-center rounded-full border border-white/[.10] bg-[#1D1D30] text-ink-300 transition-colors hover:border-[#A77AFF]/50 hover:text-white sm:inline-flex">
+            <Icon name="sliders" size={17} />
           </button>
-          <button type="button" onClick={() => onOpenAccount?.() ?? useApp.getState().setScreen('account')} aria-label="Open Sonora account" title="Account" className="focus-ring hidden h-9 w-9 items-center justify-center rounded-full border border-[#A77AFF]/40 bg-gradient-to-br from-[#8957FF]/35 to-[#7545EA]/15 text-[11px] font-semibold text-white transition hover:border-[#A77AFF]/70 hover:brightness-110 sm:flex">S</button>
+          <button type="button" onClick={() => onOpenAccount?.() ?? useApp.getState().setScreen('account')} aria-label="Open Sonora account" title="Account" className="focus-ring hidden h-10 w-10 items-center justify-center rounded-full border border-[#A77AFF]/40 bg-gradient-to-br from-[#8957FF]/35 to-[#7545EA]/15 text-[11px] font-semibold text-white transition hover:border-[#A77AFF]/70 hover:brightness-110 sm:flex">S</button>
         </div>
       </header>
 
       <div data-tour="studio-transport" className="shrink-0"><TransportBar /></div>
       <StudioTimeline />
 
-      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+      <div ref={assistantStageRef} className="relative flex min-h-0 flex-1 overflow-hidden">
         <aside data-tour="studio-tracks" className="hidden w-[220px] shrink-0 flex-col border-r border-white/[.07] bg-[#0D0D1B]/92 lg:flex xl:w-[240px]">
           <div className="flex h-[50px] shrink-0 items-center justify-between border-b border-white/[.07] px-3">
             <div className="flex items-center gap-2">
@@ -134,7 +233,7 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
               <span className="font-mono text-[9px] text-ink-500">{project.tracks.length}</span>
             </div>
             <div className="flex items-center gap-1">
-              <IconButton title="Manage tracks and buses" onClick={() => setTracksOpen(true)}><Icon name="settings" size={14} /></IconButton>
+              <IconButton title="Manage tracks and buses" onClick={() => setTracksOpen(true)}><Icon name="sliders" size={14} /></IconButton>
               <FlyoutMenu
                 label=""
                 icon="sliders"
@@ -309,13 +408,38 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
 
         {assistantOpen && (
           <>
-            <aside data-tour="studio-assistant" className="absolute inset-y-0 right-0 z-40 hidden w-[420px] max-w-[44%] border-l border-white/[.10] bg-[#0D0D1B] shadow-floating xl:flex 2xl:w-[480px]">
-              <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
-            </aside>
+            {assistantWindowRect && (
+              <div
+                data-tour="studio-assistant"
+                className="absolute z-40 hidden min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[.12] bg-[#0D0D1B]/[.98] shadow-[0_24px_80px_rgba(0,0,0,.58)] backdrop-blur-xl xl:flex"
+                style={{
+                  left: assistantWindowRect.x,
+                  top: assistantWindowRect.y,
+                  width: assistantWindowRect.width,
+                  height: assistantWindowRect.height,
+                }}
+                onPointerDown={startAssistantPointer}
+                onPointerMove={moveAssistantPointer}
+                onPointerUp={endAssistantPointer}
+                onPointerCancel={endAssistantPointer}
+                onLostPointerCapture={() => { assistantPointerRef.current = null; }}
+              >
+                <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
+                <button
+                  type="button"
+                  data-assistant-resize-handle
+                  aria-label="Resize Sonora AI window"
+                  title="Drag to resize"
+                  className="absolute bottom-1.5 right-1.5 z-10 flex h-6 w-6 touch-none items-center justify-center rounded-md border border-white/[.10] bg-[#171727]/90 text-sm leading-none text-ink-500 shadow-lg hover:border-[#A77AFF]/45 hover:text-[#C4A2FF]"
+                >
+                  ⤢
+                </button>
+              </div>
+            )}
             <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#05050c]/65 p-3 backdrop-blur-sm sm:p-5 xl:hidden" onClick={() => setAssistantOpen(false)}>
               <aside
                 data-tour="studio-assistant"
-                className="flex h-full max-h-full w-full max-w-[640px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[.10] bg-[#0D0D1B] shadow-floating"
+                className="flex h-full max-h-[calc(100dvh-24px)] w-full max-w-[640px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[.10] bg-[#0D0D1B] shadow-floating"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
