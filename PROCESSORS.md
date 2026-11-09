@@ -14,9 +14,11 @@ loudness correction stage in generated chains.
 ### Parametric EQ
 8 bands. Types: bell, low shelf, high shelf, high-pass, low-pass, notch, band-pass, tilt. Per-band frequency/gain/Q and
 routing (stereo, mid, side). Processing happens in M/S so a mid-only or side-only band behaves correctly; a stereo band
-applies identical filters to both sides. **Linear phase** mode designs a 512-tap symmetric FIR from the exact magnitude
-response of the biquad cascade (frequency sampling + inverse FFT + windowing), adding 256 samples of latency. The
-minimum-phase path is default.
+applies identical filters to both sides. Minimum-phase coefficient changes and output-trim changes ramp over 20 ms to
+reduce zipper noise and abrupt filter transitions. The optional **linear phase** mode designs a 513-tap symmetric FIR
+from the sampled magnitude response of the biquad cascade (frequency sampling + inverse FFT + windowing), adding
+exactly 256 samples of group delay (about 5.33 ms at 48 kHz). Factory starting points include Low-end cleanup, Reduce
+mud, Vocal presence, Air and clarity, Warm balance, Resonance notch and Gentle master tilt; all bands remain editable.
 
 ### Dynamic EQ
 Four bell bands whose gain is driven by a bandpass detector. Threshold, maximum cut, attack and release per band. Gain
