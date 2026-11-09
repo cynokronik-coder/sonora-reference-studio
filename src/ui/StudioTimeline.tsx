@@ -89,7 +89,7 @@ export function StudioTimeline() {
     const node = playheadRef.current;
     if (!node) return;
     const progress = duration > 0 ? Math.max(0, Math.min(1, seconds / duration)) : 0;
-    node.style.transform = \`translate3d(calc(-100% + \${progress * 100}%), 0, 0)\`;
+    node.style.transform = `translate3d(calc(-100% + ${progress * 100}%), 0, 0)`;
   };
 
   useEffect(() => {
@@ -187,7 +187,7 @@ export function StudioTimeline() {
           aria-valuemin={0}
           aria-valuemax={duration}
           aria-valuenow={Math.min(position, duration)}
-          aria-valuetext={\`\${formatTime(position)} of \${formatTime(duration)}\`}
+          aria-valuetext={`${formatTime(position)} of ${formatTime(duration)}`}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
@@ -214,7 +214,7 @@ export function StudioTimeline() {
           disabled={duration <= 0}
           aria-pressed={loopEnabled}
           title={loopEnabled ? 'Disable loop' : 'Loop full session'}
-          className={\`focus-ring flex h-9 items-center gap-2 rounded-xl border px-3 text-[10px] font-semibold transition-colors disabled:opacity-40 \${loopEnabled ? 'border-[#A77AFF]/45 bg-[#8957FF]/15 text-[#C4A2FF]' : 'border-white/[.08] bg-white/[.025] text-ink-400 hover:border-white/[.16] hover:text-ink-100'}\`}
+          className={`focus-ring flex h-9 items-center gap-2 rounded-xl border px-3 text-[10px] font-semibold transition-colors disabled:opacity-40 ${loopEnabled ? 'border-[#A77AFF]/45 bg-[#8957FF]/15 text-[#C4A2FF]' : 'border-white/[.08] bg-white/[.025] text-ink-400 hover:border-white/[.16] hover:text-ink-100'}`}
         >
           <Icon name="repeat" size={14} /> <span className="hidden sm:inline">Loop</span>
         </button>
