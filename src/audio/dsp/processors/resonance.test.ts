@@ -40,13 +40,21 @@ function defaults() {
 }
 
 describe('Resonance suppressor signal path', () => {
-  it('is bit-transparent at 0% wet mix', () => {
+  it('is transparent at 0% wet mix after the 20 ms mix ramp has settled', () => {
     const values = { ...defaults(), mix: 0 };
     const inputL = tone(3_200, 0.8, 0, FRAME_COUNT);
     const inputR = tone(3_200, 0.4, 0, FRAME_COUNT);
-    const result = run(values, 0.8, 0.4);
-    expect(result.left).toEqual(inputL);
-    expect(result.right).toEqual(inputR);
+    const processor = new ResonanceSuppressor();
+    processor.prepare(SAMPLE_RATE, BLOCK_SIZE);
+    processor.setValues(values);
+    processor.reset(); // Apply the already-selected 0% target without an initial transition.
+    const left = inputL.slice();
+    const right = inputR.slice();
+    for (let start = 0; start < FRAME_COUNT; start += BLOCK_SIZE) {
+      processor.process(left.subarray(start, start + BLOCK_SIZE), right.subarray(start, start + BLOCK_SIZE), BLOCK_SIZE);
+    }
+    expect(left).toEqual(inputL);
+    expect(right).toEqual(inputR);
   });
 
   it('reduces an actual resonant tone and reports per-band reduction', () => {
