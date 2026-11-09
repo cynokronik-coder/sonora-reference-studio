@@ -534,6 +534,7 @@ export default function ReferenceMatch() {
                   <p className="text-2xs leading-relaxed text-ink-500">Use the transport above to play, pause, seek or loop. A/B switching follows the same playhead and crossfades over 8 ms. If you change the project or matching settings, prepare a fresh comparison.</p>
                 </div>
               )}
+            </div>
           </div>
         </Panel>
       )}
