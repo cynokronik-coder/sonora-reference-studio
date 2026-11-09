@@ -23,6 +23,10 @@ export class Gate implements AudioProcessor {
   private reductionL = 0;
   private reductionR = 0;
   private reduction = 0;
+  private mix = 1;
+  private mixTarget = 1;
+  private mixStep = 0;
+  private mixRemaining = 0;
   private outputGain = 1;
   private outputGainTarget = 1;
   private outputGainStep = 0;
@@ -46,6 +50,12 @@ export class Gate implements AudioProcessor {
     this.ballisticsL.setTimes(attack, release, this.sr, hold);
     this.ballisticsR.setTimes(attack, release, this.sr, hold);
     this.ballisticsLinked.setTimes(attack, release, this.sr, hold);
+    const nextMix = clamp((values.mix ?? 100) / 100, 0, 1);
+    if (nextMix !== this.mixTarget) {
+      this.mixTarget = nextMix;
+      this.mixRemaining = Math.max(1, Math.round(this.sr * 0.02));
+      this.mixStep = (nextMix - this.mix) / this.mixRemaining;
+    }
     const nextOutput = dbToGain(clamp(values.output ?? 0, -18, 18));
     if (nextOutput !== this.outputGainTarget) {
       this.outputGainTarget = nextOutput;
@@ -98,14 +108,18 @@ export class Gate implements AudioProcessor {
 
       const gainL = dbToGain(-this.reductionL);
       const gainR = dbToGain(-this.reductionR);
-      L[i] = (L[i] * (1 - mix) + L[i] * gainL * mix) * this.outputGain;
-      R[i] = (R[i] * (1 - mix) + R[i] * gainR * mix) * this.outputGain;
-
+      if (this.mixRemaining > 0) {
+        this.mix += this.mixStep;
+        this.mixRemaining--;
+        if (this.mixRemaining === 0) this.mix = this.mixTarget;
+      }
       if (this.outputGainRemaining > 0) {
         this.outputGain += this.outputGainStep;
         this.outputGainRemaining--;
         if (this.outputGainRemaining === 0) this.outputGain = this.outputGainTarget;
       }
+      L[i] = (L[i] * (1 - this.mix) + L[i] * gainL * this.mix) * this.outputGain;
+      R[i] = (R[i] * (1 - this.mix) + R[i] * gainR * this.mix) * this.outputGain;
       maximumReduction = Math.max(maximumReduction, this.reductionL, this.reductionR);
     }
     this.reduction = maximumReduction;
@@ -120,6 +134,8 @@ export class Gate implements AudioProcessor {
     this.reductionL = 0;
     this.reductionR = 0;
     this.reduction = 0;
+    this.mix = this.mixTarget;
+    this.mixRemaining = 0;
     this.outputGain = this.outputGainTarget;
     this.outputGainRemaining = 0;
   }
