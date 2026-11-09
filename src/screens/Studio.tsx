@@ -30,7 +30,6 @@ const TRACK_KINDS: TrackKind[] = ['audio', 'vocal', 'instrument', 'drums', 'bass
 
 export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, onOpenCommandPalette }: { onStartTour?: () => void; onExpandAssistant?: () => void; onOpenAccount?: () => void; onOpenCommandPalette?: () => void } = {}) {
   const project = useApp((s) => s.project);
-  const busy = useApp((s) => s.busy);
   const { selectedTrackId, selectTrack, importFiles, updateTrack, removeTrack, addTrack } = useApp();
   const picker = useFilePicker();
   const [focus, setFocus] = useState<Focus>({ scope: 'master', id: null });
