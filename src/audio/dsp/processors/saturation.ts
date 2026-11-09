@@ -57,6 +57,8 @@ export class Saturator implements AudioProcessor {
   private modeBlend = 1;
   private modeStep = 0;
   private modeRemaining = 0;
+  private lastPreDriveDb = Number.NaN;
+  private lastToneDb = Number.NaN;
   private drive = 1;
   private driveTarget = 1;
   private driveStep = 0;
@@ -115,8 +117,11 @@ export class Saturator implements AudioProcessor {
   private configureToneFilters(immediate = false): void {
     const driveDb = clamp(this.values.drive ?? 4, 0, 30);
     const toneDb = clamp(this.values.tone ?? 0, -10, 10) * 1.5;
+    if (!immediate && driveDb === this.lastPreDriveDb && toneDb === this.lastToneDb) return;
     const pre = designBiquad('highshelf', 6000, -driveDb * 0.15, 0.707, this.sr);
     const post = designBiquad('highshelf', 4500, toneDb, 0.707, this.sr);
+    this.lastPreDriveDb = driveDb;
+    this.lastToneDb = toneDb;
     const samples = Math.max(1, Math.round(this.sr * 0.02));
     for (const filter of [this.preFilterL, this.preFilterR]) {
       if (immediate) filter.set(pre);
@@ -143,11 +148,13 @@ export class Saturator implements AudioProcessor {
     const driveDb = clamp(values.drive ?? 4, 0, 30);
     const nextDrive = dbToGain(driveDb);
     const nextComp = 1 / Math.max(0.15, Math.tanh(nextDrive) * 0.85 + 0.15);
-    this.driveTarget = nextDrive;
-    this.compGainTarget = nextComp;
-    this.nonlinearRemaining = Math.max(1, Math.round(this.sr * 0.02 * this.osFactor));
-    this.driveStep = (this.driveTarget - this.drive) / this.nonlinearRemaining;
-    this.compGainStep = (this.compGainTarget - this.compGain) / this.nonlinearRemaining;
+    if (nextDrive !== this.driveTarget || nextComp !== this.compGainTarget) {
+      this.driveTarget = nextDrive;
+      this.compGainTarget = nextComp;
+      this.nonlinearRemaining = Math.max(1, Math.round(this.sr * 0.02 * this.osFactor));
+      this.driveStep = (this.driveTarget - this.drive) / this.nonlinearRemaining;
+      this.compGainStep = (this.compGainTarget - this.compGain) / this.nonlinearRemaining;
+    }
 
     const nextOutput = dbToGain(clamp(values.output ?? 0, -18, 18));
     if (nextOutput !== this.outGainTarget) {
@@ -223,15 +230,12 @@ export class Saturator implements AudioProcessor {
       this.os.downsample(upL, n, this.wetL, 0);
       this.os.downsample(upR, n, this.wetR, 1);
 
-      // Match the oversampler's phase response in the dry leg before the
-      // parallel blend. This avoids comb filtering between differently delayed
-      // wet and dry paths when the IIR oversampling mode is active.
-      if (this.mix < 1 || this.mixTarget < 1) {
-        const dryUpL = this.dryOs!.upsample(this.dryL, n, 0);
-        const dryUpR = this.dryOs!.upsample(this.dryR, n, 1);
-        this.dryOs!.downsample(dryUpL, n, this.alignedDryL, 0);
-        this.dryOs!.downsample(dryUpR, n, this.alignedDryR, 1);
-      }
+      // Advance the dry oversampler continuously, even at 100% wet, so a
+      // later switch to parallel blending has matching filter history.
+      const dryUpL = this.dryOs!.upsample(this.dryL, n, 0);
+      const dryUpR = this.dryOs!.upsample(this.dryR, n, 1);
+      this.dryOs!.downsample(dryUpL, n, this.alignedDryL, 0);
+      this.dryOs!.downsample(dryUpR, n, this.alignedDryR, 1);
     } else {
       this.shapePair(L, R, n);
       this.wetL.set(L.subarray(0, n));
