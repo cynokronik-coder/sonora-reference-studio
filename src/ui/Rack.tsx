@@ -8,6 +8,7 @@ import { Badge, Button, HelpTip, IconButton, Modal, ParamSlider, Select, Toggle 
 import { EQCurve, GainReductionMeter } from './viz';
 import { clamp } from '../audio/dsp/util';
 import { COMPRESSOR_PRESETS } from '../audio/dsp/processors/compressor';
+import { MULTIBAND_COMP_PRESETS } from '../audio/dsp/processors/multiband';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -36,7 +37,7 @@ export function Rack({
   processors: ProcessorNodeState[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  meters?: Record<string, { reduction?: number }>;
+  meters?: Record<string, { reduction?: number; bands?: number[] }>;
   emptyHint?: string;
   filterCategory?: ProcessorCategory | 'effects' | null;
 }) {
@@ -102,7 +103,8 @@ export function Rack({
         {visibleProcessors.map(({ node, index, definition: def }) => {
           if (!def) return null;
           const isSelected = node.id === selectedId;
-          const reduction = meters?.[node.id]?.reduction ?? 0;
+          const meter = meters?.[node.id];
+          const reduction = meter?.reduction ?? 0;
           return (
             <div
               key={node.id}
@@ -182,6 +184,25 @@ export function Rack({
                   {node.type === 'eq' && (
                     <div className="mb-2">
                       <EQCurve params={node.params} height={120} />
+                    </div>
+                  )}
+
+                  {node.type === 'multibandComp' && meter?.bands && (
+                    <div className="mb-3 grid grid-cols-3 gap-2">
+                      {(['Low', 'Mid', 'High'] as const).map((label, bandIndex) => {
+                        const reductionDb = Math.abs(meter.bands?.[bandIndex] ?? 0);
+                        return (
+                          <div key={label} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">{label}</span>
+                              <span className="font-mono text-[10px] text-signal-amber">{reductionDb > 0.05 ? `-${reductionDb.toFixed(1)}` : '0.0'} dB</span>
+                            </div>
+                            <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
+                              <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -293,6 +314,7 @@ function ProcessorParams({
   advanced: boolean;
 }) {
   const [compressorPreset, setCompressorPreset] = useState('');
+  const [multibandPreset, setMultibandPreset] = useState('');
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -304,6 +326,7 @@ function ProcessorParams({
   }
   const update = (key: string, value: number) => {
     if (node.type === 'compressor') setCompressorPreset('');
+    if (node.type === 'multibandComp') setMultibandPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
@@ -312,8 +335,29 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setCompressorPreset(preset.id);
   };
+  const applyMultibandPreset = (presetId: string) => {
+    const preset = MULTIBAND_COMP_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setMultibandPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
+      {node.type === 'multibandComp' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Multiband starting point"
+            value={multibandPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...MULTIBAND_COMP_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyMultibandPreset}
+          />
+          {multibandPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {MULTIBAND_COMP_PRESETS.find((preset) => preset.id === multibandPreset)?.description} All band settings remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'compressor' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
@@ -378,6 +422,11 @@ function ProcessorParams({
                   {node.type === 'compressor' && spec.key === 'link' && (
                     <p className="mt-1 text-[10px] leading-relaxed text-ink-500">
                       0% compresses left and right independently. 100% uses the louder detector for shared stereo gain reduction.
+                    </p>
+                  )}
+                  {node.type === 'multibandComp' && spec.key.endsWith('_link') && (
+                    <p className="mt-1 text-[10px] leading-relaxed text-ink-500">
+                      0% uses independent left/right detection in this band. 100% applies shared gain reduction to both channels.
                     </p>
                   )}
                 </div>
