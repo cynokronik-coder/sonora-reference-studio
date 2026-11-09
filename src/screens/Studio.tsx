@@ -11,10 +11,9 @@ import { findTrack } from '../audio/model/project';
 import type { TrackKind } from '../audio/model/types';
 import { Timeline } from '../ui/Timeline';
 import { StudioTimeline } from '../ui/StudioTimeline';
-import Mastering from './Mastering';
 
 type Focus = { scope: 'master' | 'track' | 'bus'; id: string | null };
-type Workspace = 'arrangement' | 'mixer' | 'processing' | 'mastering';
+type Workspace = 'arrangement' | 'mixer' | 'processing';
 type AssistantWindowRect = { x: number; y: number; width: number; height: number };
 type AssistantPointer = {
   pointerId: number;
@@ -181,13 +180,9 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
         </div>
 
         <nav aria-label="Studio navigation" className="no-scrollbar flex min-w-0 items-center justify-center gap-0.5 overflow-x-auto px-1">
-          <button type="button" onClick={() => setWorkspace('arrangement')} aria-current={workspace !== 'mastering' ? 'page' : undefined} className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium transition-colors sm:px-5 sm:text-sm ${workspace !== 'mastering' ? 'bg-[#8957FF]/15 text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
-            <Icon name="waveform" size={15} className={workspace !== 'mastering' ? 'text-[#C4A2FF]' : 'text-ink-500'} /> Studio
-            {workspace !== 'mastering' && <span className="absolute inset-x-4 -bottom-[1px] h-[2px] rounded-full bg-gradient-to-r from-[#8957FF] to-[#C4A2FF]" />}
-          </button>
-          <button type="button" onClick={() => setWorkspace('mastering')} aria-current={workspace === 'mastering' ? 'page' : undefined} className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium transition-colors sm:px-5 sm:text-sm ${workspace === 'mastering' ? 'bg-[#8957FF]/15 text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
-            <Icon name="equalizer" size={15} className={workspace === 'mastering' ? 'text-[#C4A2FF]' : 'text-ink-500'} /> Mastering
-            {workspace === 'mastering' && <span className="absolute inset-x-4 -bottom-[1px] h-[2px] rounded-full bg-gradient-to-r from-[#8957FF] to-[#C4A2FF]" />}
+          <button type="button" onClick={() => setWorkspace('arrangement')} aria-current="page" className="relative flex h-11 shrink-0 items-center gap-2 rounded-xl bg-[#8957FF]/15 px-4 text-xs font-medium text-white transition-colors sm:px-5 sm:text-sm">
+            <Icon name="waveform" size={15} className="text-[#C4A2FF]" /> Studio
+            <span className="absolute inset-x-4 -bottom-[1px] h-[2px] rounded-full bg-gradient-to-r from-[#8957FF] to-[#C4A2FF]" />
           </button>
           <button type="button" onClick={() => useApp.getState().setScreen('reference')} className="focus-ring flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium text-ink-400 transition-colors hover:bg-white/[.04] hover:text-white sm:px-5 sm:text-sm">
             <Icon name="audio-lines" size={15} className="text-ink-500" /> Reference
@@ -309,31 +304,14 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
 
         <section className="relative z-0 flex min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-white/[.07] bg-[#11111F] px-5">
-            {workspace === 'mastering' ? (
-              <>
-                <div className="flex items-center gap-2 text-sm font-semibold text-white"><Icon name="equalizer" size={16} className="text-[#C4A2FF]" /> Mastering workspace</div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  <Badge tone="neutral">{project.master.processors.length} processors</Badge>
-                  <Button size="sm" variant="primary" disabled={busy?.kind === 'render'} onClick={() => void useApp.getState().verifyMaster()}>
-                    <Icon name="sparkles" size={13} /> {busy?.kind === 'render' ? 'Mastering…' : 'Start mastering'}
-                  </Button>
-                  <Button size="sm" variant="secondary" onClick={() => useApp.getState().setScreen('export')}>
-                    <Icon name="download" size={13} /> Export
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center gap-1 rounded-xl border border-white/[.07] bg-black/20 p-1">
-                  {(['arrangement', 'mixer', 'processing'] as Workspace[]).map((tab) => (
-                    <button key={tab} type="button" onClick={() => setWorkspace(tab)} aria-pressed={workspace === tab} className={`rounded-lg px-3 py-1.5 text-[10px] font-medium capitalize transition-colors ${workspace === tab ? 'bg-[#8957FF]/20 text-[#C4A2FF] shadow-violet-soft' : 'text-ink-500 hover:text-ink-200'}`}>
-                      {tab === 'arrangement' ? 'Arrangement' : tab === 'mixer' ? 'Mixer' : 'Processing'}
-                    </button>
-                  ))}
-                </div>
-                <span className="hidden w-[240px] shrink-0 whitespace-nowrap text-right text-xs text-ink-500 sm:inline">{workspace === 'arrangement' ? 'Arrange and edit your tracks' : workspace === 'mixer' ? 'Balance channels and buses' : 'Shape your sound'}</span>
-              </>
-            )}
+            <div className="flex items-center gap-1 rounded-xl border border-white/[.07] bg-black/20 p-1">
+              {(['arrangement', 'mixer', 'processing'] as Workspace[]).map((tab) => (
+                <button key={tab} type="button" onClick={() => setWorkspace(tab)} aria-pressed={workspace === tab} className={`rounded-lg px-3 py-1.5 text-[10px] font-medium capitalize transition-colors ${workspace === tab ? 'bg-[#8957FF]/20 text-[#C4A2FF] shadow-violet-soft' : 'text-ink-500 hover:text-ink-200'}`}>
+                  {tab === 'arrangement' ? 'Arrangement' : tab === 'mixer' ? 'Mixer' : 'Processing'}
+                </button>
+              ))}
+            </div>
+            <span className="hidden w-[240px] shrink-0 whitespace-nowrap text-right text-xs text-ink-500 sm:inline">{workspace === 'arrangement' ? 'Arrange and edit your tracks' : workspace === 'mixer' ? 'Balance channels and buses' : 'Shape your sound'}</span>
           </div>
 
           <div data-tour="studio-timeline" className="studio-fixed-frame min-h-0 flex-1 overflow-hidden bg-[#090914]">
@@ -379,7 +357,6 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
                   </div>
                 </div>
               )}
-              {workspace === 'mastering' && <Mastering embedded />}
             </div>
           </div>
 
