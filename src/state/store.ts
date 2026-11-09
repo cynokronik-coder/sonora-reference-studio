@@ -27,6 +27,7 @@ import { BUILT_IN_PRESETS, createPreset, type PresetCategory, type PresetDefinit
 import { computePeaks } from '../lib/peaks';
 import * as db from '../lib/db';
 import { computeMatchPreview } from '../audio/analysis/preview';
+import { loudnessMatchedMonitorGain } from '../audio/analysis/ab';
 
 export type Screen =
   | 'dashboard'
@@ -64,9 +65,17 @@ export interface ABSlot {
   label: string;
   processors: ProcessorNodeState[];
   volumeDb: number;
+  /** Integrated loudness measured from an offline render of this snapshot. */
   lufs: number | null;
+  /** Annex 2 true peak measured from the same offline render. */
   truePeakDb: number | null;
   createdAt: number;
+}
+
+export interface ABWorkingMix {
+  projectId: string;
+  processors: ProcessorNodeState[];
+  volumeDb: number;
 }
 
 export interface BusyState {
@@ -131,6 +140,7 @@ interface AppState {
   };
   abSlots: ABSlot[];
   activeSlot: string | null;
+  workingMix: ABWorkingMix | null;
   loudnessMatch: boolean;
   comparisonDb: number;
   monitorDb: number;
@@ -162,7 +172,7 @@ interface AppState {
   setToast: (message: string | null) => void;
   clearBusy: () => void;
 
-  mutate: (mutator: (project: ProjectState) => void, options?: { coalesce?: string }) => void;
+  mutate: (mutator: (project: ProjectState) => void, options?: { coalesce?: string; preserveAb?: boolean }) => void;
   undo: () => void;
   redo: () => void;
   saveNow: () => Promise<void>;
@@ -212,6 +222,7 @@ interface AppState {
   captureSlot: (label: string) => void;
   recallSlot: (id: string) => void;
   deleteSlot: (id: string) => void;
+  restoreWorkingMix: () => void;
   setLoudnessMatch: (on: boolean) => void;
 
   exportMix: (settings: ExportSettings) => Promise<void>;
@@ -314,6 +325,7 @@ export const useApp = create<AppState>((set, get) => ({
   transport: { playing: false, position: 0, loopEnabled: false, loopStart: 0, loopEnd: 0, duration: 0 },
   abSlots: [],
   activeSlot: null,
+  workingMix: null,
   loudnessMatch: false,
   comparisonDb: 0,
   monitorDb: 0,
@@ -401,6 +413,11 @@ export const useApp = create<AppState>((set, get) => ({
       selectedTrackId: null,
       selectedProcessorId: null,
       exports: [],
+      abSlots: [],
+      activeSlot: null,
+      workingMix: null,
+      loudnessMatch: false,
+      comparisonDb: 0,
       history: [],
       future: [],
       transport: { playing: false, position: 0, loopEnabled: false, loopStart: 0, loopEnd: 0, duration: 0 },
@@ -460,6 +477,11 @@ export const useApp = create<AppState>((set, get) => ({
         assets,
         analyses,
         exports,
+        abSlots: [],
+        activeSlot: null,
+        workingMix: null,
+        loudnessMatch: false,
+        comparisonDb: 0,
         assetBuffers: buffers,
         selectedTrackId: project.tracks[0]?.id ?? null,
         selectedProcessorId: null,
@@ -487,7 +509,8 @@ export const useApp = create<AppState>((set, get) => ({
 
   closeProject: () => {
     realtimeHost.stop();
-    set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, screen: 'projects' });
+    realtimeHost.setComparisonGain(0);
+    set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, abSlots: [], activeSlot: null, workingMix: null, loudnessMatch: false, comparisonDb: 0, screen: 'projects' });
   },
 
   deleteProjectById: async (id) => {
@@ -679,6 +702,8 @@ export const useApp = create<AppState>((set, get) => ({
     const next = cloneProject(state.project);
     mutator(next);
     next.updatedAt = Date.now();
+    const masterChanged = JSON.stringify(previous.master) !== JSON.stringify(next.master);
+    const clearAudition = masterChanged && state.activeSlot !== null && !options?.preserveAb;
     const coalesce = options?.coalesce;
     const shouldCoalesce =
       Boolean(coalesce) && state.lastCoalesceKey === coalesce && Date.now() - state.lastCoalesceAt < 800;
@@ -688,7 +713,9 @@ export const useApp = create<AppState>((set, get) => ({
       future: [],
       lastCoalesceKey: coalesce ?? null,
       lastCoalesceAt: Date.now(),
+      ...(clearAudition ? { activeSlot: null, workingMix: null, comparisonDb: 0 } : {}),
     });
+    if (clearAudition) realtimeHost.setComparisonGain(0);
     schedulePersist(next);
     syncEngine(next, get().assetBuffers);
   },
@@ -1309,42 +1336,129 @@ export const useApp = create<AppState>((set, get) => ({
     set((state) => ({ presets: state.presets.filter((p) => p.id !== id) }));
   },
 
-  captureSlot: (label) => {
-    const project = get().project;
+  captureSlot: async (label) => {
+    const initial = get();
+    const project = initial.project;
     if (!project) return;
-    const slot: ABSlot = {
-      id: uid('slot'),
-      label,
-      processors: structuredClone(project.master.processors),
-      volumeDb: project.master.volumeDb,
-      lufs: get().lastRenderStats?.lufs ?? null,
-      truePeakDb: get().lastRenderStats?.truePeakDb ?? null,
-      createdAt: Date.now(),
-    };
-    set((state) => ({ abSlots: [...state.abSlots.filter((s) => s.label !== label), slot].slice(-8), activeSlot: slot.id }));
+    if (initial.busy) {
+      set({ toast: 'Finish the current task before measuring an A/B version.' });
+      return;
+    }
+    const capturedProject = cloneProject(project);
+    const projectId = project.id;
+    try {
+      const result = await renderProject(get, {
+        mode: 'master',
+        startSec: 0,
+        endSec: timelineDuration(capturedProject),
+        label: `Measuring version ${label}`,
+      });
+      const currentProject = get().project;
+      if (!currentProject || currentProject.id !== projectId) {
+        set({ busy: null, toast: 'A/B capture discarded because the open project changed.' });
+        return;
+      }
+      const slot: ABSlot = {
+        id: uid('slot'),
+        label,
+        processors: structuredClone(capturedProject.master.processors),
+        volumeDb: capturedProject.master.volumeDb,
+        lufs: Number.isFinite(result.stats.lufs) ? result.stats.lufs : null,
+        truePeakDb: Number.isFinite(result.stats.truePeakDb) ? result.stats.truePeakDb : null,
+        createdAt: Date.now(),
+      };
+      const state = get();
+      const nextSlots = [...state.abSlots.filter((item) => item.label !== label), slot].slice(-8);
+      const projectUnchanged = JSON.stringify(currentProject) === JSON.stringify(capturedProject);
+      const nextActiveSlot = projectUnchanged ? slot.id : state.activeSlot;
+      const nextWorkingMix = state.workingMix ?? (state.activeSlot === null
+        ? {
+            projectId,
+            processors: structuredClone(capturedProject.master.processors),
+            volumeDb: capturedProject.master.volumeDb,
+          }
+        : null);
+      const comparisonDb = state.loudnessMatch
+        ? loudnessMatchedMonitorGain(nextSlots, nextActiveSlot)
+        : 0;
+      realtimeHost.setComparisonGain(comparisonDb);
+      set({
+        abSlots: nextSlots,
+        activeSlot: nextActiveSlot,
+        workingMix: nextWorkingMix,
+        comparisonDb,
+        lastRenderStats: result.stats,
+        busy: null,
+        toast: projectUnchanged
+          ? `Captured version ${label}: ${slot.lufs !== null ? slot.lufs.toFixed(1) + ' LUFS' : 'loudness unavailable'}.`
+          : `Version ${label} was measured and saved, but the project changed during capture. Select it to audition the captured snapshot.`,
+      });
+    } catch (error) {
+      set({ busy: null, toast: error instanceof Error ? `A/B capture failed: ${error.message}` : 'A/B capture failed.' });
+    }
   },
 
   recallSlot: (id) => {
-    const slot = get().abSlots.find((s) => s.id === id);
-    if (!slot) return;
-    get().mutate((project) => {
-      project.master.processors = structuredClone(slot.processors);
-      project.master.volumeDb = slot.volumeDb;
-    });
-    let comparisonDb = 0;
-    if (get().loudnessMatch && slot.lufs && get().lastRenderStats?.lufs) {
-      comparisonDb = (get().lastRenderStats!.lufs - slot.lufs!);
-    }
+    const state = get();
+    const slot = state.abSlots.find((item) => item.id === id);
+    const project = state.project;
+    if (!slot || !project) return;
+    const workingMix = state.workingMix ?? (state.activeSlot === null
+      ? {
+          projectId: project.id,
+          processors: structuredClone(project.master.processors),
+          volumeDb: project.master.volumeDb,
+        }
+      : null);
+    if (workingMix) set({ workingMix });
+    get().mutate((next) => {
+      next.master.processors = structuredClone(slot.processors);
+      next.master.volumeDb = slot.volumeDb;
+    }, { preserveAb: true });
+    const comparisonDb = get().loudnessMatch
+      ? loudnessMatchedMonitorGain(get().abSlots, slot.id)
+      : 0;
     realtimeHost.setComparisonGain(comparisonDb);
     set({ activeSlot: slot.id, comparisonDb });
   },
 
-  deleteSlot: (id) => set((state) => ({ abSlots: state.abSlots.filter((s) => s.id !== id) })),
+  deleteSlot: (id) => {
+    const state = get();
+    const nextSlots = state.abSlots.filter((slot) => slot.id !== id);
+    if (state.activeSlot === id) {
+      get().restoreWorkingMix();
+    }
+    const current = get();
+    const comparisonDb = current.loudnessMatch
+      ? loudnessMatchedMonitorGain(nextSlots, current.activeSlot)
+      : 0;
+    realtimeHost.setComparisonGain(comparisonDb);
+    set({
+      abSlots: nextSlots,
+      activeSlot: current.activeSlot === id ? null : current.activeSlot,
+      comparisonDb: current.activeSlot === id ? 0 : comparisonDb,
+    });
+  },
+
+  restoreWorkingMix: () => {
+    const state = get();
+    const project = state.project;
+    const workingMix = state.workingMix;
+    if (project && workingMix && project.id === workingMix.projectId) {
+      get().mutate((next) => {
+        next.master.processors = structuredClone(workingMix.processors);
+        next.master.volumeDb = workingMix.volumeDb;
+      }, { preserveAb: true });
+    }
+    realtimeHost.setComparisonGain(0);
+    set({ activeSlot: null, workingMix: null, comparisonDb: 0 });
+  },
 
   setLoudnessMatch: (on) => {
-    const slot = get().abSlots.find((s) => s.id === get().activeSlot);
-    let comparisonDb = 0;
-    if (on && slot?.lufs && get().lastRenderStats?.lufs) comparisonDb = get().lastRenderStats!.lufs - slot.lufs;
+    const state = get();
+    const comparisonDb = on
+      ? loudnessMatchedMonitorGain(state.abSlots, state.activeSlot)
+      : 0;
     realtimeHost.setComparisonGain(comparisonDb);
     set({ loudnessMatch: on, comparisonDb });
   },
@@ -1528,7 +1642,7 @@ function timelineDuration(project: ProjectState): number {
 
 async function renderProject(
   get: () => AppState,
-  options: { mode: 'master' | 'track'; trackId?: string; startSec: number; endSec: number },
+  options: { mode: 'master' | 'track'; trackId?: string; startSec: number; endSec: number; label?: string },
 ): Promise<{ L: Float32Array; R: Float32Array; sampleRate: number; stats: RenderStats }> {
   const state = get();
   const project = state.project;
