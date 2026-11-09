@@ -351,15 +351,6 @@ function severityFor(deltaDb: number): 'low' | 'medium' | 'high' {
   return 'low';
 }
 
-function referenceFor(
-  sources: CategorySource,
-  category: keyof CategorySource,
-  references: MatchGenerationOptions['references'],
-): MatchGenerationOptions['references'][number] {
-  const index = Math.round(sources[category]) || 0;
-  return references[clamp(index, 0, references.length - 1)];
-}
-
 /**
  * Compose up to six EQ bands from a smoothed tonal-error curve.
  * Peaks are selected in order of magnitude with a minimum one-octave spacing;
