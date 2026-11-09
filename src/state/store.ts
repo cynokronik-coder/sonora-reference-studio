@@ -1142,6 +1142,7 @@ export const useApp = create<AppState>((set, get) => ({
 
       const current = get();
       if (
+        current.screen !== 'reference' ||
         !current.project ||
         current.project.id !== projectId ||
         JSON.stringify(current.project) !== projectSignature ||
@@ -1152,6 +1153,7 @@ export const useApp = create<AppState>((set, get) => ({
         return;
       }
       if (
+        beforeResult.sampleRate !== realtimeHost.sampleRate ||
         beforeResult.sampleRate !== afterResult.sampleRate ||
         beforeResult.L.length !== afterResult.L.length ||
         beforeResult.R.length !== afterResult.R.length
