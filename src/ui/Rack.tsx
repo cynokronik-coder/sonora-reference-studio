@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ProcessorNodeState } from '../audio/model/types';
 import { PROCESSOR_DEFINITIONS, getDefinition, formatParam } from '../audio/dsp/registry';
 import type { ParamSpec, ProcessorCategory } from '../audio/dsp/types';
@@ -9,6 +9,7 @@ import { EQCurve, GainReductionMeter } from './viz';
 import { clamp } from '../audio/dsp/util';
 import { COMPRESSOR_PRESETS } from '../audio/dsp/processors/compressor';
 import { MULTIBAND_COMP_PRESETS } from '../audio/dsp/processors/multiband';
+import { EQ_PRESETS } from '../audio/dsp/processors/eq';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -315,6 +316,8 @@ function ProcessorParams({
 }) {
   const [compressorPreset, setCompressorPreset] = useState('');
   const [multibandPreset, setMultibandPreset] = useState('');
+  const [eqPreset, setEqPreset] = useState('');
+  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -327,6 +330,7 @@ function ProcessorParams({
   const update = (key: string, value: number) => {
     if (node.type === 'compressor') setCompressorPreset('');
     if (node.type === 'multibandComp') setMultibandPreset('');
+    if (node.type === 'eq') setEqPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
@@ -341,8 +345,29 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setMultibandPreset(preset.id);
   };
+  const applyEqPreset = (presetId: string) => {
+    const preset = EQ_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setEqPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
+      {node.type === 'eq' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="EQ starting point"
+            value={eqPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...EQ_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyEqPreset}
+          />
+          {eqPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {EQ_PRESETS.find((preset) => preset.id === eqPreset)?.description} All bands remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'multibandComp' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
