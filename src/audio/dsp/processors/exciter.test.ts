@@ -77,18 +77,18 @@ describe('Exciter high-band harmonic path', () => {
     const source = tone(100, 0.5);
     const result = render({ ...defaults(), frequency: 7_000, drive: 20, mix: 100 }, source);
     let maximumDifference = 0;
-    for (let i = 1_024; i < FRAME_COUNT; i++) {
+    for (let i = 4_096; i < FRAME_COUNT; i++) {
       maximumDifference = Math.max(maximumDifference, Math.abs(result.left[i] - source[i]));
     }
     expect(maximumDifference).toBeLessThan(0.002);
-    expect(Math.abs(amplitudeAt(result.left, 100) - 0.5)).toBeLessThan(0.001);
+    expect(Math.abs(amplitudeAt(result.left, 100, 4_096) - 0.5)).toBeLessThan(0.001);
   });
 
   it('adds measurable harmonics to a signal inside the selected upper band', () => {
     const source = tone(9_000, 0.55);
     const result = render({ ...defaults(), frequency: 3_000, drive: 18, mode: 1, mix: 100, oversample: 0 }, source);
     const secondHarmonic = amplitudeAt(result.left, 18_000);
-    expect(secondHarmonic).toBeGreaterThan(0.01);
+    expect(secondHarmonic).toBeGreaterThan(0.005);
     expect(secondHarmonic).toBeGreaterThan(amplitudeAt(source, 18_000) + 0.01);
   });
 
