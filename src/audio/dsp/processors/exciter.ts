@@ -25,6 +25,8 @@ export class Exciter implements AudioProcessor {
   private hpR = new Biquad();
   private hpL2 = new Biquad();
   private hpR2 = new Biquad();
+  private dcBlockL = new Biquad();
+  private dcBlockR = new Biquad();
   private os: Oversampler | null = null;
   private dryOs: Oversampler | null = null;
   private osFactor: 1 | 2 | 4 = 1;
@@ -73,6 +75,8 @@ export class Exciter implements AudioProcessor {
     this.alignedHighR = new Float32Array(this.maxBlock);
     this.wetHighL = new Float32Array(this.maxBlock);
     this.wetHighR = new Float32Array(this.maxBlock);
+    this.dcBlockL.configure('highpass', 20, 0, 0.707, sampleRate);
+    this.dcBlockR.configure('highpass', 20, 0, 0.707, sampleRate);
     this.buildOversampler();
     this.reset();
     this.configure(this.values.frequency ?? 6000, true);
@@ -166,15 +170,23 @@ export class Exciter implements AudioProcessor {
     }
   }
 
+  private shapeMode(index: number): number {
+    // Exciter intentionally offers five styles; the shared waveshaper also
+    // has Hard Clip at index 4, so Wavefold must map to its index 5.
+    return index === 4 ? 5 : index;
+  }
+
   private shapeHighBand(L: Float32Array, R: Float32Array, count: number): void {
     for (let i = 0; i < count; i++) {
       this.advanceNonlinearControls();
       const inputL = L[i] * this.drive;
       const inputR = R[i] * this.drive;
-      const oldL = shapeSample(inputL, this.modeFrom);
-      const oldR = shapeSample(inputR, this.modeFrom);
-      const newL = shapeSample(inputL, this.modeTo);
-      const newR = shapeSample(inputR, this.modeTo);
+      const oldMode = this.shapeMode(this.modeFrom);
+      const newMode = this.shapeMode(this.modeTo);
+      const oldL = shapeSample(inputL, oldMode);
+      const oldR = shapeSample(inputR, oldMode);
+      const newL = shapeSample(inputL, newMode);
+      const newR = shapeSample(inputR, newMode);
       L[i] = (oldL + (newL - oldL) * this.modeBlend) * this.comp;
       R[i] = (oldR + (newR - oldR) * this.modeBlend) * this.comp;
     }
@@ -230,8 +242,8 @@ export class Exciter implements AudioProcessor {
         if (this.outputRemaining === 0) this.output = this.outputTarget;
       }
 
-      const deltaL = this.wetHighL[i] - this.alignedHighL[i];
-      const deltaR = this.wetHighR[i] - this.alignedHighR[i];
+      const deltaL = this.dcBlockL.process(this.wetHighL[i] - this.alignedHighL[i]);
+      const deltaR = this.dcBlockR.process(this.wetHighR[i] - this.alignedHighR[i]);
       L[i] = (this.originalL[i] + deltaL * this.amount) * this.output;
       R[i] = (this.originalR[i] + deltaR * this.amount) * this.output;
       peakL = Math.max(peakL, Math.abs(L[i]));
@@ -245,6 +257,7 @@ export class Exciter implements AudioProcessor {
     this.os?.reset();
     this.dryOs?.reset();
     this.hpL.reset(); this.hpR.reset(); this.hpL2.reset(); this.hpR2.reset();
+    this.dcBlockL.reset(); this.dcBlockR.reset();
     this.configure(this.values.frequency ?? 6000, true);
     this.drive = this.driveTarget;
     this.comp = this.compTarget;
