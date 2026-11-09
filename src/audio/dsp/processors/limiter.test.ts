@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createDefaultParams } from '../registry';
+import { ProcessorChain } from '../chain';
 import { TruePeakMeter } from '../oversample';
-import { Limiter, limiterDefinition } from './limiter';
+import { Limiter, LIMITER_PRESETS, limiterDefinition } from './limiter';
 import { dbToGain } from '../util';
 
 const SAMPLE_RATE = 48_000;
@@ -159,5 +160,51 @@ describe('Limiter parameter definition', () => {
     const lookahead = limiterDefinition.params.find((param) => param.key === 'lookahead');
     expect(lookahead?.min).toBe(0);
     expect(lookahead?.max).toBe(10);
+  });
+});
+
+
+describe('Limiter integration and factory presets', () => {
+  it('propagates dynamic look-ahead latency through the processor chain', () => {
+    const chain = new ProcessorChain(SAMPLE_RATE, BLOCK_SIZE);
+    chain.prepare(SAMPLE_RATE, BLOCK_SIZE);
+    chain.update([{
+      id: 'master-limiter',
+      type: 'limiter',
+      enabled: true,
+      params: { ...createDefaultParams('limiter'), lookahead: 5 },
+    }]);
+    expect(chain.latency).toBe(240);
+
+    chain.update([{
+      id: 'master-limiter',
+      type: 'limiter',
+      enabled: true,
+      params: { ...createDefaultParams('limiter'), lookahead: 0 },
+    }]);
+    expect(chain.latency).toBe(0);
+  });
+
+  it('contains complete valid parameter maps for every mastering starting point', () => {
+    const specs = new Map(limiterDefinition.params.map((param) => [param.key, param]));
+    expect(LIMITER_PRESETS.length).toBeGreaterThanOrEqual(4);
+    for (const preset of LIMITER_PRESETS) {
+      expect(Object.keys(preset.values).sort()).toEqual([...specs.keys()].sort());
+      for (const [key, value] of Object.entries(preset.values)) {
+        const spec = specs.get(key);
+        expect(spec, `unknown parameter ${key} in ${preset.name}`).toBeDefined();
+        expect(Number.isFinite(value)).toBe(true);
+        if (!spec) continue;
+        if (spec.kind === 'bool') expect([0, 1]).toContain(value);
+        else if (spec.kind === 'enum') {
+          expect(Number.isInteger(value)).toBe(true);
+          expect(value).toBeGreaterThanOrEqual(0);
+          expect(value).toBeLessThan(spec.options?.length ?? 1);
+        } else {
+          expect(value).toBeGreaterThanOrEqual(spec.min ?? -Infinity);
+          expect(value).toBeLessThanOrEqual(spec.max ?? Infinity);
+        }
+      }
+    }
   });
 });
