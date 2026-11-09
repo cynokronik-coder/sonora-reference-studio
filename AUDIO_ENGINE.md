@@ -108,3 +108,7 @@ automatically. If the processor needs latency, report it in `latency`; the rende
   drawing.
 - Memory scales with total imported PCM. Very large multitrack stem sets should be split into projects in this build.
 - The UI meter stream is throttled to roughly 60 Hz (every fourth worklet block).
+
+
+### Multiband sidechain routing
+The multiband compressor maintains a dedicated crossover for its external key input. Track or bus sidechain keys are split at the same low/mid and mid/high frequencies as the programme, then routed to the matching band's compressor detector. This keeps low-band compression from reacting to unrelated high-frequency key energy. When no external key is connected, each band explicitly uses its own programme band as the detector input.
