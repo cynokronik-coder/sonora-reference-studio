@@ -14,6 +14,7 @@ import { DYNAMIC_EQ_PRESETS } from '../audio/dsp/processors/dynamicEq';
 import { RESONANCE_PRESETS } from '../audio/dsp/processors/resonance';
 import { DEESSER_PRESETS } from '../audio/dsp/processors/deesser';
 import { TRANSIENT_PRESETS } from '../audio/dsp/processors/transient';
+import { GATE_PRESETS } from '../audio/dsp/processors/gate';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -211,6 +212,25 @@ export function Rack({
                     </div>
                   )}
 
+                  {node.type === 'gate' && meter?.bands && (
+                    <div className="mb-3 grid grid-cols-2 gap-2">
+                      {(['Left', 'Right'] as const).map((label, channelIndex) => {
+                        const reductionDb = Math.abs(meter.bands?.[channelIndex] ?? 0);
+                        return (
+                          <div key={label} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">{label}</span>
+                              <span className="font-mono text-[10px] text-signal-amber">{reductionDb > 0.05 ? `-${reductionDb.toFixed(1)}` : '0.0'} dB</span>
+                            </div>
+                            <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
+                              <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   {node.type === 'resonance' && meter?.bands && (
                     <div className="mb-3 grid grid-cols-3 gap-2">
                       {meter.bands.map((value, bandIndex) => {
@@ -251,7 +271,7 @@ export function Rack({
 
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
-                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'resonance' || node.type === 'deesser' || node.type === 'limiter') && (
+                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'resonance' || node.type === 'deesser' || node.type === 'gate' || node.type === 'limiter') && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-2xs text-ink-500">Gain reduction</span>
                       <GainReductionMeter reductionDb={reduction} height={8} />
@@ -363,7 +383,8 @@ function ProcessorParams({
   const [resonancePreset, setResonancePreset] = useState('');
   const [deEsserPreset, setDeEsserPreset] = useState('');
   const [transientPreset, setTransientPreset] = useState('');
-  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); setTransientPreset(''); }, [node.id]);
+  const [gatePreset, setGatePreset] = useState('');
+  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); setTransientPreset(''); setGatePreset(''); }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -381,6 +402,7 @@ function ProcessorParams({
     if (node.type === 'resonance') setResonancePreset('');
     if (node.type === 'deesser') setDeEsserPreset('');
     if (node.type === 'transient') setTransientPreset('');
+    if (node.type === 'gate') setGatePreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
@@ -425,8 +447,29 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setTransientPreset(preset.id);
   };
+  const applyGatePreset = (presetId: string) => {
+    const preset = GATE_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setGatePreset(preset.id);
+  };
   return (
     <div className="space-y-2">
+      {node.type === 'gate' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Gate / expander starting point"
+            value={gatePreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...GATE_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyGatePreset}
+          />
+          {gatePreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {GATE_PRESETS.find((preset) => preset.id === gatePreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'transient' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
