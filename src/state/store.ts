@@ -709,8 +709,10 @@ export const useApp = create<AppState>((set, get) => ({
     const mixContextChanged = JSON.stringify(previous.tracks) !== JSON.stringify(next.tracks) ||
       JSON.stringify(previous.buses) !== JSON.stringify(next.buses) ||
       previous.tempo !== next.tempo || previous.sampleRate !== next.sampleRate;
+    const masterChanged = JSON.stringify(previous.master) !== JSON.stringify(next.master);
     next.updatedAt = Date.now();
-    const clearAudition = projectContentChanged && state.activeSlot !== null && !options?.preserveAb;
+    const clearAudition = (masterChanged || mixContextChanged) &&
+      state.activeSlot !== null && !options?.preserveAb;
     const coalesce = options?.coalesce;
     const shouldCoalesce =
       Boolean(coalesce) && state.lastCoalesceKey === coalesce && Date.now() - state.lastCoalesceAt < 800;
