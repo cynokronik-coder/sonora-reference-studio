@@ -216,3 +216,49 @@ export const compressorDefinition: ProcessorDefinition = {
   ],
   create: () => new Compressor(),
 };
+
+export interface CompressorPreset {
+  id: string;
+  name: string;
+  description: string;
+  values: ParamValues;
+}
+
+/**
+ * Reusable compressor starting points. These are deliberately conservative
+ * parameter snapshots, not genre detection or hardware emulations. All values
+ * remain editable after loading.
+ */
+export const COMPRESSOR_PRESETS: CompressorPreset[] = [
+  {
+    id: 'transparent-control',
+    name: 'Transparent control',
+    description: 'Gentle level control with full stereo linking.',
+    values: { threshold: -18, ratio: 2, attack: 25, release: 160, knee: 10, lookahead: 0, style: 0, scHpf: 80, link: 100, makeup: 0, autoMakeup: 0, mix: 75 },
+  },
+  {
+    id: 'bus-glue',
+    name: 'Bus glue',
+    description: 'Slow, low-ratio compression for subtle cohesion.',
+    values: { threshold: -16, ratio: 1.6, attack: 30, release: 220, knee: 12, lookahead: 0, style: 4, scHpf: 100, link: 100, makeup: 0, autoMakeup: 0, mix: 55 },
+  },
+  {
+    id: 'punchy-fet',
+    name: 'Punchy FET',
+    description: 'Fast attack and release for assertive peak control.',
+    values: { threshold: -22, ratio: 4, attack: 3, release: 75, knee: 3, lookahead: 0, style: 1, scHpf: 100, link: 100, makeup: 0, autoMakeup: 0, mix: 100 },
+  },
+  {
+    id: 'smooth-optical',
+    name: 'Smooth optical',
+    description: 'Slower, rounded gain reduction for gentle levelling.',
+    values: { threshold: -24, ratio: 2, attack: 25, release: 220, knee: 12, lookahead: 0, style: 2, scHpf: 90, link: 100, makeup: 0, autoMakeup: 0, mix: 85 },
+  },
+  {
+    id: 'dual-mono',
+    name: 'Dual mono',
+    description: 'Independent left/right detectors for separate channel movement.',
+    values: { threshold: -20, ratio: 3, attack: 12, release: 120, knee: 6, lookahead: 0, style: 0, scHpf: 100, link: 0, makeup: 0, autoMakeup: 0, mix: 100 },
+  },
+];
+
