@@ -48,7 +48,7 @@ export function designBiquad(
       a2 = 1 - alpha / A;
       break;
     case 'lowshelf': {
-      const S = Math.max(0.1, Q);
+      const S = Math.min(1, Math.max(0.1, Q));
       const a = sinw / 2 * Math.sqrt((A + 1 / A) * (1 / S - 1) + 2);
       const sa = 2 * Math.sqrt(A) * a;
       b0 = A * (A + 1 - (A - 1) * cosw + sa);
@@ -60,7 +60,7 @@ export function designBiquad(
       break;
     }
     case 'highshelf': {
-      const S = Math.max(0.1, Q);
+      const S = Math.min(1, Math.max(0.1, Q));
       const a = sinw / 2 * Math.sqrt((A + 1 / A) * (1 / S - 1) + 2);
       const sa = 2 * Math.sqrt(A) * a;
       b0 = A * (A + 1 + (A - 1) * cosw + sa);
