@@ -731,9 +731,11 @@ export const useApp = create<AppState>((set, get) => ({
     if (state.matchAudition) {
       get().clearMatchAudition();
       state = get();
+      if (!state.project) return;
     }
-    const previous = cloneProject(state.project);
-    const next = cloneProject(state.project);
+    const project = state.project;
+    const previous = cloneProject(project);
+    const next = cloneProject(project);
     mutator(next);
     const projectContentChanged = JSON.stringify(previous) !== JSON.stringify(next);
     const mixContextChanged = JSON.stringify(previous.tracks) !== JSON.stringify(next.tracks) ||
@@ -743,7 +745,7 @@ export const useApp = create<AppState>((set, get) => ({
     const clearAudition = projectContentChanged && state.activeSlot !== null && !options?.preserveAb;
     // A/B recalls are temporary views. Keep history and the persisted project
     // anchored to the user's working master, not to the auditioned snapshot.
-    if (state.activeSlot !== null && state.workingMix?.projectId === state.project.id) {
+    if (state.activeSlot !== null && state.workingMix?.projectId === project.id) {
       previous.master.processors = structuredClone(state.workingMix.processors);
       previous.master.volumeDb = state.workingMix.volumeDb;
       if (clearAudition && !masterChanged) {
