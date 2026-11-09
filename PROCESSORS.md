@@ -76,7 +76,13 @@ blends each channel's envelope features towards the stronger side; 100% applies 
 Punch and attack, Soften transients, Longer sustain, Drum snap and Gentle dynamics.
 
 ### Gate / Expander
-Downward expander with threshold, ratio, range, attack, hold and release.
+Downward expander with independent left/right peak detectors and per-channel gain-reduction envelopes. The Stereo Link
+control blends each detector towards the stronger channel; at 100% both channels share one envelope, preventing stereo
+image shifts when one side crosses threshold first. Expansion follows the conventional dB-domain slope: for a hard knee,
+gain reduction below threshold is (ratio − 1) × distance below threshold, capped by the Range control. A continuous
+quadratic soft knee smooths the transition around threshold. Attack, hold, release, range, ratio, knee, stereo link,
+dry/wet and output are editable. Output gain and dry/wet changes are smoothed. Left/right gain reduction is displayed
+independently. Factory starting points include Gentle expander, Tight drum gate, Vocal noise control and Strong cleanup.
 
 ### Clipper
 Soft cubic, hard or tanh clipping with drive, ceiling, mix and output. Intended before the limiter to shave isolated
