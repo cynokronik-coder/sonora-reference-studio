@@ -15,7 +15,7 @@ The current LevelMeter fill in **src/ui/viz.tsx:143–145** is:
 ~~~tsx
 <div
   className="absolute bottom-0 left-0 right-0 transition-[height] duration-75"
-  style={{ height: \`\${normalized * 100}%\`, background: \`linear-gradient(to top, \${color}55, \${color})\` }}
+  style={{ height: `${normalized * 100}%`, background: `linear-gradient(to top, ${color}55, ${color})` }}
 />
 ~~~
 
@@ -24,7 +24,7 @@ The current GainReductionMeter fill in **src/ui/viz.tsx:163–165** is:
 ~~~tsx
 <div
   className="absolute left-0 right-0 top-0 bg-signal-amber/80 transition-[height] duration-75"
-  style={{ height: \`\${amount * 100}%\` }}
+  style={{ height: `${amount * 100}%` }}
 />
 ~~~
 
@@ -40,9 +40,9 @@ For LevelMeter, keep the fill anchored to the bottom and give it a fixed full he
 <div
   className="absolute bottom-0 left-0 right-0 h-full origin-bottom transition-transform duration-75 ease-linear"
   style={{
-    transform: \`scaleY(\${normalized})\`,
+    transform: `scaleY(${normalized})`,
     transformOrigin: 'bottom',
-    background: \`linear-gradient(to top, \${color}55, \${color})\`,
+    background: `linear-gradient(to top, ${color}55, ${color})`,
   }}
 />
 ~~~
@@ -53,7 +53,7 @@ For GainReductionMeter, keep the fill anchored to the top and replace its changi
 <div
   className="absolute left-0 right-0 top-0 h-full origin-top bg-signal-amber/80 transition-transform duration-75 ease-linear"
   style={{
-    transform: \`scaleY(\${amount})\`,
+    transform: `scaleY(${amount})`,
     transformOrigin: 'top',
   }}
 />
