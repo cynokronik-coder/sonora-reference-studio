@@ -22,7 +22,7 @@ const COMMANDS: Command[] = [
   { id: 'projects', label: 'Projects', description: 'Open, create and manage sessions', screen: 'projects', group: 'Workspace', icon: 'folder', keywords: 'sessions files recent' },
   { id: 'plans', label: 'Plans & Add-ons', description: 'Compare plans and available features', screen: 'plans', group: 'Workspace', icon: 'sparkles', keywords: 'pricing subscription credits billing' },
   { id: 'account', label: 'Account', description: 'Profile, sign-in and subscription details', screen: 'account', group: 'Workspace', icon: 'settings', keywords: 'profile login password user' },
-  { id: 'studio', label: 'Mixing Studio', description: 'Arrange tracks, balance channels and edit your mix', screen: 'studio', group: 'Production', icon: 'waveform', keywords: 'daw mixer arrangement tracks timeline', requiresProject: true },
+  { id: 'studio', label: 'Mixing Studio', description: 'Arrange tracks, balance channels and edit your mix', screen: 'studio', group: 'Production', icon: 'waveform', keywords: 'daw mixer arrangement tracks timeline channels buses manage tracks ai assistant copilot chat', requiresProject: true },
   { id: 'reference', label: 'Reference Match', description: 'Compare your mix with a reference release', screen: 'reference', group: 'Production', icon: 'headphones', keywords: 'matching compare target tonal balance', requiresProject: true },
   { id: 'mastering', label: 'Mastering', description: 'Refine loudness, dynamics and final peaks', screen: 'mastering', group: 'Production', icon: 'equalizer', keywords: 'master limiter loudness true peak', requiresProject: true },
   { id: 'presets', label: 'Preset Library', description: 'Browse editable starting points for your sound', screen: 'presets', group: 'Production', icon: 'music', keywords: 'chains effects eq dynamics', requiresProject: true },
@@ -55,11 +55,12 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
   }, [onClose, onNavigate]);
 
   const filtered = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) return COMMANDS;
-    return COMMANDS.filter((command) =>
-      `${command.label} ${command.description} ${command.keywords}`.toLowerCase().includes(normalized),
-    );
+    const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    if (tokens.length === 0) return COMMANDS;
+    return COMMANDS.filter((command) => {
+      const searchable = `${command.label} ${command.description} ${command.keywords}`.toLowerCase();
+      return tokens.every((token) => searchable.includes(token));
+    });
   }, [query]);
 
   useEffect(() => {
