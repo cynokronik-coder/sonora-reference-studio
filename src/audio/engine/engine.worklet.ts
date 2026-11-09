@@ -9,6 +9,7 @@ declare class AudioWorkletProcessor {
 import { ProjectRenderer, type EngineAsset } from './renderer';
 import type { ProjectState } from '../model/types';
 import { gainToDb } from '../dsp/util';
+import { copyAuditionBlock, type AuditionMode, type AuditionTransition, type StereoAuditionBuffers } from './audition';
 
 interface AssetPayload {
   id: string;
@@ -41,6 +42,10 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
   private loopEnabled = false;
   private loopStartSample = 0;
   private loopEndSample = 0;
+  private matchAuditionBuffers: StereoAuditionBuffers | null = null;
+  private matchAuditionActive = false;
+  private matchAuditionMode: AuditionMode = 'before';
+  private matchAuditionTransition: AuditionTransition | null = null;
 
   constructor() {
     super();
@@ -76,6 +81,39 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         this.renderer.configure(this.project, this.assets, sampleRate, this.staticBlock);
         this.endSample = Math.round(this.renderer.timelineEndSeconds * sampleRate);
         this.port.postMessage({ type: 'configured', endSample: this.endSample });
+        break;
+      }
+      case 'match-audition-buffers': {
+        this.matchAuditionBuffers = {
+          beforeL: message.beforeL as Float32Array,
+          beforeR: message.beforeR as Float32Array,
+          afterL: message.afterL as Float32Array,
+          afterR: message.afterR as Float32Array,
+        };
+        this.matchAuditionTransition = null;
+        break;
+      }
+      case 'match-audition-mode': {
+        const nextMode = message.mode === 'after' ? 'after' : 'before';
+        const nextActive = Boolean(message.active) && Boolean(this.matchAuditionBuffers);
+        if (this.matchAuditionActive && nextActive && nextMode !== this.matchAuditionMode) {
+          this.matchAuditionTransition = {
+            from: this.matchAuditionMode,
+            totalFrames: Math.max(1, Math.round(sampleRate * 0.008)),
+            elapsedFrames: 0,
+          };
+        } else if (!nextActive) {
+          this.matchAuditionTransition = null;
+        }
+        this.matchAuditionMode = nextMode;
+        this.matchAuditionActive = nextActive;
+        break;
+      }
+      case 'clear-match-audition': {
+        this.matchAuditionActive = false;
+        this.matchAuditionBuffers = null;
+        this.matchAuditionTransition = null;
+        this.renderer.reset();
         break;
       }
       case 'play': {
@@ -122,7 +160,23 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    this.renderer.renderBlock(this.position, outL.length, outL, outR);
+    const auditionBuffers = this.matchAuditionActive ? this.matchAuditionBuffers : null;
+    if (auditionBuffers) {
+      const elapsed = copyAuditionBlock(
+        auditionBuffers,
+        this.matchAuditionMode,
+        this.position,
+        outL,
+        outR,
+        this.matchAuditionTransition ?? undefined,
+      );
+      if (this.matchAuditionTransition) {
+        this.matchAuditionTransition.elapsedFrames = elapsed;
+        if (elapsed >= this.matchAuditionTransition.totalFrames) this.matchAuditionTransition = null;
+      }
+    } else {
+      this.renderer.renderBlock(this.position, outL.length, outL, outR);
+    }
     this.position += outL.length;
     if (
       this.loopEnabled &&
@@ -153,15 +207,18 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         peakR: gainToDb(this.peakR),
         position: this.position / sampleRate,
         playing: true,
-        gr: this.renderer.meterSnapshot(),
-        peaks: this.renderer.peakSnapshot(),
+        gr: auditionBuffers ? {} : this.renderer.meterSnapshot(),
+        peaks: auditionBuffers ? {} : this.renderer.peakSnapshot(),
       });
     } else if (this.position - this.lastPositionPost > sampleRate * 0.05) {
       this.lastPositionPost = this.position;
       this.port.postMessage({ type: 'position', position: this.position / sampleRate, playing: true });
     }
 
-    if (this.endSample > 0 && this.position >= this.endSample + sampleRate * 0.5) {
+    const auditionEnd = auditionBuffers
+      ? Math.min(auditionBuffers.beforeL.length, auditionBuffers.beforeR.length, auditionBuffers.afterL.length, auditionBuffers.afterR.length)
+      : this.endSample + sampleRate * 0.5;
+    if (this.endSample > 0 && this.position >= auditionEnd) {
       this.playing = false;
       this.position = 0;
       this.port.postMessage({ type: 'ended' });
