@@ -9,7 +9,6 @@ interface RenderRequest {
   sampleRate: number;
   startSec: number;
   endSec: number;
-  statsOnly?: boolean;
 }
 
 let cancelled = false;
@@ -84,22 +83,20 @@ function render(request: RenderRequest): void {
     return;
   }
 
-  const outputL = request.statsOnly ? rawL.subarray(latency) : rawL.slice(latency);
-  const outputR = request.statsOnly ? rawR.subarray(latency) : rawR.slice(latency);
+  const outputL = rawL.slice(latency);
+  const outputR = rawR.slice(latency);
   const loudness = analyzeLoudness(outputL, outputR, sampleRate);
   let peak = 0;
   for (let i = 0; i < outputL.length; i++) {
     peak = Math.max(peak, Math.abs(outputL[i]), Math.abs(outputR[i]));
   }
-  const resultL = request.statsOnly ? new Float32Array(0) : outputL;
-  const resultR = request.statsOnly ? new Float32Array(0) : outputR;
-  const bufferL = resultL.buffer;
-  const bufferR = resultR.buffer;
+  const bufferL = outputL.buffer;
+  const bufferR = outputR.buffer;
   (self.postMessage as unknown as (message: unknown, transfer?: Transferable[]) => void)(
     {
       type: 'done',
-      L: resultL,
-      R: resultR,
+      L: outputL,
+      R: outputR,
       sampleRate,
       stats: {
         lufs: loudness.integratedLufs,
@@ -112,6 +109,6 @@ function render(request: RenderRequest): void {
         peak,
       },
     },
-    request.statsOnly ? [] : [bufferL, bufferR],
+    [bufferL, bufferR],
   );
 }
