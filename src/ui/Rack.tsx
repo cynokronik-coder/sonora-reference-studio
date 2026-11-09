@@ -46,7 +46,7 @@ export function Rack({
   processors: ProcessorNodeState[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  meters?: Record<string, { reduction?: number; bands?: number[] }>;
+  meters?: Record<string, { reduction?: number; peakL?: number; peakR?: number; bands?: number[] }>;
   emptyHint?: string;
   filterCategory?: ProcessorCategory | 'effects' | null;
 }) {
