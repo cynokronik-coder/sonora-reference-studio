@@ -86,7 +86,7 @@ only for parameters that actually have lanes. Structural parameter sync happens 
 
 ## Latency compensation
 
-The linear-phase EQ's 512-tap FIR has 256 samples of group delay. `ProjectRenderer` computes the maximum track/bus
+The linear-phase EQ's 513-tap symmetric FIR has exactly 256 samples of group delay (about 5.33 ms at 48 kHz). Minimum-phase biquad coefficient changes are smoothed over 20 ms; this interpolation is performed per sample in the audio processing loop. `ProjectRenderer` computes the maximum track/bus
 latency and inserts integer delays on the other paths, including the intermediate bus stage. Offline export renders
 `totalLatency` extra frames and discards the head. All paths therefore remain sample-aligned.
 
@@ -112,3 +112,7 @@ automatically. If the processor needs latency, report it in `latency`; the rende
 
 ### Multiband sidechain routing
 The multiband compressor maintains a dedicated crossover for its external key input. Track or bus sidechain keys are split at the same low/mid and mid/high frequencies as the programme, then routed to the matching band's compressor detector. This keeps low-band compression from reacting to unrelated high-frequency key energy. When no external key is connected, each band explicitly uses its own programme band as the detector input.
+
+
+### Parametric EQ transitions
+The minimum-phase EQ uses per-sample interpolation between stable normalized biquad coefficient sets over 20 ms when a parameter changes. The output trim is ramped over the same interval. Disabled/rerouted filters continue processing only while their transition back to passthrough is active. The optional linear-phase FIR uses 513 odd-length symmetric taps so its group delay is the exact integer 256 samples rather than the half-sample delay of an even-length kernel.
