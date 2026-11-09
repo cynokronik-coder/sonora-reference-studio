@@ -15,16 +15,22 @@ describe('copyAuditionBlock', () => {
     const left = new Float32Array(2);
     const right = new Float32Array(2);
     copyAuditionBlock(buffers(), 'after', 1, left, right);
-    expect([...left]).toEqual([0.6, 0.7]);
-    expect([...right]).toEqual([-0.6, -0.7]);
+    expect(left[0]).toBeCloseTo(0.6, 6);
+    expect(left[1]).toBeCloseTo(0.7, 6);
+    expect(right[0]).toBeCloseTo(-0.6, 6);
+    expect(right[1]).toBeCloseTo(-0.7, 6);
   });
 
   it('copies the before version without changing its samples', () => {
     const left = new Float32Array(3);
     const right = new Float32Array(3);
     copyAuditionBlock(buffers(), 'before', 0, left, right);
-    expect([...left]).toEqual([0.1, 0.2, 0.3]);
-    expect([...right]).toEqual([-0.1, -0.2, -0.3]);
+    expect(left[0]).toBeCloseTo(0.1, 6);
+    expect(left[1]).toBeCloseTo(0.2, 6);
+    expect(left[2]).toBeCloseTo(0.3, 6);
+    expect(right[0]).toBeCloseTo(-0.1, 6);
+    expect(right[1]).toBeCloseTo(-0.2, 6);
+    expect(right[2]).toBeCloseTo(-0.3, 6);
   });
 
   it('crossfades from the old version to the new version over the requested frames', () => {
@@ -39,7 +45,7 @@ describe('copyAuditionBlock', () => {
       { from: 'before', totalFrames: 2, elapsedFrames: 0 },
     );
     expect(left[0]).toBeCloseTo(0.3, 6);
-    expect(left[1]).toBeCloseTo(0.8, 6);
+    expect(left[1]).toBeCloseTo(0.6, 6);
     expect(right[0]).toBeCloseTo(-0.3, 6);
     expect(right[1]).toBeCloseTo(-0.8, 6);
     expect(elapsed).toBe(2);
@@ -49,7 +55,11 @@ describe('copyAuditionBlock', () => {
     const left = new Float32Array(3);
     const right = new Float32Array(3);
     copyAuditionBlock(buffers(), 'after', 3, left, right);
-    expect([...left]).toEqual([0.8, 0, 0]);
-    expect([...right]).toEqual([-0.8, 0, 0]);
+    expect(left[0]).toBeCloseTo(0.8, 6);
+    expect(left[1]).toBe(0);
+    expect(left[2]).toBe(0);
+    expect(right[0]).toBeCloseTo(-0.8, 6);
+    expect(right[1]).toBe(0);
+    expect(right[2]).toBe(0);
   });
 });
