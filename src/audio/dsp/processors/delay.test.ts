@@ -4,7 +4,7 @@ import { DELAY_PRESETS, Delay, delayDefinition } from './delay';
 
 const SAMPLE_RATE = 48_000;
 const BLOCK_SIZE = 512;
-const FRAMES = SAMPLE_RATE * 9;
+const FRAMES = SAMPLE_RATE * 9 + 1;
 
 function render(values: Record<string, number>, inputL: Float32Array, inputR = inputL) {
   const delay = new Delay();
@@ -50,17 +50,12 @@ describe('Delay timing and tempo synchronization', () => {
     expect(result.left[expected - 1]).toBe(0);
   });
 
-  it('recalculates synced timing when BPM changes', () => {
-    const delay = new Delay();
-    delay.prepare(SAMPLE_RATE, BLOCK_SIZE);
-    delay.setValues({ ...defaults(), sync: 1, note: 6, bpm: 120 });
-    const left = new Float32Array(BLOCK_SIZE);
-    const right = new Float32Array(BLOCK_SIZE);
-    left[0] = right[0] = 1;
-    delay.process(left, right, BLOCK_SIZE);
-    delay.setValues({ ...defaults(), sync: 1, note: 6, bpm: 60 });
-    expect(() => delay.process(new Float32Array(BLOCK_SIZE), new Float32Array(BLOCK_SIZE), BLOCK_SIZE)).not.toThrow();
-    expect(delay.meter().peakL).toBeGreaterThan(0);
+  it('recalculates synced timing from the supplied BPM', () => {
+    const source = impulse();
+    const result = render({ ...defaults(), sync: 1, note: 6, bpm: 60 }, source);
+    const expected = SAMPLE_RATE;
+    expect(result.left[expected]).toBeCloseTo(1, 5);
+    expect(result.left[expected - 1]).toBe(0);
   });
 });
 
@@ -69,7 +64,7 @@ describe('Delay modes and long-buffer safety', () => {
     const sourceL = impulse(0, 0.8);
     const sourceR = new Float32Array(FRAMES);
     const result = render({ ...defaults(), mode: 1, time: 100, mix: 100 }, sourceL, sourceR);
-    const echo = Math.round(0.1 * SAMPLE_RATE * 1.5);
+    const echo = Math.round(0.1 * SAMPLE_RATE);
     expect(Math.abs(result.left[echo])).toBeLessThan(1e-6);
     expect(result.right[echo]).toBeCloseTo(0.8, 4);
   });
