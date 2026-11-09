@@ -540,7 +540,7 @@ export const useApp = create<AppState>((set, get) => ({
     realtimeHost.setComparisonGain(0);
     realtimeHost.setMatchAudition(false);
     realtimeHost.clearMatchAuditionBuffers();
-    set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, abSlots: [], activeSlot: null, workingMix: null, loudnessMatch: false, comparisonDb: 0, screen: 'projects' });
+    set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, matchPreview: null, matchAudition: null, abSlots: [], activeSlot: null, workingMix: null, loudnessMatch: false, comparisonDb: 0, screen: 'projects' });
   },
 
   deleteProjectById: async (id) => {
@@ -776,6 +776,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   undo: () => {
+    if (get().matchAudition) get().clearMatchAudition();
     if (get().activeSlot !== null) {
       get().restoreWorkingMix();
       return;
@@ -801,6 +802,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   redo: () => {
+    if (get().matchAudition) get().clearMatchAudition();
     if (get().activeSlot !== null) {
       get().restoreWorkingMix();
       return;
