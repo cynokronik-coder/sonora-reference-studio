@@ -274,3 +274,43 @@ export const resonanceDefinition: ProcessorDefinition = {
   ],
   create: () => new ResonanceSuppressor(),
 };
+
+export interface ResonancePreset {
+  id: string;
+  name: string;
+  description: string;
+  values: ParamValues;
+}
+
+function resonancePreset(id: string, name: string, description: string, overrides: ParamValues): ResonancePreset {
+  const values: ParamValues = {};
+  for (const param of resonanceDefinition.params) values[param.key] = param.default;
+  return { id, name, description, values: { ...values, ...overrides } };
+}
+
+/** Editable, restrained starting points for known resonance problems. */
+export const RESONANCE_PRESETS: ResonancePreset[] = [
+  resonancePreset('gentle-resonance-control', 'Gentle resonance control', 'A light first band for a single narrow ring; adjust its frequency to the peak you hear.', {
+    sensitivity: 50, range: 4, attack: 6, release: 140, link: 100,
+    b0_on: 1, b0_freq: 3_200, b0_q: 10, b0_threshold: -30,
+    b1_on: 0, b2_on: 0,
+  }),
+  resonancePreset('vocal-harshness', 'Vocal harshness', 'Targets a harsh upper-mid resonance with a second optional band for a separate whistle.', {
+    sensitivity: 52, range: 5, attack: 2, release: 100, link: 100,
+    b0_on: 1, b0_freq: 4_200, b0_q: 8, b0_threshold: -32,
+    b1_on: 1, b1_freq: 6_200, b1_q: 12, b1_threshold: -36,
+    b2_on: 0,
+  }),
+  resonancePreset('snare-ring', 'Snare ring', 'A narrow midrange resonance starting point for ringing drum tones.', {
+    sensitivity: 48, range: 7, attack: 1, release: 180, link: 100,
+    b0_on: 1, b0_freq: 850, b0_q: 14, b0_threshold: -34,
+    b1_on: 1, b1_freq: 1_700, b1_q: 16, b1_threshold: -38,
+    b2_on: 0,
+  }),
+  resonancePreset('mix-harshness', 'Mix harshness', 'Two restrained upper-frequency bands for intermittent harshness in a full mix.', {
+    sensitivity: 52, range: 3.5, attack: 4, release: 120, link: 100,
+    b0_on: 1, b0_freq: 3_500, b0_q: 7, b0_threshold: -31,
+    b1_on: 1, b1_freq: 7_200, b1_q: 10, b1_threshold: -35,
+    b2_on: 0,
+  }),
+];
