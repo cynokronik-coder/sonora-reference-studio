@@ -310,6 +310,25 @@ export class Saturator implements AudioProcessor {
   }
 }
 
+export const saturationDefinition: ProcessorDefinition = {
+  type: 'saturation',
+  name: 'Saturation',
+  shortName: 'SAT',
+  category: 'saturation',
+  description: 'Six waveshaping styles with independent stereo filter state, smoothed controls, parallel dry/wet and 1x/2x/4x oversampling.',
+  purpose: 'Adds harmonics and density. Always level-match the output and compare at matched loudness; oversampling reduces, but does not eliminate, aliasing.',
+  params: [
+    { key: 'mode', label: 'Style', kind: 'enum', options: [...SATURATION_MODES], default: 0 },
+    { key: 'drive', label: 'Drive', kind: 'float', min: 0, max: 30, step: 0.1, default: 4, unit: 'dB' },
+    { key: 'tone', label: 'Tone', kind: 'float', min: -10, max: 10, step: 0.1, default: 0, unit: 'dB' },
+    { key: 'mix', label: 'Dry/wet', kind: 'float', min: 0, max: 100, step: 1, default: 100, unit: '%' },
+    { key: 'output', label: 'Output', kind: 'float', min: -18, max: 18, step: 0.1, default: 0, unit: 'dB' },
+    { key: 'oversample', label: 'Oversampling', kind: 'enum', options: ['Off', '2x', '4x'], default: 2, advanced: true },
+  ],
+  create: () => new Saturator(),
+};
+
+
 export interface SaturationPreset {
   id: string;
   name: string;
@@ -347,21 +366,3 @@ export const SATURATION_PRESETS: SaturationPreset[] = [
     mode: 0, drive: 1.5, tone: 0, mix: 25, output: -0.5, oversample: 2,
   }),
 ];
-
-export const saturationDefinition: ProcessorDefinition = {
-  type: 'saturation',
-  name: 'Saturation',
-  shortName: 'SAT',
-  category: 'saturation',
-  description: 'Six waveshaping styles with independent stereo filter state, smoothed controls, parallel dry/wet and 1x/2x/4x oversampling.',
-  purpose: 'Adds harmonics and density. Always level-match the output and compare at matched loudness; oversampling reduces, but does not eliminate, aliasing.',
-  params: [
-    { key: 'mode', label: 'Style', kind: 'enum', options: [...SATURATION_MODES], default: 0 },
-    { key: 'drive', label: 'Drive', kind: 'float', min: 0, max: 30, step: 0.1, default: 4, unit: 'dB' },
-    { key: 'tone', label: 'Tone', kind: 'float', min: -10, max: 10, step: 0.1, default: 0, unit: 'dB' },
-    { key: 'mix', label: 'Dry/wet', kind: 'float', min: 0, max: 100, step: 1, default: 100, unit: '%' },
-    { key: 'output', label: 'Output', kind: 'float', min: -18, max: 18, step: 0.1, default: 0, unit: 'dB' },
-    { key: 'oversample', label: 'Oversampling', kind: 'enum', options: ['Off', '2x', '4x'], default: 2, advanced: true },
-  ],
-  create: () => new Saturator(),
-};
