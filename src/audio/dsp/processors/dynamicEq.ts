@@ -160,7 +160,8 @@ export class DynamicEq implements AudioProcessor {
       const rmsWindow = clamp(bandValue(this.values, bandIndex, 'rmsWindow', 10), 1, 100);
       const band = this.bands[bandIndex];
 
-      if (Math.abs(frequency - band.lastFreq) > 0.25 || Math.abs(q - band.lastQ) > 0.002) {
+      const bandShapeChanged = Math.abs(frequency - band.lastFreq) > 0.25 || Math.abs(q - band.lastQ) > 0.002;
+      if (bandShapeChanged) {
         band.detectorL.configure('bandpass', frequency, 0, q, this.sr);
         band.detectorR.configure('bandpass', frequency, 0, q, this.sr);
         band.lastFreq = frequency;
@@ -191,11 +192,11 @@ export class DynamicEq implements AudioProcessor {
 
         const gainL = -band.reductionL;
         const gainR = -band.reductionR;
-        if (Math.abs(gainL - band.lastGainL) >= 0.05) {
+        if (bandShapeChanged || Math.abs(gainL - band.lastGainL) >= 0.05) {
           band.filterL.set(designBiquad('peak', frequency, gainL, q, this.sr));
           band.lastGainL = gainL;
         }
-        if (Math.abs(gainR - band.lastGainR) >= 0.05) {
+        if (bandShapeChanged || Math.abs(gainR - band.lastGainR) >= 0.05) {
           band.filterR.set(designBiquad('peak', frequency, gainR, q, this.sr));
           band.lastGainR = gainR;
         }
