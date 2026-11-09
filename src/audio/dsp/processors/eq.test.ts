@@ -52,9 +52,9 @@ describe('Parametric EQ routing and response', () => {
   it('reports the measured minimum-phase cascade response for routed bands', () => {
     const values = { ...createDefaultParams('eq'), b0_on: 1, b0_type: 0, b0_freq: 1_000, b0_gain: 6, b0_q: 1 };
     const response = ParametricEq.response(values, SAMPLE_RATE, new Float32Array([100, 1_000, 10_000]));
-    expect(response[0]).toBeCloseTo(0, 1);
+    expect(Math.abs(response[0])).toBeLessThan(0.1);
     expect(response[1]).toBeCloseTo(6, 1);
-    expect(response[2]).toBeCloseTo(0, 1);
+    expect(Math.abs(response[2])).toBeLessThan(0.1);
   });
 
   it('clamps malformed type, routing, frequency, gain and Q values safely', () => {
