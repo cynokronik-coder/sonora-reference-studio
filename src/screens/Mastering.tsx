@@ -31,6 +31,8 @@ export default function Mastering() {
     recallSlot,
     deleteSlot,
     activeSlot,
+    workingMix,
+    restoreWorkingMix,
     loudnessMatch,
     setLoudnessMatch,
     comparisonDb,
@@ -227,29 +229,44 @@ export default function Mastering() {
                 <p className="mt-2 text-2xs leading-relaxed text-ink-500">Configurable starting points, not universal platform rules. Check your distributor's current requirements.</p>
               </Panel>
 
-              <Panel title="A/B comparison" right={<HelpTip title="Why match listening volume?">A louder master can seem better even when it is more distorted. Loudness-matched listening compensates monitor volume only; it does not alter the exported audio.</HelpTip>}>
-                <div className="grid grid-cols-4 gap-1.5">
+              <Panel title="A/B comparison" right={<HelpTip title="How level matching works">Each slot is measured with an offline render. The quietest measured version is the reference, and louder versions are attenuated at the monitor output only. No audio file or export is changed.</HelpTip>}>
+                <div className="grid grid-cols-4 gap-2">
                   {['A', 'B', 'C', 'D'].map((label) => {
                     const slot = abSlots.find((item) => item.label === label);
+                    const selected = activeSlot === slot?.id;
                     return (
-                      <div key={label} className={`rounded-lg border p-2 ${activeSlot === slot?.id ? 'border-[#A77AFF]/45 bg-[#8957FF]/10' : 'border-white/[.07] bg-[#0D0D1B]/50'}`}>
+                      <div key={label} className={`min-w-0 rounded-xl border p-2.5 ${selected ? 'border-[#A77AFF]/55 bg-[#8957FF]/[.12]' : 'border-white/[.07] bg-[#0D0D1B]/50'}`}>
                         <div className="flex items-center justify-between">
-                          <span className="font-mono text-xs text-ink-100">{label}</span>
-                          {slot ? <button type="button" className="text-2xs text-ink-500 hover:text-signal-red" onClick={() => deleteSlot(slot.id)}>×</button> : <span className="text-[9px] text-ink-600">empty</span>}
+                          <span className="font-mono text-sm font-semibold text-ink-100">{label}</span>
+                          {slot ? (
+                            <button type="button" aria-label={`Delete version ${label}`} disabled={busy?.kind === 'render'} className="text-xs text-ink-500 hover:text-signal-red disabled:opacity-40" onClick={() => deleteSlot(slot.id)}>×</button>
+                          ) : <span className="text-[9px] uppercase tracking-wide text-ink-600">empty</span>}
                         </div>
                         {slot ? (
                           <>
-                            <div className="mt-1 font-mono text-[9px] text-ink-500">{slot.lufs !== null ? `${slot.lufs.toFixed(1)} LUFS` : 'unmeasured'}</div>
-                            <Button size="sm" variant="ghost" className="mt-1 w-full" onClick={() => recallSlot(slot.id)}>Recall</Button>
+                            <div className="mt-2 space-y-1 font-mono text-[10px] leading-relaxed text-ink-400">
+                              <div>{slot.lufs !== null ? `${slot.lufs.toFixed(1)} LUFS` : 'LUFS —'}</div>
+                              <div>{slot.truePeakDb !== null ? `${slot.truePeakDb.toFixed(1)} dBTP` : 'Peak —'}</div>
+                            </div>
+                            <Button size="sm" variant={selected ? 'primary' : 'secondary'} className="mt-2 w-full" disabled={busy?.kind === 'render'} onClick={() => recallSlot(slot.id)}>{selected ? 'Selected' : 'Audition'}</Button>
+                            <Button size="sm" variant="ghost" className="mt-1 w-full" disabled={busy?.kind === 'render'} onClick={() => void captureSlot(label)}>Replace</Button>
                           </>
-                        ) : <Button size="sm" variant="ghost" className="mt-1 w-full" onClick={() => captureSlot(label)}>Capture</Button>}
+                        ) : (
+                          <Button size="sm" variant="ghost" className="mt-2 w-full" disabled={busy?.kind === 'render'} onClick={() => void captureSlot(label)}>Capture</Button>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-                <div className="mt-3 space-y-1.5">
-                  <Toggle checked={loudnessMatch} onChange={setLoudnessMatch} label="Loudness-matched listening" description="Monitor-only gain keeps louder versions from seeming automatically better." />
-                  <p className="font-mono text-2xs text-ink-500">Comparison gain {comparisonDb >= 0 ? '+' : ''}{comparisonDb.toFixed(1)} dB</p>
+                <div className="mt-3 space-y-2 rounded-xl border border-white/[.07] bg-[#0D0D1B]/45 p-3">
+                  <Toggle checked={loudnessMatch} onChange={setLoudnessMatch} label="Loudness-matched listening" description="Uses measured integrated LUFS and only attenuates; monitor path only." />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-mono text-2xs text-ink-400">Monitor trim {comparisonDb >= 0 ? '+' : ''}{comparisonDb.toFixed(1)} dB</p>
+                    {workingMix && (
+                      <Button size="sm" variant="secondary" disabled={busy?.kind === 'render'} onClick={restoreWorkingMix}>Return to working mix</Button>
+                    )}
+                  </div>
+                  <p className="text-2xs leading-relaxed text-ink-500">Capture measures the complete current mix. Audition switches the saved master chain; Replace stores the chain currently loaded in the mastering rack.</p>
                 </div>
               </Panel>
             </div>
