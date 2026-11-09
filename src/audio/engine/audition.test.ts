@@ -47,7 +47,7 @@ describe('copyAuditionBlock', () => {
     expect(left[0]).toBeCloseTo(0.3, 6);
     expect(left[1]).toBeCloseTo(0.6, 6);
     expect(right[0]).toBeCloseTo(-0.3, 6);
-    expect(right[1]).toBeCloseTo(-0.8, 6);
+    expect(right[1]).toBeCloseTo(-0.6, 6);
     expect(elapsed).toBe(2);
   });
 
