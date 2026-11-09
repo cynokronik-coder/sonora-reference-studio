@@ -497,7 +497,10 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
     const newlyMissingSections = resolved.fallbackAssetIds.filter((assetId) => !sectionFallbackWarnings.has(assetId));
     if (newlyMissingSections.length) {
       newlyMissingSections.forEach((assetId) => sectionFallbackWarnings.add(assetId));
-      const exactSelection = references.some((entry) => Number.isInteger(entry.sectionIndex) && (entry.sectionIndex as number) >= 0);
+      const exactSelection = resolved.assetIds.some((assetId) => {
+        const selectedReference = references.find((entry) => entry.assetId === assetId);
+        return Number.isInteger(selectedReference?.sectionIndex) && (selectedReference?.sectionIndex as number) >= 0;
+      });
       warnings.push({
         kind: 'limitation',
         message: exactSelection
