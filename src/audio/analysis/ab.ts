@@ -8,6 +8,7 @@
 export interface LoudnessSlotLike {
   id: string;
   lufs: number | null;
+  stale?: boolean;
 }
 
 export function loudnessMatchedMonitorGain(
@@ -17,9 +18,10 @@ export function loudnessMatchedMonitorGain(
 ): number {
   if (!selectedSlotId || !Number.isFinite(maxAttenuationDb) || maxAttenuationDb <= 0) return 0;
   const selected = slots.find((slot) => slot.id === selectedSlotId);
-  if (!selected || selected.lufs === null || !Number.isFinite(selected.lufs)) return 0;
+  if (!selected || selected.stale || selected.lufs === null || !Number.isFinite(selected.lufs)) return 0;
 
   const measured = slots
+    .filter((slot) => !slot.stale)
     .map((slot) => slot.lufs)
     .filter((lufs): lufs is number => lufs !== null && Number.isFinite(lufs));
   if (!measured.length) return 0;
