@@ -1,6 +1,7 @@
 import { Biquad, designBiquad, designTilt, type BiquadCoeffs } from '../biquad';
 import { FirConvolver, designLinearPhaseFir } from '../fir';
 import type { AudioProcessor, ParamValues, ProcessorDefinition, ProcessorMeter } from '../types';
+import { clamp, dbToGain } from '../util';
 
 export const EQ_BAND_COUNT = 8;
 export const EQ_TYPES = ['Bell', 'Low shelf', 'High shelf', 'High pass', 'Low pass', 'Notch', 'Band pass', 'Tilt'] as const;
@@ -8,10 +9,62 @@ export const EQ_ROUTING = ['Stereo', 'Mid', 'Side'] as const;
 
 const TYPE_MAP = ['peak', 'lowshelf', 'highshelf', 'highpass', 'lowpass', 'notch', 'bandpass', 'peak'] as const;
 const PASSTHROUGH: BiquadCoeffs = { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
+const FREQ_DEFAULTS = [100, 250, 500, 1000, 2500, 5000, 8000, 12000];
+
+interface EqBandConfig {
+  on: boolean;
+  type: number;
+  freq: number;
+  gain: number;
+  q: number;
+  route: number;
+}
+
+function finiteParam(values: ParamValues, key: string, fallback: number): number {
+  const value = values[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function eqBandConfig(values: ParamValues, band: number, sampleRate: number): EqBandConfig {
+  const type = Math.round(clamp(finiteParam(values, `b${band}_type`, 0), 0, EQ_TYPES.length - 1));
+  const route = Math.round(clamp(finiteParam(values, `b${band}_route`, 0), 0, EQ_ROUTING.length - 1));
+  const nyquistLimit = Math.max(20, sampleRate * 0.49);
+  const freq = clamp(finiteParam(values, `b${band}_freq`, FREQ_DEFAULTS[band]), 20, Math.min(20000, nyquistLimit));
+  const gain = clamp(finiteParam(values, `b${band}_gain`, 0), -18, 18);
+  // RBJ shelf slope S must not exceed 1. Other filter shapes use the
+  // conventional Q range exposed in the processor controls.
+  const q = type === 1 || type === 2
+    ? clamp(finiteParam(values, `b${band}_q`, 0.7), 0.1, 1)
+    : clamp(finiteParam(values, `b${band}_q`, 1), 0.2, 18);
+  return {
+    on: finiteParam(values, `b${band}_on`, band === 0 ? 1 : 0) > 0.5,
+    type,
+    freq,
+    gain,
+    q,
+    route,
+  };
+}
+
+function normalizedEqValues(values: ParamValues, sampleRate: number): ParamValues {
+  const normalized: ParamValues = {};
+  for (let band = 0; band < EQ_BAND_COUNT; band++) {
+    const config = eqBandConfig(values, band, sampleRate);
+    normalized[`b${band}_on`] = config.on ? 1 : 0;
+    normalized[`b${band}_type`] = config.type;
+    normalized[`b${band}_freq`] = config.freq;
+    normalized[`b${band}_gain`] = config.gain;
+    normalized[`b${band}_q`] = config.q;
+    normalized[`b${band}_route`] = config.route;
+  }
+  normalized.output = clamp(finiteParam(values, 'output', 0), -18, 18);
+  normalized.linear = finiteParam(values, 'linear', 0) > 0.5 ? 1 : 0;
+  return normalized;
+}
 
 /**
  * Parametric EQ with eight bands, stereo / mid / side routing and an optional
- * linear-phase mode implemented as a 512-tap symmetric FIR.
+ * linear-phase mode implemented as a 513-tap symmetric FIR.
  *
  * All processing happens in mid/side, which is mathematically identical to
  * left/right when a band is routed to both sides and necessary when it is not.
@@ -55,29 +108,24 @@ export class ParametricEq implements AudioProcessor {
   }
 
   setValues(values: ParamValues): void {
-    this.values = values;
-    this.outGain = Math.pow(10, (values.output ?? 0) / 20);
-    this.linear = (values.linear ?? 0) > 0.5;
+    this.values = normalizedEqValues(values, this.sr);
+    this.outGain = dbToGain(this.values.output ?? 0);
+    this.linear = (this.values.linear ?? 0) > 0.5;
     this.rebuild();
   }
 
   private bandValue(values: ParamValues, b: number, key: string, fallback: number): number {
-    const v = values[`b${b}_${key}`];
-    return typeof v === 'number' ? v : fallback;
+    return finiteParam(values, `b${b}_${key}`, fallback);
   }
 
   private cascadeFor(path: 'mid' | 'side'): BiquadCoeffs[] {
     const out: BiquadCoeffs[] = [];
     for (let b = 0; b < EQ_BAND_COUNT; b++) {
-      const on = this.bandValue(this.values, b, 'on', b === 0 ? 1 : 0) > 0.5;
-      if (!on) continue;
-      const route = Math.round(this.bandValue(this.values, b, 'route', 0));
-      if (path === 'mid' && route === 2) continue;
-      if (path === 'side' && route === 1) continue;
-      const type = Math.round(this.bandValue(this.values, b, 'type', 0));
-      const freq = this.bandValue(this.values, b, 'freq', 1000);
-      const gain = this.bandValue(this.values, b, 'gain', 0);
-      const q = this.bandValue(this.values, b, 'q', 1);
+      const config = eqBandConfig(this.values, b, this.sr);
+      if (!config.on) continue;
+      if (path === 'mid' && config.route === 2) continue;
+      if (path === 'side' && config.route === 1) continue;
+      const { type, freq, gain, q } = config;
       if (type === 7) {
         const tilt = designTilt(gain, this.sr, freq);
         out.push(tilt.low, tilt.high);
@@ -94,12 +142,8 @@ export class ParametricEq implements AudioProcessor {
     this.lastSignature = sig;
 
     for (let b = 0; b < EQ_BAND_COUNT; b++) {
-      const on = this.bandValue(this.values, b, 'on', b === 0 ? 1 : 0) > 0.5;
-      const route = Math.round(this.bandValue(this.values, b, 'route', 0));
-      const type = Math.round(this.bandValue(this.values, b, 'type', 0));
-      const freq = this.bandValue(this.values, b, 'freq', 1000);
-      const gain = this.bandValue(this.values, b, 'gain', 0);
-      const q = this.bandValue(this.values, b, 'q', 1);
+      const config = eqBandConfig(this.values, b, this.sr);
+      const { on, route, type, freq, gain, q } = config;
       this.applyMid[b] = on && route !== 2;
       this.applySide[b] = on && route !== 1;
 
@@ -121,8 +165,8 @@ export class ParametricEq implements AudioProcessor {
     }
 
     if (this.linear) {
-      const midTaps = designLinearPhaseFir(this.cascadeFor('mid'), 512);
-      const sideTaps = designLinearPhaseFir(this.cascadeFor('side'), 512);
+      const midTaps = designLinearPhaseFir(this.cascadeFor('mid'), 513);
+      const sideTaps = designLinearPhaseFir(this.cascadeFor('side'), 513);
       if (!this.convMid) {
         this.convMid = new FirConvolver(midTaps, 1);
         this.convSide = new FirConvolver(sideTaps, 1);
@@ -210,14 +254,11 @@ export class ParametricEq implements AudioProcessor {
     const coeffs: BiquadCoeffs[] = [];
     for (let i = 0; i < EQ_BAND_COUNT; i++) {
       if (onlyBand !== undefined && i !== onlyBand) continue;
-      if ((values[`b${i}_on`] ?? (i === 0 ? 1 : 0)) < 0.5) continue;
-      const route = Math.round(values[`b${i}_route`] ?? 0);
+      const config = eqBandConfig(values, i, sampleRate);
+      if (!config.on) continue;
+      const { route, type, freq, gain, q } = config;
       if (routing === 'mid' && route === 2) continue;
       if (routing === 'side' && route === 1) continue;
-      const type = Math.round(values[`b${i}_type`] ?? 0);
-      const freq = values[`b${i}_freq`] ?? 1000;
-      const gain = values[`b${i}_gain`] ?? 0;
-      const q = values[`b${i}_q`] ?? 1;
       if (type === 7) {
         const tilt = designTilt(gain, sampleRate, freq);
         coeffs.push(tilt.low, tilt.high);
@@ -247,19 +288,18 @@ export class ParametricEq implements AudioProcessor {
 function bandParams(index: number) {
   const p = `b${index}`;
   const group = `Band ${index + 1}`;
-  const freqDefaults = [100, 250, 500, 1000, 2500, 5000, 8000, 12000];
   return [
     { key: `${p}_on`, label: 'Enabled', kind: 'bool' as const, default: index === 0 ? 1 : 0, group },
     { key: `${p}_type`, label: 'Type', kind: 'enum' as const, options: [...EQ_TYPES], default: 0, group },
     {
       key: `${p}_freq`, label: 'Frequency', kind: 'float' as const, min: 20, max: 20000, step: 1,
-      default: freqDefaults[index], unit: 'Hz', scale: 'log' as const, group,
+      default: FREQ_DEFAULTS[index], unit: 'Hz', scale: 'log' as const, group,
     },
     {
       key: `${p}_gain`, label: 'Gain', kind: 'float' as const, min: -18, max: 18, step: 0.1,
       default: 0, unit: 'dB', group,
     },
-    { key: `${p}_q`, label: 'Q', kind: 'float' as const, min: 0.2, max: 18, step: 0.01, default: 1, group },
+    { key: `${p}_q`, label: 'Q / Shelf slope', kind: 'float' as const, min: 0.1, max: 18, step: 0.01, default: 1, group },
     { key: `${p}_route`, label: 'Routing', kind: 'enum' as const, options: [...EQ_ROUTING], default: 0, advanced: true, group },
   ];
 }
