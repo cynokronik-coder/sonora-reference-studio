@@ -1,4 +1,4 @@
-import { Biquad } from './biquad';
+import { Biquad, designBiquad } from './biquad';
 
 interface CrossoverStage {
   lp1: Biquad[];
@@ -39,7 +39,7 @@ export class Lr4Crossover {
     this.configure(sampleRate, this.lowFreq, this.highFreq);
   }
 
-  configure(sampleRate: number, lowFreq: number, highFreq: number): void {
+  configure(sampleRate: number, lowFreq: number, highFreq: number, smoothingSamples = 0): void {
     this.sr = sampleRate;
     const maxLow = sampleRate * 0.4;
     const maxHigh = sampleRate * 0.45;
@@ -55,15 +55,19 @@ export class Lr4Crossover {
       this.lowFreq + minimumGap,
       Math.min(requestedHigh, maxHigh),
     );
+    const lowPass = designBiquad('lowpass', this.lowFreq, 0, 0.7071, sampleRate);
+    const lowHigh = designBiquad('highpass', this.lowFreq, 0, 0.7071, sampleRate);
+    const highPass = designBiquad('lowpass', this.highFreq, 0, 0.7071, sampleRate);
+    const highHigh = designBiquad('highpass', this.highFreq, 0, 0.7071, sampleRate);
+    const apply = (filter: Biquad, coefficients: ReturnType<typeof designBiquad>) => {
+      if (smoothingSamples > 0) filter.setSmoothed(coefficients, smoothingSamples);
+      else filter.set(coefficients);
+    };
     for (const stage of this.channels) {
-      stage.lp1[0].configure('lowpass', this.lowFreq, 0, 0.7071, sampleRate);
-      stage.lp1[1].configure('lowpass', this.lowFreq, 0, 0.7071, sampleRate);
-      stage.hp1[0].configure('highpass', this.lowFreq, 0, 0.7071, sampleRate);
-      stage.hp1[1].configure('highpass', this.lowFreq, 0, 0.7071, sampleRate);
-      stage.lp2[0].configure('lowpass', this.highFreq, 0, 0.7071, sampleRate);
-      stage.lp2[1].configure('lowpass', this.highFreq, 0, 0.7071, sampleRate);
-      stage.hp2[0].configure('highpass', this.highFreq, 0, 0.7071, sampleRate);
-      stage.hp2[1].configure('highpass', this.highFreq, 0, 0.7071, sampleRate);
+      for (const filter of stage.lp1) apply(filter, lowPass);
+      for (const filter of stage.hp1) apply(filter, lowHigh);
+      for (const filter of stage.lp2) apply(filter, highPass);
+      for (const filter of stage.hp2) apply(filter, highHigh);
     }
   }
 
