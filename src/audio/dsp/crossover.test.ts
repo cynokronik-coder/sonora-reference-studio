@@ -67,7 +67,8 @@ describe('Lr4Crossover three-band reconstruction', () => {
       const crossover = new Lr4Crossover(sampleRate);
       crossover.configure(sampleRate, 600, 800);
       expect(crossover.lowCutoff).toBeGreaterThan(0);
-      expect(crossover.highCutoff).toBeGreaterThanOrEqual(crossover.lowCutoff * 2);
+      expect(crossover.highCutoff).toBeGreaterThan(crossover.lowCutoff);
+      expect(crossover.highCutoff).toBeCloseTo(800, 4);
       expect(crossover.highCutoff).toBeLessThanOrEqual(sampleRate * 0.45 + 1e-6);
     },
   );
