@@ -166,6 +166,10 @@ export class DynamicEq implements AudioProcessor {
         band.detectorR.configure('bandpass', frequency, 0, q, this.sr);
         band.lastFreq = frequency;
         band.lastQ = q;
+        // Force a one-time update of the programme EQ coefficients for the
+        // changed band shape; subsequent updates are driven by gain movement.
+        band.lastGainL = 999;
+        band.lastGainR = 999;
       }
       band.ballisticsL.setTimes(attack, release, this.sr);
       band.ballisticsR.setTimes(attack, release, this.sr);
@@ -192,11 +196,11 @@ export class DynamicEq implements AudioProcessor {
 
         const gainL = -band.reductionL;
         const gainR = -band.reductionR;
-        if (bandShapeChanged || Math.abs(gainL - band.lastGainL) >= 0.05) {
+        if (Math.abs(gainL - band.lastGainL) >= 0.05) {
           band.filterL.set(designBiquad('peak', frequency, gainL, q, this.sr));
           band.lastGainL = gainL;
         }
-        if (bandShapeChanged || Math.abs(gainR - band.lastGainR) >= 0.05) {
+        if (Math.abs(gainR - band.lastGainR) >= 0.05) {
           band.filterR.set(designBiquad('peak', frequency, gainR, q, this.sr));
           band.lastGainR = gainR;
         }
