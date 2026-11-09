@@ -405,6 +405,7 @@ export const useApp = create<AppState>((set, get) => ({
       set({ storageError: describeStorageError(error), toast: 'Could not create the project: this browser is blocking local storage.' });
       return;
     }
+    realtimeHost.setComparisonGain(0);
     set({
       project,
       assets: [],
@@ -474,6 +475,7 @@ export const useApp = create<AppState>((set, get) => ({
       }
       project.sampleRate = targetRate;
       await db.saveProject(project);
+      realtimeHost.setComparisonGain(0);
       set({
         project,
         assets,
@@ -703,10 +705,10 @@ export const useApp = create<AppState>((set, get) => ({
     const previous = cloneProject(state.project);
     const next = cloneProject(state.project);
     mutator(next);
-    next.updatedAt = Date.now();
     const projectContentChanged = JSON.stringify(previous) !== JSON.stringify(next);
     const mixContextChanged = JSON.stringify(previous.tracks) !== JSON.stringify(next.tracks) ||
       JSON.stringify(previous.buses) !== JSON.stringify(next.buses);
+    next.updatedAt = Date.now();
     const clearAudition = projectContentChanged && state.activeSlot !== null && !options?.preserveAb;
     const coalesce = options?.coalesce;
     const shouldCoalesce =
