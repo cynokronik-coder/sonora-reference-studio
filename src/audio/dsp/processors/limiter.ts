@@ -2,6 +2,8 @@ import { TruePeakMeter, Oversampler } from '../oversample';
 import type { AudioProcessor, ParamValues, ProcessorDefinition, ProcessorMeter } from '../types';
 import { clamp, dbToGain, gainToDb } from '../util';
 
+const TRUE_PEAK_SAFETY_GAIN = dbToGain(-0.5);
+
 /** Monotonic sliding maximum over a fixed window (O(1) amortised). */
 class SlidingMax {
   private values: Float32Array;
@@ -180,7 +182,7 @@ export class Limiter implements AudioProcessor {
       // delayed by look-ahead; this guard absorbs small block-boundary and
       // reconstruction discrepancies rather than claiming sample-perfect
       // reconstruction from the estimate.
-      const truePeakGuard = truePeak ? dbToGain(-0.5) : 1;
+      const truePeakGuard = truePeak ? TRUE_PEAK_SAFETY_GAIN : 1;
       const effectiveCeiling = this.ceiling * truePeakGuard / truePeakRatio;
       const target = windowMax > effectiveCeiling ? effectiveCeiling / windowMax : 1;
       if (target < this.env) this.env = target;
