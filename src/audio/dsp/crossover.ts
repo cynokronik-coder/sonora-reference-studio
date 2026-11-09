@@ -36,6 +36,9 @@ export class Lr4Crossover {
   prepare(sampleRate: number, maxBlock: number): void {
     this.sr = sampleRate;
     this.maxBlock = maxBlock;
+    // Filter histories are sample-rate dependent. Clear them before reusing
+    // this crossover at a new engine rate or after a host re-prepare.
+    this.reset();
     this.configure(sampleRate, this.lowFreq, this.highFreq);
   }
 
