@@ -19,6 +19,7 @@ const TRACK_KINDS: TrackKind[] = ['audio', 'vocal', 'instrument', 'drums', 'bass
 
 export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, onOpenCommandPalette }: { onStartTour?: () => void; onExpandAssistant?: () => void; onOpenAccount?: () => void; onOpenCommandPalette?: () => void } = {}) {
   const project = useApp((s) => s.project);
+  const busy = useApp((s) => s.busy);
   const { selectedTrackId, selectTrack, importFiles, updateTrack, removeTrack, addTrack } = useApp();
   const picker = useFilePicker();
   const [focus, setFocus] = useState<Focus>({ scope: 'master', id: null });
@@ -217,7 +218,15 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
             {workspace === 'mastering' ? (
               <>
                 <div className="flex items-center gap-2 text-sm font-semibold text-white"><Icon name="equalizer" size={16} className="text-[#C4A2FF]" /> Mastering workspace</div>
-                <span className="hidden w-[240px] shrink-0 whitespace-nowrap text-right text-xs text-ink-500 sm:inline">Final tone, dynamics and delivery verification</span>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Badge tone="neutral">{project.master.processors.length} processors</Badge>
+                  <Button size="sm" variant="primary" disabled={busy?.kind === 'render'} onClick={() => void useApp.getState().verifyMaster()}>
+                    <Icon name="sparkles" size={13} /> {busy?.kind === 'render' ? 'Mastering…' : 'Start mastering'}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => useApp.getState().setScreen('export')}>
+                    <Icon name="download" size={13} /> Export
+                  </Button>
+                </div>
               </>
             ) : (
               <>
