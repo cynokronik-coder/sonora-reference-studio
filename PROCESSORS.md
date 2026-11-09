@@ -21,8 +21,14 @@ exactly 256 samples of group delay (about 5.33 ms at 48 kHz). Factory starting p
 mud, Vocal presence, Air and clarity, Warm balance, Resonance notch and Gentle master tilt; all bands remain editable.
 
 ### Dynamic EQ
-Four bell bands whose gain is driven by a bandpass detector. Threshold, maximum cut, attack and release per band. Gain
-reduction is reported for the rack meter and is genuinely level-dependent.
+Four dynamic bell bands with independent left/right raw-signal band-pass detectors. Detection runs on signed programme
+samples before the envelope measurement; it does not rectify the signal before filtering, avoiding false octave triggers
+from generated harmonics. Per-band threshold, ratio, maximum cut, attack, release, Q and stereo link are editable.
+At 0% link, each channel has its own detector envelope and dynamic EQ gain; at 100%, one shared envelope applies
+identical gain reduction to both channels. Detector-frequency changes and dynamic bell coefficients are smoothed to
+reduce abrupt filter transitions. Disabled bands ramp back to passthrough. Per-band reduction and maximum total reduction
+are reported to the processor rack. Factory starting points include Vocal harshness, Low-mid control, Bass note control,
+High-frequency smoothing and Gentle dynamic balance.
 
 ### Resonance Suppressor
 Three high-Q dynamic notches (Q 1–30) with sensitivity and maximum cut. Frequencies can be set from the analysis engine's
