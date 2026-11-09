@@ -172,7 +172,7 @@ interface AppState {
   setToast: (message: string | null) => void;
   clearBusy: () => void;
 
-  mutate: (mutator: (project: ProjectState) => void, options?: { coalesce?: string; preserveAb?: boolean }) => void;
+  mutate: (mutator: (project: ProjectState) => void, options?: { coalesce?: string; preserveAb?: boolean; skipPersist?: boolean }) => void;
   undo: () => void;
   redo: () => void;
   saveNow: () => Promise<void>;
@@ -219,7 +219,7 @@ interface AppState {
   savePreset: (name: string, category: PresetCategory, description: string, scope: 'master' | 'track', trackId?: string | null) => Promise<void>;
   deleteUserPreset: (id: string) => Promise<void>;
 
-  captureSlot: (label: string) => void;
+  captureSlot: (label: string) => Promise<void>;
   recallSlot: (id: string) => void;
   deleteSlot: (id: string) => void;
   restoreWorkingMix: () => void;
@@ -702,8 +702,8 @@ export const useApp = create<AppState>((set, get) => ({
     const next = cloneProject(state.project);
     mutator(next);
     next.updatedAt = Date.now();
-    const masterChanged = JSON.stringify(previous.master) !== JSON.stringify(next.master);
-    const clearAudition = masterChanged && state.activeSlot !== null && !options?.preserveAb;
+    const projectContentChanged = JSON.stringify(previous) !== JSON.stringify(next);
+    const clearAudition = projectContentChanged && state.activeSlot !== null && !options?.preserveAb;
     const coalesce = options?.coalesce;
     const shouldCoalesce =
       Boolean(coalesce) && state.lastCoalesceKey === coalesce && Date.now() - state.lastCoalesceAt < 800;
@@ -716,7 +716,7 @@ export const useApp = create<AppState>((set, get) => ({
       ...(clearAudition ? { activeSlot: null, workingMix: null, comparisonDb: 0 } : {}),
     });
     if (clearAudition) realtimeHost.setComparisonGain(0);
-    schedulePersist(next);
+    if (!options?.skipPersist) schedulePersist(next);
     syncEngine(next, get().assetBuffers);
   },
 
@@ -731,6 +731,7 @@ export const useApp = create<AppState>((set, get) => ({
       selectedProcessorId: null,
     });
     schedulePersist(previous);
+    realtimeHost.setComparisonGain(0);
     syncEngine(previous, get().assetBuffers);
   },
 
@@ -745,6 +746,7 @@ export const useApp = create<AppState>((set, get) => ({
       selectedProcessorId: null,
     });
     schedulePersist(next);
+    realtimeHost.setComparisonGain(0);
     syncEngine(next, get().assetBuffers);
   },
 
@@ -1370,8 +1372,10 @@ export const useApp = create<AppState>((set, get) => ({
       const state = get();
       const nextSlots = [...state.abSlots.filter((item) => item.label !== label), slot].slice(-8);
       const projectUnchanged = JSON.stringify(currentProject) === JSON.stringify(capturedProject);
-      const nextActiveSlot = projectUnchanged ? slot.id : state.activeSlot;
-      const nextWorkingMix = state.workingMix ?? (state.activeSlot === null
+      const nextActiveSlot = projectUnchanged
+        ? slot.id
+        : (nextSlots.some((item) => item.id === state.activeSlot) ? state.activeSlot : null);
+      const nextWorkingMix = state.workingMix ?? (projectUnchanged && state.activeSlot === null
         ? {
             projectId,
             processors: structuredClone(capturedProject.master.processors),
@@ -1387,7 +1391,7 @@ export const useApp = create<AppState>((set, get) => ({
         activeSlot: nextActiveSlot,
         workingMix: nextWorkingMix,
         comparisonDb,
-        lastRenderStats: result.stats,
+        ...(projectUnchanged ? { lastRenderStats: result.stats } : {}),
         busy: null,
         toast: projectUnchanged
           ? `Captured version ${label}: ${slot.lufs !== null ? slot.lufs.toFixed(1) + ' LUFS' : 'loudness unavailable'}.`
@@ -1414,7 +1418,7 @@ export const useApp = create<AppState>((set, get) => ({
     get().mutate((next) => {
       next.master.processors = structuredClone(slot.processors);
       next.master.volumeDb = slot.volumeDb;
-    }, { preserveAb: true });
+    }, { preserveAb: true, skipPersist: true });
     const comparisonDb = get().loudnessMatch
       ? loudnessMatchedMonitorGain(get().abSlots, slot.id)
       : 0;
