@@ -79,7 +79,14 @@ export class StereoProcessor implements AudioProcessor {
   private haasMixTarget = 0;
   private haasMixStep = 0;
   private haasMixRemaining = 0;
-  private monoMaker = true;
+  private haasDelaySamples = 0;
+  private haasDelayTarget = 0;
+  private haasDelayStep = 0;
+  private haasDelayRemaining = 0;
+  private monoMakerAmount = 1;
+  private monoMakerTarget = 1;
+  private monoMakerStep = 0;
+  private monoMakerRemaining = 0;
   private peakL = 0;
   private peakR = 0;
 
@@ -137,7 +144,8 @@ export class StereoProcessor implements AudioProcessor {
     this.balance = this.balanceTarget = clamp((this.values.balance ?? 0) / 100, -1, 1);
     this.output = this.outputTarget = dbToGain(clamp(this.values.output ?? 0, -18, 18));
     this.haasMix = this.haasMixTarget = clamp((this.values.haasMix ?? 0) / 100, 0, 1);
-    this.monoMaker = (this.values.monoMaker ?? 1) > 0.5;
+    this.haasDelaySamples = this.haasDelayTarget = clamp(this.values.haas ?? 0, 0, 40) * 0.001 * this.sr;
+    this.monoMakerAmount = this.monoMakerTarget = (this.values.monoMaker ?? 1) > 0.5 ? 1 : 0;
     this.clearRamps();
   }
 
@@ -150,6 +158,8 @@ export class StereoProcessor implements AudioProcessor {
     this.balanceRemaining = 0;
     this.outputRemaining = 0;
     this.haasMixRemaining = 0;
+    this.haasDelayRemaining = 0;
+    this.monoMakerRemaining = 0;
   }
 
   private configureSplit(split: number, immediate = false): void {
@@ -166,7 +176,6 @@ export class StereoProcessor implements AudioProcessor {
   }
 
   setValues(values: ParamValues): void {
-    const previous = this.values;
     this.values = values;
     this.configureSplit(values.split ?? 180);
 
@@ -195,8 +204,21 @@ export class StereoProcessor implements AudioProcessor {
         this.setGainRamp(this[key], targets[key], key);
       }
     }
-    this.monoMaker = (values.monoMaker ?? 1) > 0.5;
-    void previous;
+    const nextMonoMaker = (values.monoMaker ?? 1) > 0.5 ? 1 : 0;
+    if (nextMonoMaker !== this.monoMakerTarget) {
+      this.monoMakerTarget = nextMonoMaker;
+      const ramp = this.ramp(this.monoMakerAmount, nextMonoMaker);
+      this.monoMakerStep = ramp.step;
+      this.monoMakerRemaining = ramp.remaining;
+    }
+
+    const nextHaasDelay = clamp(values.haas ?? 0, 0, 40) * 0.001 * this.sr;
+    if (nextHaasDelay !== this.haasDelayTarget) {
+      this.haasDelayTarget = nextHaasDelay;
+      const ramp = this.ramp(this.haasDelaySamples, nextHaasDelay);
+      this.haasDelayStep = ramp.step;
+      this.haasDelayRemaining = ramp.remaining;
+    }
   }
 
   private advanceRamps(): void {
@@ -208,12 +230,13 @@ export class StereoProcessor implements AudioProcessor {
     if (this.balanceRemaining > 0) { this.balance += this.balanceStep; if (--this.balanceRemaining === 0) this.balance = this.balanceTarget; }
     if (this.outputRemaining > 0) { this.output += this.outputStep; if (--this.outputRemaining === 0) this.output = this.outputTarget; }
     if (this.haasMixRemaining > 0) { this.haasMix += this.haasMixStep; if (--this.haasMixRemaining === 0) this.haasMix = this.haasMixTarget; }
+    if (this.haasDelayRemaining > 0) { this.haasDelaySamples += this.haasDelayStep; if (--this.haasDelayRemaining === 0) this.haasDelaySamples = this.haasDelayTarget; }
+    if (this.monoMakerRemaining > 0) { this.monoMakerAmount += this.monoMakerStep; if (--this.monoMakerRemaining === 0) this.monoMakerAmount = this.monoMakerTarget; }
   }
 
   process(L: Float32Array, R: Float32Array, n: number): void {
     if (n > this.maxBlock) throw new RangeError(`Stereo imaging block size ${n} exceeds prepared capacity ${this.maxBlock}`);
 
-    const haasSamples = Math.round(clamp(this.values.haas ?? 0, 0, 40) * 0.001 * this.sr);
     const haasLength = this.haasBuffer.length;
 
     this.xover.split(L, R, n, this.splitBuffers);
@@ -223,7 +246,7 @@ export class StereoProcessor implements AudioProcessor {
     for (let i = 0; i < n; i++) {
       this.advanceRamps();
       const lowM = (this.lowL[i] + this.lowR[i]) * 0.5;
-      const lowS = ((this.lowL[i] - this.lowR[i]) * 0.5) * (this.monoMaker ? 0 : this.lowWidth) * this.width;
+      const lowS = ((this.lowL[i] - this.lowR[i]) * 0.5) * this.lowWidth * (1 - this.monoMakerAmount) * this.width;
       const midM = (this.midL[i] + this.midR[i]) * 0.5;
       const midS = ((this.midL[i] - this.midR[i]) * 0.5) * this.highWidth * this.width;
       const highM = (this.highL[i] + this.highR[i]) * 0.5;
@@ -239,14 +262,18 @@ export class StereoProcessor implements AudioProcessor {
       // Keep the Haas history rolling even when the effect is disabled. Turning
       // it back on then reads recent programme audio rather than stale samples.
       let delayedRight = 0;
-      if (haasSamples > 0) {
-        let readIndex = this.haasIndex - haasSamples;
-        if (readIndex < 0) readIndex += haasLength;
-        delayedRight = this.haasBuffer[readIndex];
+      if (this.haasDelaySamples > 0.01) {
+        const wholeDelay = Math.floor(this.haasDelaySamples);
+        const fraction = this.haasDelaySamples - wholeDelay;
+        let readA = this.haasIndex - wholeDelay;
+        let readB = readA - 1;
+        while (readA < 0) readA += haasLength;
+        while (readB < 0) readB += haasLength;
+        delayedRight = this.haasBuffer[readA] * (1 - fraction) + this.haasBuffer[readB] * fraction;
       }
       this.haasBuffer[this.haasIndex] = right;
       this.haasIndex = (this.haasIndex + 1) % haasLength;
-      if (haasSamples > 0 && this.haasMix > 0) {
+      if (this.haasDelaySamples > 0.01 && this.haasMix > 0) {
         right = right * (1 - this.haasMix) + delayedRight * this.haasMix;
       }
 
@@ -262,6 +289,9 @@ export class StereoProcessor implements AudioProcessor {
 
   reset(): void {
     this.xover.reset();
+    if (this.lastSplit > 0) {
+      this.xover.configure(this.sr, this.lastSplit, Math.min(Math.max(this.lastSplit * 2.2, 4_000), this.sr * 0.45));
+    }
     this.haasBuffer.fill(0);
     this.haasIndex = 0;
     this.clearRamps();
