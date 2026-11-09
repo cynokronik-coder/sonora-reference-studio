@@ -62,8 +62,7 @@ in the realtime path.
 
 - `TruePeakMeter` applies a 4x oversampled low-pass chain and tracks the maximum absolute interpolated sample.
 - Analysis uses it in 512-frame chunks to measure dBTP over the whole file.
-- The limiter measures each block's oversampled peak and tightens its effective ceiling by the derived
-  inter-sample/sample-peak ratio. That means masters meet a dBTP ceiling rather than only a sample-peak ceiling.
+- The limiter measures a 4x IIR-interpolated block peak and tightens the effective ceiling by the inter-sample/sample-peak ratio, with an additional 0.5 dB safety guard to cover block-based estimation and look-ahead alignment. This is a conservative engineering approximation, not certification of standards-compliant dBTP measurement; verify delivery masters with an independent compliant meter when required.
 
 ## Loudness
 
@@ -86,7 +85,7 @@ only for parameters that actually have lanes. Structural parameter sync happens 
 
 ## Latency compensation
 
-The linear-phase EQ's 513-tap symmetric FIR has exactly 256 samples of group delay (about 5.33 ms at 48 kHz). Minimum-phase biquad coefficient changes are smoothed over 20 ms; this interpolation is performed per sample in the audio processing loop. `ProjectRenderer` computes the maximum track/bus
+The linear-phase EQ's 513-tap symmetric FIR has exactly 256 samples of group delay (about 5.33 ms at 48 kHz). The limiter reports its selected look-ahead delay (0–10 ms) through the same processor latency contract. `ProcessorChain` sums active processor latency and `ProjectRenderer` recomputes track, bus and master compensation when processor parameters change. Minimum-phase biquad coefficient changes are smoothed over 20 ms; this interpolation is performed per sample in the audio processing loop. `ProjectRenderer` computes the maximum track/bus
 latency and inserts integer delays on the other paths, including the intermediate bus stage. Offline export renders
 `totalLatency` extra frames and discards the head. All paths therefore remain sample-aligned.
 
@@ -132,3 +131,7 @@ The Exciter copies the original stereo programme into prepared buffers, runs ind
 
 ### Clipper render path
 The clipper copies left/right input into prepared dry buffers, upsamples both channels through independent IIR filter banks when 2x/4x is selected, shapes samples with the selected soft/hard/tanh transfer curve, then downsamples into prepared wet buffers. A second matching IIR oversampler advances continuously on the untouched dry input so partial wet blends use the same phase/filter history. At 0% wet the original samples are restored after the 20 ms mix ramp. Drive and internal ceiling are interpolated per oversampled sample; style crossfades and mix/output trims ramp to avoid abrupt parameter steps. The internal clipping ceiling is before output trim and is not a final true-peak guarantee. Use the downstream limiter for a delivered dBTP ceiling. The current IIR oversampler reduces aliasing but has frequency-dependent phase shift, not linear phase.
+
+
+### Limiter look-ahead and detector window
+The limiter's latency is the rounded configured look-ahead time in samples. Its ring buffer delays programme audio by exactly that amount. The monotonic sliding-maximum detector uses a matching window of look-ahead samples plus the current input sample; a zero-look-ahead setting therefore uses a one-sample detector window and reports zero latency. Input gain, output trim and the internal ceiling are ramped over 20 ms. The current true-peak path uses 4x IIR interpolation, a block ratio and a 0.5 dB safety guard; because the estimator is block based and IIR rather than a standards-validated FIR measurement chain, treat it as conservative protection and verify final delivery with an independent standards-compliant true-peak meter where required. The output trim is post-limiter and must stay at 0 dB when relying on the limiter's internal ceiling.
