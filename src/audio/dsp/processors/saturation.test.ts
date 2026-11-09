@@ -78,7 +78,7 @@ describe('Saturation stereo processing', () => {
     }
   });
 
-  it('processes the prepared render quantum without allocation-induced buffer errors', () => {
+  it('processes the prepared render quantum without overflowing its preallocated buffers', () => {
     const processor = new Saturator();
     processor.prepare(SAMPLE_RATE, BLOCK_SIZE);
     processor.setValues(defaults());
