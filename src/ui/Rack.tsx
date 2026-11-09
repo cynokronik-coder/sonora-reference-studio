@@ -11,6 +11,7 @@ import { COMPRESSOR_PRESETS } from '../audio/dsp/processors/compressor';
 import { MULTIBAND_COMP_PRESETS } from '../audio/dsp/processors/multiband';
 import { EQ_PRESETS } from '../audio/dsp/processors/eq';
 import { DYNAMIC_EQ_PRESETS } from '../audio/dsp/processors/dynamicEq';
+import { RESONANCE_PRESETS } from '../audio/dsp/processors/resonance';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -229,7 +230,7 @@ export function Rack({
 
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
-                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'deesser' || node.type === 'limiter') && (
+                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'resonance' || node.type === 'deesser' || node.type === 'limiter') && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-2xs text-ink-500">Gain reduction</span>
                       <GainReductionMeter reductionDb={reduction} height={8} />
@@ -338,7 +339,8 @@ function ProcessorParams({
   const [multibandPreset, setMultibandPreset] = useState('');
   const [eqPreset, setEqPreset] = useState('');
   const [dynamicEqPreset, setDynamicEqPreset] = useState('');
-  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); }, [node.id]);
+  const [resonancePreset, setResonancePreset] = useState('');
+  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -353,6 +355,7 @@ function ProcessorParams({
     if (node.type === 'multibandComp') setMultibandPreset('');
     if (node.type === 'eq') setEqPreset('');
     if (node.type === 'dynamicEq') setDynamicEqPreset('');
+    if (node.type === 'resonance') setResonancePreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
@@ -379,8 +382,29 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setDynamicEqPreset(preset.id);
   };
+  const applyResonancePreset = (presetId: string) => {
+    const preset = RESONANCE_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setResonancePreset(preset.id);
+  };
   return (
     <div className="space-y-2">
+      {node.type === 'resonance' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Resonance starting point"
+            value={resonancePreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...RESONANCE_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyResonancePreset}
+          />
+          {resonancePreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {RESONANCE_PRESETS.find((preset) => preset.id === resonancePreset)?.description} All bands remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'dynamicEq' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
