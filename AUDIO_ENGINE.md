@@ -84,6 +84,16 @@ Reference weights are relative influence values. Zero excludes a reference from 
 
 When a requested chorus or verse is unavailable in a selected reference (or in the target), the matcher uses full-track measurements and adds a visible limitation warning. It does not silently label full-track measurements as section-specific. Proposal confidence is a heuristic guidance score, not a calibrated probability; it is reduced when references disagree on the relevant characteristic or when source analysis quality is weak. The final output must still be rendered, listened to and measured.
 
+## A/B mastering audition
+
+Mastering A/B slots capture the current master processor chain and master fader, then measure the complete current mix with the offline renderer. The stored integrated LUFS and BS.1770-5 Annex 2 true peak therefore come from the captured version itself, not from a possibly stale previous verification.
+
+Recalling a slot loads its master chain for realtime audition. The working mix is saved in session state and can be restored with **Return to working mix**. A slot recall is not autosaved as the permanent project master; subsequent edits to the project are saved normally. A/B slots themselves are session-only and are cleared when another project is opened.
+
+Loudness-matched listening uses the quietest non-stale measured slot as the common reference. Other slots are attenuated by the LUFS difference, with a maximum 24 dB reduction and no positive monitor gain. This compensation is applied after the audio engine and before the monitor gain; it never changes the project render or export. A slot without a finite LUFS measurement, or one marked stale after track/bus changes, is auditionable without loudness compensation and should be recaptured before level-matched comparison.
+
+Track or bus edits invalidate stored A/B measurements because the captured slot stores the master chain, not a duplicate of the full multitrack session. A new capture measures the complete current mix and restores a valid comparison reference.
+
 ## Automation
 
 Lanes are stored per track: `volume`, `pan`, or a processor parameter keyed by processor id. `valueAtTime` interpolates
