@@ -22,22 +22,29 @@ const STYLE_BEHAVIOR: StyleBehavior[] = [
 ];
 
 /**
- * Feed-forward compressor with a soft knee, program-style behaviours, an
- * optional sidechain key and a true dry/wet mix.
+ * Feed-forward compressor with independent left/right detector state,
+ * configurable stereo linking, an optional external key, lookahead and a
+ * true dry/wet mix.
  *
- * Detection runs on the (optionally filtered or external) key signal, while the
- * audio is delayed by the lookahead amount so transients are caught before they
- * pass. Gain reduction is applied in dB, which is what makes the ratio behave
- * like a real compressor rather than a soft clipper.
+ * At 0% stereo link each channel has its own detector and gain-reduction
+ * envelope. At 100%, both channels follow the stronger detector, preserving
+ * the stereo image through common gain reduction. Intermediate values blend
+ * each channel's detector level towards the stronger channel.
+ *
+ * Detection runs on the (optionally filtered or external) key signal, while
+ * the programme audio is delayed by the lookahead amount.
  */
 export class Compressor implements AudioProcessor {
   readonly type = 'compressor';
   readonly latency = 0;
   private sr = 48000;
   private values: ParamValues = {};
-  private ballistics = new DbBallistics(48000, 10, 100);
-  private scFilter = new Biquad();
-  private rmsState = 0;
+  private ballisticsL = new DbBallistics(48000, 10, 100);
+  private ballisticsR = new DbBallistics(48000, 10, 100);
+  private scFilterL = new Biquad();
+  private scFilterR = new Biquad();
+  private rmsStateL = 0;
+  private rmsStateR = 0;
   private grDb = 0;
   private delayL: Float32Array = new Float32Array(0);
   private delayR: Float32Array = new Float32Array(0);
@@ -57,28 +64,32 @@ export class Compressor implements AudioProcessor {
     this.delayL = new Float32Array(maxDelay);
     this.delayR = new Float32Array(maxDelay);
     this.delayIndex = 0;
-    this.ballistics.setTimes(10, 100, sampleRate);
-    this.scFilter.configure('highpass', 120, 0, 0.707, sampleRate);
+    this.ballisticsL.setTimes(10, 100, sampleRate);
+    this.ballisticsR.setTimes(10, 100, sampleRate);
+    this.scFilterL.configure('highpass', 120, 0, 0.707, sampleRate);
+    this.scFilterR.configure('highpass', 120, 0, 0.707, sampleRate);
     void maxBlock;
   }
 
   setValues(values: ParamValues): void {
     this.values = values;
     const style = Math.round(values.style ?? 0);
-    this.style = style;
-    const behavior = STYLE_BEHAVIOR[style] ?? STYLE_BEHAVIOR[0];
+    this.style = Math.max(0, Math.min(STYLE_BEHAVIOR.length - 1, style));
+    const behavior = STYLE_BEHAVIOR[this.style];
     const attack = (values.attack ?? 10) * behavior.attackScale;
     const release = (values.release ?? 100) * behavior.releaseScale;
-    this.ballistics.setTimes(attack, release, this.sr);
-    this.scFilter.configure('highpass', clamp(values.scHpf ?? 120, 20, 1000), 0, 0.707, this.sr);
+    this.ballisticsL.setTimes(attack, release, this.sr);
+    this.ballisticsR.setTimes(attack, release, this.sr);
+    const sidechainHighPass = clamp(values.scHpf ?? 120, 20, 1000);
+    this.scFilterL.configure('highpass', sidechainHighPass, 0, 0.707, this.sr);
+    this.scFilterR.configure('highpass', sidechainHighPass, 0, 0.707, this.sr);
     const threshold = values.threshold ?? -20;
     const ratio = (values.ratio ?? 4) * behavior.ratioScale;
     const auto = (values.autoMakeup ?? 0) > 0.5;
     const manual = values.makeup ?? 0;
     const autoDb = auto && ratio > 1 ? -threshold * (1 - 1 / ratio) * 0.7 : 0;
     this.makeup = dbToGain(manual + autoDb);
-    const mixPct = clamp(values.mix ?? 100, 0, 100);
-    this.mix = mixPct / 100;
+    this.mix = clamp(values.mix ?? 100, 0, 100) / 100;
     this.delaySamples = Math.round(clamp(values.lookahead ?? 0, 0, 20) * 0.001 * this.sr);
   }
 
@@ -87,53 +98,58 @@ export class Compressor implements AudioProcessor {
     this.sidechainR = R;
   }
 
+  private targetReduction(detector: number, threshold: number, ratio: number, knee: number): number {
+    const over = gainToDb(Math.max(detector, 1e-7)) - threshold;
+    if (over <= 0) return 0;
+    if (knee > 0 && over < knee) {
+      return ((1 - 1 / ratio) * over * over) / (2 * knee);
+    }
+    return (1 - 1 / ratio) * over;
+  }
+
   process(L: Float32Array, R: Float32Array, n: number): void {
     if (this.delayL.length === 0) this.prepare(this.sr, n);
     const threshold = this.values.threshold ?? -20;
-    const ratio = Math.max(1, (this.values.ratio ?? 4) * (STYLE_BEHAVIOR[this.style] ? STYLE_BEHAVIOR[this.style].ratioScale : 1));
-    const knee = Math.max(0, (this.values.knee ?? 6) * (STYLE_BEHAVIOR[this.style]?.kneeScale ?? 1));
     const behavior = STYLE_BEHAVIOR[this.style] ?? STYLE_BEHAVIOR[0];
+    const ratio = Math.max(1, (this.values.ratio ?? 4) * behavior.ratioScale);
+    const knee = Math.max(0, (this.values.knee ?? 6) * behavior.kneeScale);
     const link = clamp((this.values.link ?? 100) / 100, 0, 1);
     const useExternal = this.sidechainL !== null && this.sidechainR !== null;
     const rmsMix = behavior.detectorRms;
     const rmsCoeff = 1 - Math.exp(-1 / (0.01 * this.sr));
     const delayLen = this.delayL.length;
     const delay = this.delaySamples;
-    let maxGr = 0;
 
     for (let i = 0; i < n; i++) {
-      const scL = useExternal ? this.sidechainL![i] : L[i];
-      const scR = useExternal ? this.sidechainR![i] : R[i];
-      const filteredL = this.scFilter.process(scL);
-      const filteredR = this.scFilter.process(scR);
+      const scL = useExternal ? this.sidechainL![i] ?? 0 : L[i];
+      const scR = useExternal ? this.sidechainR![i] ?? 0 : R[i];
+      const filteredL = this.scFilterL.process(scL);
+      const filteredR = this.scFilterR.process(scR);
 
-      let detect = Math.max(Math.abs(filteredL), Math.abs(filteredR));
+      let detectL = Math.abs(filteredL);
+      let detectR = Math.abs(filteredR);
       if (rmsMix > 0) {
-        this.rmsState += ((filteredL * filteredL + filteredR * filteredR) * 0.5 - this.rmsState) * rmsCoeff;
-        const rms = Math.sqrt(Math.max(0, this.rmsState));
-        detect = detect * (1 - rmsMix) + rms * rmsMix;
-      }
-      if (link < 1) {
-        // Partial linking keeps some independent movement between channels.
-        const l = Math.abs(filteredL);
-        const r = Math.abs(filteredR);
-        detect = detect * link + Math.max(l, r) * (1 - link) * 0 + detect * (1 - link);
+        this.rmsStateL += (filteredL * filteredL - this.rmsStateL) * rmsCoeff;
+        this.rmsStateR += (filteredR * filteredR - this.rmsStateR) * rmsCoeff;
+        const rmsL = Math.sqrt(Math.max(0, this.rmsStateL));
+        const rmsR = Math.sqrt(Math.max(0, this.rmsStateR));
+        detectL = detectL * (1 - rmsMix) + rmsL * rmsMix;
+        detectR = detectR * (1 - rmsMix) + rmsR * rmsMix;
       }
 
-      const levelDb = gainToDb(Math.max(detect, 1e-7));
-      const over = levelDb - threshold;
-      let target = 0;
-      if (over > 0) {
-        if (knee > 0 && over < knee) {
-          target = ((1 - 1 / ratio) * over * over) / (2 * knee);
-        } else {
-          target = (1 - 1 / ratio) * over;
-        }
-      }
-      const gr = this.ballistics.process(target);
-      if (gr > maxGr) maxGr = gr;
-      this.grDb = gr;
-      const gain = dbToGain(-gr) * this.makeup;
+      // Blend each channel towards the stronger detector. This gives 0% a
+      // genuine dual-mono response and 100% a common detector for both sides.
+      const linkedDetector = Math.max(detectL, detectR);
+      detectL += (linkedDetector - detectL) * link;
+      detectR += (linkedDetector - detectR) * link;
+
+      const targetL = this.targetReduction(detectL, threshold, ratio, knee);
+      const targetR = this.targetReduction(detectR, threshold, ratio, knee);
+      const grL = this.ballisticsL.process(targetL);
+      const grR = this.ballisticsR.process(targetR);
+      this.grDb = Math.max(grL, grR);
+      const gainL = dbToGain(-grL) * this.makeup;
+      const gainR = dbToGain(-grR) * this.makeup;
 
       this.delayL[this.delayIndex] = L[i];
       this.delayR[this.delayIndex] = R[i];
@@ -141,22 +157,18 @@ export class Compressor implements AudioProcessor {
       if (readIndex < 0) readIndex += delayLen;
       const dryL = this.delayL[readIndex];
       const dryR = this.delayR[readIndex];
-      let wetL = dryL * gain;
-      let wetR = dryR * gain;
-      if (this.mix < 1) {
-        wetL = wetL * this.mix + dryL * (1 - this.mix);
-        wetR = wetR * this.mix + dryR * (1 - this.mix);
-      }
-      L[i] = wetL;
-      R[i] = wetR;
-      const al = Math.abs(wetL);
-      const ar = Math.abs(wetR);
+      const wetL = dryL * gainL;
+      const wetR = dryR * gainR;
+      L[i] = wetL * this.mix + dryL * (1 - this.mix);
+      R[i] = wetR * this.mix + dryR * (1 - this.mix);
+
+      const al = Math.abs(L[i]);
+      const ar = Math.abs(R[i]);
       if (al > this.peakL) this.peakL = al;
       if (ar > this.peakR) this.peakR = ar;
       this.delayIndex = (this.delayIndex + 1) % delayLen;
     }
 
-    // Decay meter peaks at block rate.
     this.peakL *= 0.98;
     this.peakR *= 0.98;
   }
@@ -165,10 +177,15 @@ export class Compressor implements AudioProcessor {
     this.delayL.fill(0);
     this.delayR.fill(0);
     this.delayIndex = 0;
-    this.ballistics.reset();
-    this.scFilter.reset();
+    this.ballisticsL.reset();
+    this.ballisticsR.reset();
+    this.scFilterL.reset();
+    this.scFilterR.reset();
+    this.rmsStateL = 0;
+    this.rmsStateR = 0;
     this.grDb = 0;
-    this.rmsState = 0;
+    this.peakL = 0;
+    this.peakR = 0;
   }
 
   meter(): ProcessorMeter {
