@@ -52,10 +52,10 @@ export class DeEsser implements AudioProcessor {
     this.ballisticsL = new DbBallistics(sampleRate, 0.5, 60);
     this.ballisticsR = new DbBallistics(sampleRate, 0.5, 60);
     this.ballisticsLinked = new DbBallistics(sampleRate, 0.5, 60);
-    this.configure(clamp(6500, 2500, sampleRate * 0.45));
     this.mix = this.mixTarget;
     this.outputGain = this.outputGainTarget;
     this.reset();
+    this.configure(clamp(6500, 2500, sampleRate * 0.45), true);
   }
 
   setValues(values: ParamValues): void {
@@ -84,18 +84,18 @@ export class DeEsser implements AudioProcessor {
     }
   }
 
-  private configure(frequency: number): void {
+  private configure(frequency: number, immediate = false): void {
     this.lastFreq = frequency;
     const samples = Math.max(1, Math.round(this.sr * 0.02));
+    const highpass = this.highpassCoefficients(frequency);
+    const lowpass = this.lowpassCoefficients(frequency);
     for (const filter of [this.hpL, this.hpR, this.hpL2, this.hpR2]) {
-      filter.setSmoothed(
-        // Use the second-order Butterworth sections in cascade for an LR4 split.
-        this.highpassCoefficients(frequency),
-        samples,
-      );
+      if (immediate) filter.set(highpass);
+      else filter.setSmoothed(highpass, samples);
     }
     for (const filter of [this.lpL, this.lpR, this.lpL2, this.lpR2]) {
-      filter.setSmoothed(this.lowpassCoefficients(frequency), samples);
+      if (immediate) filter.set(lowpass);
+      else filter.setSmoothed(lowpass, samples);
     }
   }
 
@@ -200,6 +200,7 @@ export class DeEsser implements AudioProcessor {
     this.reduction = 0;
     this.reductionL = 0;
     this.reductionR = 0;
+    if (this.lastFreq > 0) this.configure(this.lastFreq, true);
   }
 
   meter(): ProcessorMeter {
