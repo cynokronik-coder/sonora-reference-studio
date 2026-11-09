@@ -312,10 +312,10 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
             <aside data-tour="studio-assistant" className="absolute inset-y-0 right-0 z-40 hidden w-[420px] max-w-[44%] border-l border-white/[.10] bg-[#0D0D1B] shadow-floating xl:flex 2xl:w-[480px]">
               <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
             </aside>
-            <div className="fixed inset-0 z-[70] bg-[#05050c]/65 backdrop-blur-sm xl:hidden" onClick={() => setAssistantOpen(false)}>
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#05050c]/65 p-3 backdrop-blur-sm sm:p-5 xl:hidden" onClick={() => setAssistantOpen(false)}>
               <aside
                 data-tour="studio-assistant"
-                className="absolute inset-y-0 right-0 flex w-[min(520px,96vw)] flex-col border-l border-white/[.10] bg-[#0D0D1B] shadow-floating"
+                className="flex h-full max-h-full w-full max-w-[640px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[.10] bg-[#0D0D1B] shadow-floating"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
