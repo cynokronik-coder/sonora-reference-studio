@@ -418,6 +418,7 @@ export default function ReferenceMatch() {
                 <input
                   type="checkbox"
                   checked={!excluded.has(proposal.id)}
+                  disabled={Boolean(busy)}
                   onChange={() => {
                     clearMatchAudition();
                     const next = new Set(excluded);
@@ -464,11 +465,11 @@ export default function ReferenceMatch() {
               <Button
                 variant="primary"
                 onClick={() => applyMatchPlan(matchPlan.proposals.filter((p) => !excluded.has(p.id)).map((p) => p.id))}
-                disabled={matchPlan.proposals.every((p) => excluded.has(p.id))}
+                disabled={Boolean(busy) || matchPlan.proposals.every((p) => excluded.has(p.id))}
               >
                 Apply {matchPlan.proposals.length - excluded.size} processors to master
               </Button>
-              <Button onClick={() => void verifyMaster()}>Render & measure master</Button>
+              <Button onClick={() => void verifyMaster()} disabled={Boolean(busy)}>Render & measure master</Button>
               <Button variant="ghost" onClick={() => useApp.getState().setScreen('mastering')}>Open mastering</Button>
               <span className="ml-auto text-2xs text-ink-500">
                 Predicted pre-limiter: {matchPlan.predicted.integratedLufs.toFixed(1)} LUFS · {matchPlan.predicted.truePeakDb.toFixed(1)} dBTP
