@@ -15,6 +15,7 @@ The suite uses synthetic signals only — no fixtures with unknown provenance.
 | Parametric EQ | bell gain and high-pass DC removal; RBJ shelf coefficients stay finite across ±18 dB, multiple sample rates and hostile Q inputs; Mid/Side-only routing isolation; separate M/S response curves; linear-phase 513-tap impulse peak aligns to reported 256-sample latency; factory preset ranges |
 | Dynamic EQ | band-filtered peak/RMS detection; active-band response vs off-band rejection; smooth knee/ratio/range/attack/release; stereo link at 0% and 100%; external-key frequency selectivity and clearing; per-band meters and preset parameter ranges |
 | Compressor | a signal over threshold is reduced and reports real gain reduction |
+| Dynamic EQ | band-specific signed detector filtering, peak/RMS mode, independent stereo detection, full-link common attenuation, ratio/knee/range envelope, frequency-matched external key, internal fallback, per-band meters and valid presets |
 | Limiter | output stays under a -1 dBTP ceiling with lookahead, and GR is reported |
 | Saturation | output remains finite and differs from input (harmonics added) |
 | Multiband | neutral three-band response stays within ±0.15 dB from 50 Hz–12 kHz at 44.1/48/96 kHz; band solo/bypass, frequency-matched external sidechain response, detector reset and preset parameter ranges |
