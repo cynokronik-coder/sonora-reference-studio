@@ -9,6 +9,7 @@ import { requestSonoraAi } from '../audio/ai/client';
 import { buildAssistantContext } from '../audio/ai/context';
 import { createValidatedAiProposal } from '../audio/ai/proposals';
 import { realtimeHost } from '../audio/engine/realtime';
+import type { AuditionMode } from '../audio/engine/audition';
 import type { EngineAsset } from '../audio/engine/renderer';
 import { createProcessorNode, createProject as newProject, createTrack, createClip, createBus, defaultMatchSettings, uid } from '../audio/model/defaults';
 import type {
@@ -80,6 +81,13 @@ export interface ABWorkingMix {
   volumeDb: number;
 }
 
+export interface MatchAuditionState {
+  mode: AuditionMode;
+  comparisonDb: number;
+  before: RenderStats;
+  after: RenderStats;
+}
+
 export interface BusyState {
   kind: 'import' | 'load' | 'analyze' | 'render' | 'match' | 'decode' | 'assistant';
   label: string;
@@ -121,6 +129,7 @@ interface AppState {
   analyses: Record<string, AnalysisReport>;
   matchPlan: MatchPlan | null;
   matchPreview: { before: number[]; after: number[] } | null;
+  matchAudition: MatchAuditionState | null;
   presets: PresetDefinition[];
   exports: ExportRecord[];
   selectedTrackId: string | null;
@@ -207,6 +216,9 @@ interface AppState {
   setMonitorDb: (db: number) => void;
 
   generateMatch: () => Promise<void>;
+  prepareMatchAudition: (proposalIds?: string[]) => Promise<void>;
+  setMatchAuditionMode: (mode: AuditionMode) => void;
+  clearMatchAudition: () => void;
   applyMatchPlan: (proposalIds?: string[]) => void;
   clearMatchPlan: () => void;
   verifyMaster: () => Promise<void>;
@@ -313,6 +325,7 @@ export const useApp = create<AppState>((set, get) => ({
   analyses: {},
   matchPlan: null,
   matchPreview: null,
+  matchAudition: null,
   presets: [...BUILT_IN_PRESETS],
   exports: [],
   selectedTrackId: null,
@@ -375,7 +388,10 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
 
-  setScreen: (screen) => set({ screen }),
+  setScreen: (screen) => {
+    if (get().screen === 'reference' && screen !== 'reference') get().clearMatchAudition();
+    set({ screen });
+  },
   setMode: (mode) => {
     try {
       localStorage.setItem('sonora:mode', mode);
@@ -406,6 +422,8 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
     realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     set({
       project,
       assets: [],
@@ -413,6 +431,7 @@ export const useApp = create<AppState>((set, get) => ({
       analyses: {},
       matchPlan: null,
       matchPreview: null,
+      matchAudition: null,
       selectedTrackId: null,
       selectedProcessorId: null,
       exports: [],
@@ -476,6 +495,8 @@ export const useApp = create<AppState>((set, get) => ({
       project.sampleRate = targetRate;
       await db.saveProject(project);
       realtimeHost.setComparisonGain(0);
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.clearMatchAuditionBuffers();
       set({
         project,
         assets,
@@ -495,6 +516,7 @@ export const useApp = create<AppState>((set, get) => ({
         history: [],
         future: [],
         matchPlan: null,
+        matchAudition: null,
         transport: {
           playing: false,
           position: 0,
@@ -514,6 +536,8 @@ export const useApp = create<AppState>((set, get) => ({
   closeProject: () => {
     realtimeHost.stop();
     realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, abSlots: [], activeSlot: null, workingMix: null, loudnessMatch: false, comparisonDb: 0, screen: 'projects' });
   },
 
@@ -700,8 +724,12 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   mutate: (mutator, options) => {
-    const state = get();
+    let state = get();
     if (!state.project) return;
+    if (state.matchAudition) {
+      get().clearMatchAudition();
+      state = get();
+    }
     const previous = cloneProject(state.project);
     const next = cloneProject(state.project);
     mutator(next);
@@ -733,8 +761,14 @@ export const useApp = create<AppState>((set, get) => ({
       lastCoalesceAt: Date.now(),
       ...(mixContextChanged && state.abSlots.length ? { abSlots: state.abSlots.map((slot) => ({ ...slot, stale: true })) } : {}),
       ...(clearAudition ? { activeSlot: null, workingMix: null, comparisonDb: 0 } : {}),
+      ...(projectContentChanged && state.matchAudition ? { matchAudition: null } : {}),
     });
     if (clearAudition) realtimeHost.setComparisonGain(0);
+    if (projectContentChanged && state.matchAudition) {
+      realtimeHost.clearMatchAuditionBuffers();
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.setComparisonGain(state.comparisonDb);
+    }
     if (!options?.skipPersist && !(state.activeSlot !== null && !projectContentChanged)) schedulePersist(next);
     syncEngine(next, get().assetBuffers);
   },
@@ -752,12 +786,15 @@ export const useApp = create<AppState>((set, get) => ({
       history: history.slice(0, -1),
       future: [project, ...future].slice(0, 50),
       selectedProcessorId: null,
+      matchAudition: null,
       activeSlot: null,
       workingMix: null,
       comparisonDb: 0,
     });
     schedulePersist(previous);
     realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     syncEngine(previous, get().assetBuffers);
   },
 
@@ -774,12 +811,15 @@ export const useApp = create<AppState>((set, get) => ({
       future: future.slice(1),
       history: [...history, project].slice(-50),
       selectedProcessorId: null,
+      matchAudition: null,
       activeSlot: null,
       workingMix: null,
       comparisonDb: 0,
     });
     schedulePersist(next);
     realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     syncEngine(next, get().assetBuffers);
   },
 
@@ -976,7 +1016,7 @@ export const useApp = create<AppState>((set, get) => ({
     realtimeHost.loadAssets(engineAssets(project, assetBuffers));
     realtimeHost.pushProject(project);
     realtimeHost.setMonitorGain(get().monitorDb);
-    realtimeHost.setComparisonGain(get().comparisonDb);
+    realtimeHost.setComparisonGain(get().matchAudition?.comparisonDb ?? get().comparisonDb);
     realtimeHost.setLoop(transport.loopEnabled, transport.loopStart, transport.loopEnd);
     if (transport.playing) {
       realtimeHost.pause();
@@ -1012,6 +1052,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   generateMatch: async () => {
+    get().clearMatchAudition();
     const { project, analyses, assets } = get();
     if (!project) return;
     const targetId = project.targetAssetIds[0];
@@ -1057,7 +1098,10 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
 
-  clearMatchPlan: () => set({ matchPlan: null, matchPreview: null }),
+  clearMatchPlan: () => {
+    get().clearMatchAudition();
+    set({ matchPlan: null, matchPreview: null });
+  },
 
   verifyMaster: async () => {
     const { project } = get();
@@ -1668,6 +1712,8 @@ export const useApp = create<AppState>((set, get) => ({
   clearAllData: async () => {
     realtimeHost.stop();
     realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     await db.clearAllData();
     set({
       projects: [],
@@ -1675,6 +1721,9 @@ export const useApp = create<AppState>((set, get) => ({
       assets: [],
       assetBuffers: {},
       analyses: {},
+      matchPlan: null,
+      matchPreview: null,
+      matchAudition: null,
       exports: [],
       presets: [...BUILT_IN_PRESETS],
       screen: 'dashboard',
@@ -1698,10 +1747,10 @@ function timelineDuration(project: ProjectState): number {
 
 async function renderProject(
   get: () => AppState,
-  options: { mode: 'master' | 'track'; trackId?: string; startSec: number; endSec: number; label?: string },
+  options: { mode: 'master' | 'track'; trackId?: string; startSec: number; endSec: number; label?: string; projectOverride?: ProjectState },
 ): Promise<{ L: Float32Array; R: Float32Array; sampleRate: number; stats: RenderStats }> {
   const state = get();
-  const project = state.project;
+  const project = options.projectOverride ?? state.project;
   if (!project) throw new Error('No project open.');
   let renderProjectState = cloneProject(project);
   if (options.mode === 'track' && options.trackId) {
