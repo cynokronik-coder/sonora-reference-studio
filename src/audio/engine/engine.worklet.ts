@@ -9,7 +9,7 @@ declare class AudioWorkletProcessor {
 import { ProjectRenderer, type EngineAsset } from './renderer';
 import type { ProjectState } from '../model/types';
 import { gainToDb } from '../dsp/util';
-import { copyAuditionBlock, type AuditionMode, type AuditionTransition, type StereoAuditionBuffers } from './audition';
+import { renderAuditionBlock, type AuditionMode, type AuditionTransition, type StereoAuditionBuffers } from './audition';
 
 interface AssetPayload {
   id: string;
@@ -196,10 +196,14 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
           afterL: this.matchAuditionAfterL, afterR: this.matchAuditionAfterR,
         };
       }
-      this.matchBeforeRenderer!.renderBlock(this.position, outL.length, this.matchAuditionBeforeL, this.matchAuditionBeforeR);
-      this.matchAfterRenderer!.renderBlock(this.position, outL.length, this.matchAuditionAfterL, this.matchAuditionAfterR);
-      const elapsed = copyAuditionBlock(
-        this.matchAuditionBuffers, this.matchAuditionMode, 0, outL, outR,
+      const elapsed = renderAuditionBlock(
+        this.matchBeforeRenderer!,
+        this.matchAfterRenderer!,
+        this.position,
+        this.matchAuditionMode,
+        this.matchAuditionBuffers,
+        outL,
+        outR,
         this.matchAuditionTransition ?? undefined,
       );
       if (this.matchAuditionTransition) {
