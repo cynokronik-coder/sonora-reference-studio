@@ -103,7 +103,7 @@ const originY = opensBelow ? 0 : panel.height;
 setPosition({
   top,
   left,
-  transformOrigin: \`\${originX}px \${originY}px\`,
+  transformOrigin: `${originX}px ${originY}px`,
 });
 ~~~
 
