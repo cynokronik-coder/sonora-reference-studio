@@ -451,14 +451,47 @@ export const clipperDefinition: ProcessorDefinition = {
   name: 'Clipper',
   shortName: 'CLIP',
   category: 'mastering',
-  description: 'Soft, hard or tanh clipping with ceiling and dry/wet. Placed before the limiter to shave peaks musically.',
-  purpose: 'Recovers loudness from isolated peaks with less pumping than a limiter alone, at the cost of added harmonics.',
+  description: 'Soft, hard or tanh clip curves with adjustable internal ceiling, stereo metering and 1x/2x/4x oversampling.',
+  purpose: 'Shaves transient peaks and adds harmonics before the limiter. Output trim is post clip and can raise the final level above the internal clipping ceiling.',
   params: [
     { key: 'mode', label: 'Mode', kind: 'enum', options: [...CLIPPER_MODES], default: 0 },
     { key: 'drive', label: 'Drive', kind: 'float', min: 0, max: 18, step: 0.1, default: 3, unit: 'dB' },
-    { key: 'ceiling', label: 'Ceiling', kind: 'float', min: -12, max: 0, step: 0.1, default: -0.3, unit: 'dB' },
+    { key: 'ceiling', label: 'Clip ceiling', kind: 'float', min: -12, max: 0, step: 0.1, default: -0.3, unit: 'dBFS' },
     { key: 'mix', label: 'Dry/wet', kind: 'float', min: 0, max: 100, step: 1, default: 100, unit: '%' },
     { key: 'output', label: 'Output', kind: 'float', min: -12, max: 12, step: 0.1, default: 0, unit: 'dB' },
+    { key: 'oversample', label: 'Oversampling', kind: 'enum', options: ['Off', '2x', '4x'], default: 2, advanced: true },
   ],
   create: () => new Clipper(),
 };
+
+export interface ClipperPreset {
+  id: string;
+  name: string;
+  description: string;
+  values: ParamValues;
+}
+
+function clipperPreset(id: string, name: string, description: string, overrides: ParamValues): ClipperPreset {
+  const values: ParamValues = {};
+  for (const param of clipperDefinition.params) values[param.key] = param.default;
+  return { id, name, description, values: { ...values, ...overrides } };
+}
+
+/** Editable peak-shaping starting points; always level-match against bypass. */
+export const CLIPPER_PRESETS: ClipperPreset[] = [
+  clipperPreset('soft-peak-rounding', 'Soft peak rounding', 'A restrained soft curve for shaving transient edges before final limiting.', {
+    mode: 0, drive: 4, ceiling: -0.5, mix: 65, output: -0.5, oversample: 2,
+  }),
+  clipperPreset('drum-impact', 'Drum impact', 'A firmer clipper setting for drum transients; listen for added grit and cymbal distortion.', {
+    mode: 1, drive: 7, ceiling: -1, mix: 60, output: -1.5, oversample: 2,
+  }),
+  clipperPreset('tanh-smoothness', 'Tanh smoothness', 'A rounded nonlinear curve for softer peak shaping and harmonic density.', {
+    mode: 2, drive: 6, ceiling: -1, mix: 55, output: -1.2, oversample: 2,
+  }),
+  clipperPreset('mastering-peak-shave', 'Mastering peak shave', 'A low-drive parallel starting point for catching occasional peaks before the limiter.', {
+    mode: 0, drive: 2.5, ceiling: -0.8, mix: 30, output: -0.3, oversample: 2,
+  }),
+  clipperPreset('hard-creative-clip', 'Hard creative clip', 'An assertive hard clip for deliberate sound design rather than transparent mastering.', {
+    mode: 1, drive: 12, ceiling: -1.5, mix: 100, output: -3, oversample: 2,
+  }),
+];
