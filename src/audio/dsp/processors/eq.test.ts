@@ -73,7 +73,6 @@ describe('Parametric EQ routing and parameter safety', () => {
     let error = 0;
     for (let i = 0; i < left.length; i++) error = Math.max(error, Math.abs(left[i] - reference[i]));
     expect(error).toBeLessThan(1e-5);
-    expect(error).toBeLessThan(1e-5);
   });
 
   it('does not apply a mid-only filter to an anti-phase side signal', () => {
