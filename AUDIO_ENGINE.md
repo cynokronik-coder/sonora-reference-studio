@@ -30,6 +30,8 @@ Clip fill (offset, gain, fades)
 Solo logic: if any track is soloed, only soloed tracks contribute. Muted buses are zeroed. Reference tracks behave like
 audio tracks and can be auditioned independently.
 
+External sidechain keys are tapped from each source track's raw clip signal before its own processing and fader. Track, bus and master processor chains receive the key assignment before each block is processed. Dynamics processors that implement `setSidechain` may use this key for detection; disconnecting the source clears the key and returns to internal detection.
+
 The multiband compressor splits programme audio and external sidechain keys through separate, identically configured
 LR4 crossover networks. Each band compressor receives only its matching frequency region of the external key. Sidechain
 filter state is reset when the key source changes; the normal renderer uses stable raw-key buffers across blocks.
