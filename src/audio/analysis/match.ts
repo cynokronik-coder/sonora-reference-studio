@@ -319,6 +319,18 @@ function referenceFor(
   return resolveReferenceMetrics(sources[category], references, section);
 }
 
+function confidenceFor(
+  base: number,
+  reference: ResolvedReferenceMetrics,
+  category: keyof CategorySource,
+): number {
+  // This is a transparent heuristic, not a calibrated probability. Agreement
+  // between references and source-analysis quality reduce overconfident advice.
+  const agreementFactor = 0.65 + 0.35 * reference.agreement[category];
+  const qualityFactor = 0.8 + 0.2 * reference.quality;
+  return clamp(base * agreementFactor * qualityFactor, 0.1, 0.95);
+}
+
 function fmtDb(v: number, digits = 1): string {
   return Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toFixed(digits)} dB` : '—';
 }
@@ -454,9 +466,23 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
   const proposals: MatchProposal[] = [];
   const diagnostics: MetricDiff[] = [];
 
+  const sectionFallbackWarnings = new Set<string>();
+  if (settings.targetSection !== 'full' && !pickSection(target, settings.targetSection)) {
+    warnings.push({
+      kind: 'limitation',
+      message: `The requested target section (“${settings.targetSection}”) was not detected. Full-track measurements are being used for the target.`,
+    });
+  }
   const refFor = (category: keyof CategorySource) => {
-    const ref = referenceFor(sources, category, references);
-    return { report: ref.report, assetId: ref.assetId, metrics: metricsFrom(ref.report, settings.referenceSection) };
+    const resolved = referenceFor(sources, category, references, settings.referenceSection);
+    for (const assetId of resolved.fallbackAssetIds) sectionFallbackWarnings.add(assetId);
+    if (resolved.fallbackAssetIds.length) {
+      warnings.push({
+        kind: 'limitation',
+        message: `The requested reference section (“${settings.referenceSection}”) was not detected in ${resolved.fallbackAssetIds.length} selected reference(s). Full-track measurements are used for those files.`,
+      });
+    }
+    return resolved;
   };
 
   // ---------- Tonal balance ----------
@@ -485,10 +511,10 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
         params: eq.params,
         reason:
           `Tonal balance differs most around ${strongest?.center ?? 0} Hz ` +
-          `(${fmtDb(strongest?.v ?? 0)} vs. ${referenceName(references, sources.frequencyBalance)}). ` +
+          `(${fmtDb(strongest?.v ?? 0)} vs. ${ref.name}). ` +
           `The EQ bands below use the smoothed spectral difference, capped at +${settings.maxEqBoost}/-${settings.maxEqCut} dB.`,
         expected: 'Frequency response moves toward the reference balance while keeping the target arrangement intact.',
-        confidence: clamp(0.55 + (referenceCountForCategory(references, sources.frequencyBalance) - 1) * 0.1, 0.4, 0.9),
+        confidence: confidenceFor(0.55 + (ref.assetIds.length - 1) * 0.1, ref, 'frequencyBalance'),
         before: [
           {
             label: 'Tonal difference',
@@ -561,7 +587,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
           `The target has ${crestDelta.toFixed(1)} dB more crest factor than the reference. ` +
           `A ${ratio.toFixed(1)}:1 compressor with an 8 dB knee reduces the highest peaks and brings average density closer.`,
         expected: `Crest factor moves toward ${predictedCrest.toFixed(1)} dB with transient detail preserved at a ${(55 + 45 * scales.dynamics).toFixed(0)}% wet mix.`,
-        confidence: 0.72,
+        confidence: confidenceFor(0.72, ref, 'dynamics'),
         before: [
           {
             label: 'Crest factor',
@@ -608,7 +634,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
           `Integrated loudness is ${requested.toFixed(1)} LU from the reference. ` +
           `Applying ${allowed >= 0 ? '+' : ''}${allowed.toFixed(1)} dB respects the request and the ±${Math.abs(settings.maxLoudnessChange)} dB matching limit.`,
         expected: `Integrated level approaches ${predictedLoudness.toFixed(1)} LUFS before the limiter.`,
-        confidence: 0.88,
+        confidence: confidenceFor(0.88, ref, 'loudness'),
         before: [
           {
             label: 'Integrated loudness',
@@ -657,7 +683,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
           `The reference has ${delta > 0 ? 'wider' : 'narrower'} side energy by ${Math.abs(delta).toFixed(1)} dB. ` +
           `Width is scaled to ${widthPercent.toFixed(0)}% while keeping everything below 180 Hz mono.`,
         expected: delta > 0 ? 'A wider image with a stable mono low end.' : 'A tighter image more consistent with the reference.',
-        confidence: 0.8,
+        confidence: confidenceFor(0.8, ref, 'stereoWidth'),
         before: [
           {
             label: 'Side / mid ratio',
@@ -709,7 +735,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
           `(${(tgt.punchScore * 100).toFixed(0)}% vs ${(ref.metrics.punchScore * 100).toFixed(0)}%). ` +
           `Transient attack is set to ${attack.toFixed(0)}%.`,
         expected: delta > 0 ? 'Drums and plucks hit harder without a level increase.' : 'Transients are softened to match the reference envelope.',
-        confidence: 0.62,
+        confidence: confidenceFor(0.62, ref, 'punch'),
         before: [
           {
             label: 'Punch score',
@@ -756,7 +782,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
           `The reference has ${harmonicDelta > 0 ? 'more' : 'different'} harmonic density and a ${tonalDelta > 0 ? 'warmer' : 'brighter'} tilt. ` +
           `Saturation drive of ${drive.toFixed(1)} dB is applied at ${(25 + 45 * scales.saturation).toFixed(0)}% wet to add texture without thick distortion.`,
         expected: 'Denser harmonics and a slightly fuller top end. The exact harmonic signature of the reference cannot be cloned from measurement.',
-        confidence: 0.55,
+        confidence: confidenceFor(0.55, ref, 'saturation'),
         before: [
           {
             label: 'Spectral flatness',
@@ -792,7 +818,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
         reason:
           'The reference has a wider loudness range with a more glued low end. A gentle low-band bus compression stage adds density without flattening the top.',
         expected: 'More consistent low-frequency energy and a cohesive, denser master character.',
-        confidence: 0.5,
+        confidence: confidenceFor(0.5, ref, 'character'),
         before: [
           {
             label: 'Loudness range',
@@ -892,16 +918,6 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
     },
     effectiveScale: scales,
   };
-}
-
-function referenceName(refs: MatchGenerationOptions['references'], index: number): string {
-  const i = clamp(Math.round(index), 0, refs.length - 1);
-  return `reference ${i + 1}`;
-}
-
-function referenceCountForCategory(refs: MatchGenerationOptions['references'], index: number): number {
-  void index;
-  return refs.length;
 }
 
 /** Convert a plan into editable processor nodes for a project. */
