@@ -149,9 +149,16 @@ Gentle width, Haas creative and Mono check. Always compare in mono and check cor
 ## Time
 
 ### Reverb
-Freeverb-derived topology: eight parallel damped comb filters and four allpass diffusers per channel, with stereo spread.
-Room/hall/plate/spring presets alter feedback, damping, diffusion and default pre-delay. Pre-delay, decay, damping, width,
-low/high cut, wet mix and output. Algorithmic synthesis, not convolution.
+Freeverb-derived algorithmic stereo reverb: eight parallel damped feedback combs feed four serial allpass diffusers per
+channel, with slightly offset right-channel delay lengths. Each comb's feedback is derived from its actual delay length
+and the selected RT60 decay time in seconds: (g = 10^{-3D/(f_s T_{60})}). This makes the Decay control a real
+approximate 60 dB decay-time target rather than an arbitrary room-size coefficient. Room, Hall, Plate and Spring
+characters alter damping, diffusion and suggested pre-delay without secretly rescaling the displayed RT60. Predelay
+supports the full 0–250 ms range with fractional-sample interpolation. Damping, diffusion, RT60, predelay, width, wet
+mix, output and tone filters ramp over 20 ms; filters are redesigned only when their cutoffs change. Left/right comb,
+allpass, predelay and tone-filter histories are independent. Factory starting points include Small room, Vocal plate,
+Large hall, Spring amp and Ambient wash. This is an algorithmic synthesis reverb, not convolution or a simulation of a
+measured room impulse response.
 
 ### Delay
 Stereo, ping-pong, slapback and multi-tap modes. Tempo-synced note values or free milliseconds, feedback, damping,
