@@ -116,15 +116,13 @@ export class DynamicEq implements AudioProcessor {
     this.sidechainR = R;
   }
 
-  private detectorLevel(sample: number, mode: number, windowMs: number, band: DynBand, channel: 'L' | 'R'): number {
-    const absolute = Math.abs(sample);
-    if (mode < 0.5) return absolute;
-    const coefficient = 1 - Math.exp(-1 / (Math.max(1, windowMs) * 0.001 * this.sr));
+  private detectorLevel(sample: number, mode: number, rmsCoefficient: number, band: DynBand, channel: 'L' | 'R'): number {
+    if (mode < 0.5) return Math.abs(sample);
     if (channel === 'L') {
-      band.rmsStateL += (sample * sample - band.rmsStateL) * coefficient;
+      band.rmsStateL += (sample * sample - band.rmsStateL) * rmsCoefficient;
       return Math.sqrt(Math.max(0, band.rmsStateL));
     }
-    band.rmsStateR += (sample * sample - band.rmsStateR) * coefficient;
+    band.rmsStateR += (sample * sample - band.rmsStateR) * rmsCoefficient;
     return Math.sqrt(Math.max(0, band.rmsStateR));
   }
 
@@ -177,6 +175,9 @@ export class DynamicEq implements AudioProcessor {
       const stereoLink = clamp(bandValue(this.values, bandIndex, 'link', 100), 0, 100) / 100;
       const detectorMode = clamp(bandValue(this.values, bandIndex, 'mode', 0), 0, 1);
       const rmsWindow = clamp(bandValue(this.values, bandIndex, 'rmsWindow', 10), 1, 100);
+      // Compute once per band per block, rather than evaluating Math.exp twice
+      // for every sample in the audio callback.
+      const rmsCoefficient = 1 - Math.exp(-1 / (rmsWindow * 0.001 * this.sr));
       const band = this.bands[bandIndex];
 
       const bandShapeChanged = Math.abs(frequency - band.lastFreq) > 0.25 || Math.abs(q - band.lastQ) > 0.002;
@@ -199,8 +200,8 @@ export class DynamicEq implements AudioProcessor {
         // avoids creating a rectified waveform before the band-pass detector.
         const detectorL = band.detectorL.process(keyL[sample] ?? 0);
         const detectorR = band.detectorR.process(keyR[sample] ?? 0);
-        let levelL = this.detectorLevel(detectorL, detectorMode, rmsWindow, band, 'L');
-        let levelR = this.detectorLevel(detectorR, detectorMode, rmsWindow, band, 'R');
+        let levelL = this.detectorLevel(detectorL, detectorMode, rmsCoefficient, band, 'L');
+        let levelR = this.detectorLevel(detectorR, detectorMode, rmsCoefficient, band, 'R');
 
         const linkedLevel = Math.max(levelL, levelR);
         levelL += (linkedLevel - levelL) * stereoLink;
