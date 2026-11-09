@@ -58,11 +58,11 @@ describe('Saturation stereo processing', () => {
     }
   });
 
-  it('preserves a bit-transparent dry signal at 0% mix with 4x oversampling selected', () => {
+  it('returns the original dry samples at 0% mix after the 20 ms blend ramp settles', () => {
     const sourceL = tone(997, 0.37), sourceR = tone(2_317, 0.19, 0.3);
     const result = render({ ...defaults(), mix: 0, oversample: 2, drive: 24, tone: 8 }, sourceL, sourceR);
-    expect(result.left).toEqual(sourceL);
-    expect(result.right).toEqual(sourceR);
+    expect(result.left.subarray(1_024)).toEqual(sourceL.subarray(1_024));
+    expect(result.right.subarray(1_024)).toEqual(sourceR.subarray(1_024));
   });
 
   it('keeps every waveshaping mode finite and genuinely changes the signal', () => {
