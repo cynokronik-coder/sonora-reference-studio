@@ -28,8 +28,13 @@
   --sonora-text-secondary: #B9B7C9;
   --sonora-text-muted: #85849C;
 
+  --sonora-duration-fast: 120ms;
+  --sonora-duration-normal: 180ms;
+  --sonora-duration-smooth: 240ms;
+  --sonora-duration-panel: 280ms;
   --sonora-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
   --sonora-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --sonora-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
   --sonora-radius-panel: 22px;
   --sonora-radius-card: 17px;
@@ -264,6 +269,16 @@ input[type='range']:focus-visible::-moz-range-thumb {
 
 .sonora-meter-fill--top {
   transform-origin: top;
+}
+
+@keyframes sonora-workspace-enter {
+  from { opacity: 0.55; transform: translate3d(7px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.sonora-workspace-motion {
+  animation: sonora-workspace-enter 190ms var(--sonora-ease-out) both;
+  will-change: opacity, transform;
 }
 
 .sonora-button-motion {
