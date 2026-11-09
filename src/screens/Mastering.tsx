@@ -247,6 +247,7 @@ export default function Mastering() {
                             <div className="mt-2 space-y-1 font-mono text-[10px] leading-relaxed text-ink-400">
                               <div>{slot.lufs !== null ? `${slot.lufs.toFixed(1)} LUFS` : 'LUFS —'}</div>
                               <div>{slot.truePeakDb !== null ? `${slot.truePeakDb.toFixed(1)} dBTP` : 'Peak —'}</div>
+                              {slot.stale && <div className="font-sans text-[9px] text-amber-300">Mix changed · recapture</div>}
                             </div>
                             <Button size="sm" variant={selected ? 'primary' : 'secondary'} className="mt-2 w-full" disabled={busy?.kind === 'render'} onClick={() => recallSlot(slot.id)}>{selected ? 'Selected' : 'Audition'}</Button>
                             <Button size="sm" variant="ghost" className="mt-1 w-full" disabled={busy?.kind === 'render'} onClick={() => void captureSlot(label)}>Replace</Button>
@@ -266,7 +267,7 @@ export default function Mastering() {
                       <Button size="sm" variant="secondary" disabled={busy?.kind === 'render'} onClick={restoreWorkingMix}>Return to working mix</Button>
                     )}
                   </div>
-                  <p className="text-2xs leading-relaxed text-ink-500">Capture measures the complete current mix. Audition switches the saved master chain; Replace stores the chain currently loaded in the mastering rack.</p>
+                  <p className="text-2xs leading-relaxed text-ink-500">Capture measures the complete current mix. Audition switches the saved master chain; Replace stores the chain currently loaded in the mastering rack. Slots last for this session. Track or bus edits mark prior measurements stale.</p>
                 </div>
               </Panel>
             </div>
