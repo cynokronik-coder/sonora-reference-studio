@@ -174,7 +174,7 @@ interface AppState {
   setToast: (message: string | null) => void;
   clearBusy: () => void;
 
-  mutate: (mutator: (project: ProjectState) => void, options?: { coalesce?: string; preserveAb?: boolean; skipPersist?: boolean }) => void;
+  mutate: (mutator: (project: ProjectState) => void, options?: { coalesce?: string; preserveAb?: boolean; skipPersist?: boolean; skipHistory?: boolean }) => void;
   undo: () => void;
   redo: () => void;
   saveNow: () => Promise<void>;
@@ -710,15 +710,24 @@ export const useApp = create<AppState>((set, get) => ({
       JSON.stringify(previous.buses) !== JSON.stringify(next.buses) ||
       previous.tempo !== next.tempo || previous.sampleRate !== next.sampleRate;
     const masterChanged = JSON.stringify(previous.master) !== JSON.stringify(next.master);
+    const clearAudition = projectContentChanged && state.activeSlot !== null && !options?.preserveAb;
+    // A/B recalls are temporary views. Keep history and the persisted project
+    // anchored to the user's working master, not to the auditioned snapshot.
+    if (state.activeSlot !== null && state.workingMix?.projectId === state.project.id) {
+      previous.master.processors = structuredClone(state.workingMix.processors);
+      previous.master.volumeDb = state.workingMix.volumeDb;
+      if (clearAudition && !masterChanged) {
+        next.master.processors = structuredClone(state.workingMix.processors);
+        next.master.volumeDb = state.workingMix.volumeDb;
+      }
+    }
     next.updatedAt = Date.now();
-    const clearAudition = (masterChanged || mixContextChanged) &&
-      state.activeSlot !== null && !options?.preserveAb;
     const coalesce = options?.coalesce;
     const shouldCoalesce =
       Boolean(coalesce) && state.lastCoalesceKey === coalesce && Date.now() - state.lastCoalesceAt < 800;
     set({
       project: next,
-      history: shouldCoalesce ? state.history : [...state.history.slice(-49), previous],
+      history: options?.skipHistory ? state.history : shouldCoalesce ? state.history : [...state.history.slice(-49), previous],
       future: [],
       lastCoalesceKey: coalesce ?? null,
       lastCoalesceAt: Date.now(),
@@ -726,11 +735,15 @@ export const useApp = create<AppState>((set, get) => ({
       ...(clearAudition ? { activeSlot: null, workingMix: null, comparisonDb: 0 } : {}),
     });
     if (clearAudition) realtimeHost.setComparisonGain(0);
-    if (!options?.skipPersist) schedulePersist(next);
+    if (!options?.skipPersist && !(state.activeSlot !== null && !projectContentChanged)) schedulePersist(next);
     syncEngine(next, get().assetBuffers);
   },
 
   undo: () => {
+    if (get().activeSlot !== null) {
+      get().restoreWorkingMix();
+      return;
+    }
     const { history, project, future } = get();
     if (!history.length || !project) return;
     const previous = history[history.length - 1];
@@ -749,6 +762,10 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   redo: () => {
+    if (get().activeSlot !== null) {
+      get().restoreWorkingMix();
+      return;
+    }
     const { future, project, history } = get();
     if (!future.length || !project) return;
     const next = future[0];
@@ -767,8 +784,13 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   saveNow: async () => {
-    const project = get().project;
-    if (!project) return;
+    const state = get();
+    if (!state.project) return;
+    const project = cloneProject(state.project);
+    if (state.activeSlot !== null && state.workingMix?.projectId === project.id) {
+      project.master.processors = structuredClone(state.workingMix.processors);
+      project.master.volumeDb = state.workingMix.volumeDb;
+    }
     await db.saveProject(project);
     set({ lastSavedAt: Date.now() });
   },
@@ -1441,7 +1463,7 @@ export const useApp = create<AppState>((set, get) => ({
     get().mutate((next) => {
       next.master.processors = structuredClone(slot.processors);
       next.master.volumeDb = slot.volumeDb;
-    }, { preserveAb: true, skipPersist: true });
+    }, { preserveAb: true, skipPersist: true, skipHistory: true });
     const comparisonDb = get().loudnessMatch
       ? loudnessMatchedMonitorGain(get().abSlots, slot.id)
       : 0;
@@ -1475,7 +1497,7 @@ export const useApp = create<AppState>((set, get) => ({
       get().mutate((next) => {
         next.master.processors = structuredClone(workingMix.processors);
         next.master.volumeDb = workingMix.volumeDb;
-      }, { preserveAb: true });
+      }, { preserveAb: true, skipHistory: true });
     }
     realtimeHost.setComparisonGain(0);
     set({ activeSlot: null, workingMix: null, comparisonDb: 0 });
