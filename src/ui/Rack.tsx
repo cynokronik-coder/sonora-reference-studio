@@ -334,23 +334,29 @@ function ProcessorParams({
                 );
               }
               return (
-                <ParamSlider
-                  key={spec.key}
-                  label={spec.label}
-                  value={value}
-                  min={spec.min ?? 0}
-                  max={spec.max ?? 1}
-                  step={spec.step ?? 0.01}
-                  unit={spec.unit}
-                  logarithmic={spec.scale === 'log'}
-                  compact
-                  onChange={(next) => update(spec.key, clamp(next, spec.min ?? -Infinity, spec.max ?? Infinity))}
-                  format={
-                    spec.scale === 'log' && (spec.max ?? 0) >= 1000
-                      ? (v) => `${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v)} ${spec.unit ?? ''}`.trim()
-                      : undefined
-                  }
-                />
+                <div key={spec.key} className="min-w-0">
+                  <ParamSlider
+                    label={spec.label}
+                    value={value}
+                    min={spec.min ?? 0}
+                    max={spec.max ?? 1}
+                    step={spec.step ?? 0.01}
+                    unit={spec.unit}
+                    logarithmic={spec.scale === 'log'}
+                    compact
+                    onChange={(next) => update(spec.key, clamp(next, spec.min ?? -Infinity, spec.max ?? Infinity))}
+                    format={
+                      spec.scale === 'log' && (spec.max ?? 0) >= 1000
+                        ? (v) => `${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v)} ${spec.unit ?? ''}`.trim()
+                        : undefined
+                    }
+                  />
+                  {node.type === 'compressor' && spec.key === 'link' && (
+                    <p className="mt-1 text-[10px] leading-relaxed text-ink-500">
+                      0% compresses left and right independently. 100% uses the louder detector for shared stereo gain reduction.
+                    </p>
+                  )}
+                </div>
               );
             })}
           </div>
