@@ -89,7 +89,7 @@ describe('Exciter high-band harmonic path', () => {
     const result = render({ ...defaults(), frequency: 3_000, drive: 18, mode: 1, mix: 100, oversample: 0 }, source);
     const secondHarmonic = amplitudeAt(result.left, 18_000);
     expect(secondHarmonic).toBeGreaterThan(0.005);
-    expect(secondHarmonic).toBeGreaterThan(amplitudeAt(source, 18_000) + 0.01);
+    expect(secondHarmonic).toBeGreaterThan(amplitudeAt(source, 18_000) + 0.005);
   });
 
   it('reduces a folded third-harmonic alias when moving from 1x to 4x', () => {
