@@ -76,6 +76,14 @@ in the realtime path.
 
 The realtime limiter still uses its conservative 4x IIR estimator with a 0.5 dB safety guard. It is not represented as a certified Annex 2 dBTP meter; use the offline export analysis for the standards-based report.
 
+## Reference matching
+
+`generateMatchPlan` converts measured reports into editable processor proposals; it does not mutate the project or claim to recreate the reference waveform. A per-category source index can select one analysed reference, or a negative index selects a weighted consensus. Weighted consensus averages loudness in linear power, true peak in linear amplitude, and each spectral band in linear power before recalculating relative tonal balance. Other descriptive metrics use weighted arithmetic means.
+
+Reference weights are relative influence values. Zero excludes a reference from a weighted blend; when all weights are zero, the resolver falls back to equal weights and keeps the analysis usable. Explicitly selecting one reference for a category takes precedence over its blend weight.
+
+When a requested chorus or verse is unavailable in a selected reference (or in the target), the matcher uses full-track measurements and adds a visible limitation warning. It does not silently label full-track measurements as section-specific. Proposal confidence is a heuristic guidance score, not a calibrated probability; it is reduced when references disagree on the relevant characteristic or when source analysis quality is weak. The final output must still be rendered, listened to and measured.
+
 ## Automation
 
 Lanes are stored per track: `volume`, `pan`, or a processor parameter keyed by processor id. `valueAtTime` interpolates
