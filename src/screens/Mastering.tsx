@@ -21,7 +21,7 @@ const MASTERING_STYLES = [
   { id: 'master-modern-pop', label: 'Bright', description: 'Forward presence and a modern polished edge.', detail: 'A brighter, denser pop-oriented starting point.', color: '#55B7EA' },
 ] as const;
 
-export default function Mastering() {
+export default function Mastering({ embedded = false }: { embedded?: boolean } = {}) {
   const {
     project,
     assets,
@@ -77,6 +77,7 @@ export default function Mastering() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sonora-canvas">
+      {!embedded && (
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[.07] bg-[#0D0D1B]/75 px-5 py-4 backdrop-blur-xl sm:px-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -97,11 +98,12 @@ export default function Mastering() {
           </Button>
         </div>
       </header>
+      )}
 
-      <TransportBar />
+      {!embedded && <TransportBar />}
 
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[1600px] space-y-5 p-5 sm:p-6 lg:p-7">
+        <div className={`mx-auto w-full max-w-[1600px] space-y-5 ${embedded ? 'p-4 sm:p-5' : 'p-5 sm:p-6 lg:p-7'}`}>
           <section className="grid gap-3 xl:grid-cols-[1.05fr_.95fr]">
             <Panel dataTour="mastering-upload" title="Your track" subtitle="The original audio remains untouched; mastering uses the current project chain.">
               <div
