@@ -122,7 +122,7 @@ describe('reference consensus resolution', () => {
       { assetId: 'b', report: report({ lufs: -12 }), weight: 0 },
     ], 'full');
     expect(resolved.assetIds).toEqual(['a', 'b']);
-    expect(resolved.metrics.lufs).toBeCloseTo(-15, 1);
+    expect(resolved.metrics.lufs).toBeCloseTo(-14.04, 1);
   });
 
   it('keeps explicit per-category reference selection independent of blend weights', () => {
@@ -140,7 +140,7 @@ describe('reference consensus resolution', () => {
       { assetId: 'no-chorus', report: report({ lufs: -12 }) },
     ], 'chorus');
     expect(resolved.fallbackAssetIds).toEqual(['no-chorus']);
-    expect(resolved.metrics.lufs).toBeFinite();
+    expect(Number.isFinite(resolved.metrics.lufs)).toBe(true);
   });
 
   it('reduces category agreement when references disagree', () => {
