@@ -15,7 +15,7 @@ const PASSTHROUGH: BiquadCoeffs = { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
 
 /**
  * Parametric EQ with eight bands, stereo / mid / side routing and an optional
- * linear-phase mode implemented as a 512-tap symmetric FIR.
+ * linear-phase mode implemented as a 513-tap symmetric FIR with an exact 256-sample group delay at 48 kHz.
  *
  * All processing happens in mid/side, which is mathematically identical to
  * left/right when a band is routed to both sides and necessary when it is not.
