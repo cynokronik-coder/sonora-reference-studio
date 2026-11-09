@@ -4,7 +4,7 @@ import { clamp, dbToGain, gainToDb } from '../util';
 
 const TRUE_PEAK_SAFETY_GAIN = dbToGain(-0.5);
 
-/** Monotonic sliding maximum over a fixed window (O(1) amortised). */
+/** Monotonic sliding maximum over a bounded, runtime-selectable window (O(1) amortised). */
 class SlidingMax {
   private values: Float32Array;
   private indices: Int32Array;
@@ -51,14 +51,16 @@ class SlidingMax {
 }
 
 /**
- * Look-ahead brickwall limiter.
+ * Look-ahead stereo limiter with a sliding-maximum detector and optional
+ * 4x IIR true-peak estimation. Its reported latency equals the configured
+ * look-ahead delay so the renderer can align parallel tracks and buses.
  *
- * A sliding maximum looks ahead over the attack window and pre-computes the
- * required gain before the transient arrives, so no sample is clipped and no
- * distortion is introduced by the gain envelope. True-peak awareness is real:
- * each block is 4x oversampled and the effective ceiling is tightened by the
- * inter-sample peak ratio. This makes exported masters meet a dBTP ceiling
- * instead of only a sample-peak ceiling.
+ * True-peak mode tightens the detector ceiling using a block-based
+ * inter-sample/sample-peak estimate plus a conservative 0.5 dB guard. This is
+ * protective DSP, not a standards-certified true-peak measurement chain;
+ * delivery masters should still be verified with a compliant external meter.
+ * The output trim is post-limiter and can therefore exceed the internal
+ * ceiling; leave it at 0 dB when relying on this processor's ceiling.
  */
 export class Limiter implements AudioProcessor {
   readonly type = 'limiter';
@@ -233,8 +235,8 @@ export const limiterDefinition: ProcessorDefinition = {
   name: 'Limiter',
   shortName: 'LIMIT',
   category: 'mastering',
-  description: 'Look-ahead brickwall limiter with true-peak ceiling control and programme-dependent release.',
-  purpose: 'Raises the final level safely. The loudest stage in the mastering chain and the last line of defence against clipping.',
+  description: 'Stereo-linked look-ahead limiter with 4x IIR true-peak estimation, a conservative safety guard and programme-dependent release.',
+  purpose: 'Controls the final peak level with look-ahead gain reduction. Keep post-limiter output trim at 0 dB when relying on its ceiling; verify critical delivery masters with an independent true-peak meter.',
   params: [
     { key: 'input', label: 'Input gain', kind: 'float', min: -12, max: 24, step: 0.1, default: 0, unit: 'dB' },
     { key: 'ceiling', label: 'Ceiling', kind: 'float', min: -12, max: 0, step: 0.1, default: -0.3, unit: 'dBTP' },
