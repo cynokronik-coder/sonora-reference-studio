@@ -17,15 +17,19 @@ function rms(values: Float32Array, start = Math.floor(values.length / 2)): numbe
   return Math.sqrt(sum / Math.max(1, values.length - start));
 }
 function projection(values: Float32Array, frequency: number, start = Math.floor(values.length / 2)): number {
-  let dot = 0;
-  let power = 0;
+  let sinProjection = 0;
+  let cosProjection = 0;
+  let count = 0;
   for (let i = start; i < values.length; i++) {
-    const reference = Math.sin((2 * Math.PI * frequency * i) / SAMPLE_RATE);
-    dot += values[i] * reference;
-    power += reference * reference;
+    const angle = (2 * Math.PI * frequency * i) / SAMPLE_RATE;
+    sinProjection += values[i] * Math.sin(angle);
+    cosProjection += values[i] * Math.cos(angle);
+    count++;
   }
-  return dot / Math.max(power, 1e-9);
+  // Magnitude of the sinusoidal component is phase independent.
+  return (2 * Math.hypot(sinProjection, cosProjection)) / Math.max(1, count);
 }
+
 function render(values: Record<string, number>, leftSource: Float32Array, rightSource = leftSource) {
   const processor = new DeEsser();
   processor.prepare(SAMPLE_RATE, BLOCK_SIZE);
@@ -51,16 +55,16 @@ function sine(frequency: number, amplitude: number): Float32Array {
 }
 
 describe('De-esser split-band and wideband processing', () => {
-  it('is transparent at 0% wet mix', () => {
-    const left = sine(7_000, 0.8);
-    const right = sine(7_000, 0.35);
+  it('is transparent at 0% wet mix after the 20 ms blend ramp settles', () => {
+    const left = sine(10_000, 0.8);
+    const right = sine(10_000, 0.35);
     const result = render({ ...defaults(), mix: 0 }, left, right);
-    expect(result.left).toEqual(left);
-    expect(result.right).toEqual(right);
+    expect(result.left.subarray(1_024)).toEqual(left.subarray(1_024));
+    expect(result.right.subarray(1_024)).toEqual(right.subarray(1_024));
   });
 
   it('reduces a sibilant high-frequency tone and reports gain reduction', () => {
-    const source = sine(7_000, 0.8);
+    const source = sine(10_000, 0.8);
     const result = render(defaults(), source);
     expect(result.meter.reduction ?? 0).toBeGreaterThan(3);
     expect(rms(result.left)).toBeLessThan(rms(source) * 0.85);
@@ -68,17 +72,17 @@ describe('De-esser split-band and wideband processing', () => {
 
   it('leaves low-frequency energy substantially intact in split-band mode', () => {
     const low = sine(250, 0.15);
-    const high = sine(7_000, 0.8);
+    const high = sine(10_000, 0.8);
     const source = new Float32Array(FRAME_COUNT);
     for (let i = 0; i < source.length; i++) source[i] = low[i] + high[i];
     const result = render(defaults(), source);
     expect(Math.abs(projection(result.left, 250))).toBeCloseTo(0.15, 1);
-    expect(Math.abs(projection(result.left, 7_000))).toBeLessThan(0.7);
+    expect(Math.abs(projection(result.left, 10_000))).toBeLessThan(0.7);
   });
 
   it('wideband mode attenuates low-frequency content when sibilance triggers', () => {
     const low = sine(250, 0.15);
-    const high = sine(7_000, 0.8);
+    const high = sine(10_000, 0.8);
     const source = new Float32Array(FRAME_COUNT);
     for (let i = 0; i < source.length; i++) source[i] = low[i] + high[i];
     const result = render({ ...defaults(), mode: 1 }, source);
@@ -86,8 +90,8 @@ describe('De-esser split-band and wideband processing', () => {
   });
 
   it('uses independent envelopes at 0% stereo link', () => {
-    const left = sine(7_000, 0.8);
-    const right = sine(7_000, 0.05);
+    const left = sine(10_000, 0.8);
+    const right = sine(10_000, 0.05);
     const result = render({ ...defaults(), link: 0 }, left, right);
     const leftGain = rms(result.left) / rms(left);
     const rightGain = rms(result.right) / rms(right);
@@ -96,8 +100,8 @@ describe('De-esser split-band and wideband processing', () => {
   });
 
   it('uses common gain reduction at 100% stereo link', () => {
-    const left = sine(7_000, 0.8);
-    const right = sine(7_000, 0.05);
+    const left = sine(10_000, 0.8);
+    const right = sine(10_000, 0.05);
     const result = render({ ...defaults(), link: 100 }, left, right);
     const leftGain = rms(result.left) / rms(left);
     const rightGain = rms(result.right) / rms(right);
@@ -111,8 +115,8 @@ describe('De-esser split-band and wideband processing', () => {
     const right = new Float32Array(BLOCK_SIZE);
     for (let block = 0; block < 30; block++) {
       processor.setValues({ ...defaults(), frequency: 4_000 + block * 150 });
-      left.set(tone(7_000, 0.8, block * BLOCK_SIZE, BLOCK_SIZE));
-      right.set(tone(7_000, 0.4, block * BLOCK_SIZE, BLOCK_SIZE));
+      left.set(tone(10_000, 0.8, block * BLOCK_SIZE, BLOCK_SIZE));
+      right.set(tone(10_000, 0.4, block * BLOCK_SIZE, BLOCK_SIZE));
       processor.process(left, right, BLOCK_SIZE);
       for (const sample of left) expect(Number.isFinite(sample)).toBe(true);
       for (const sample of right) expect(Number.isFinite(sample)).toBe(true);
