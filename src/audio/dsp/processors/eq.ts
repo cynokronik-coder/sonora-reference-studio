@@ -63,9 +63,12 @@ export class ParametricEq implements AudioProcessor {
 
   setValues(values: ParamValues): void {
     this.values = values;
-    this.outGainTarget = Math.pow(10, (values.output ?? 0) / 20);
-    this.outGainRemaining = Math.max(1, Math.round(this.sr * (EQ_PARAMETER_SMOOTH_MS / 1000)));
-    this.outGainStep = (this.outGainTarget - this.outGain) / this.outGainRemaining;
+    const nextOutGain = Math.pow(10, (values.output ?? 0) / 20);
+    if (nextOutGain !== this.outGainTarget) {
+      this.outGainTarget = nextOutGain;
+      this.outGainRemaining = Math.max(1, Math.round(this.sr * (EQ_PARAMETER_SMOOTH_MS / 1000)));
+      this.outGainStep = (this.outGainTarget - this.outGain) / this.outGainRemaining;
+    }
     this.linear = (values.linear ?? 0) > 0.5;
     this.rebuild();
   }
@@ -130,8 +133,8 @@ export class ParametricEq implements AudioProcessor {
       }
       // Keep inactive bands in the render loop only while they finish their
       // 20 ms transition back to a passthrough response.
-      this.applyMid[b] = applyMidTarget || this.midFilters[b].some((filter) => filter.isSmoothing);
-      this.applySide[b] = applySideTarget || this.sideFilters[b].some((filter) => filter.isSmoothing);
+      this.applyMid[b] = applyMidTarget;
+      this.applySide[b] = applySideTarget;
     }
 
     if (this.linear) {
