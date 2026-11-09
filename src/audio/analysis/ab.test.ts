@@ -36,6 +36,19 @@ describe('loudnessMatchedMonitorGain', () => {
     ], 'B', 8)).toBe(-8);
   });
 
+  it('does not use measurements from an outdated track or bus mix', () => {
+    expect(loudnessMatchedMonitorGain([
+      { id: 'A', lufs: -20, stale: true },
+      { id: 'B', lufs: -12 },
+    ], 'B')).toBe(0);
+    expect(loudnessMatchedMonitorGain([
+      { id: 'A', lufs: -20, stale: true },
+      { id: 'B', lufs: -12 },
+      { id: 'C', lufs: -8 },
+    ], 'C')).toBe(-4);
+    expect(loudnessMatchedMonitorGain([{ id: 'A', lufs: -20, stale: true }], 'A')).toBe(0);
+  });
+
   it('returns zero when no finite measurements exist', () => {
     expect(loudnessMatchedMonitorGain([
       { id: 'A', lufs: Number.NaN },
