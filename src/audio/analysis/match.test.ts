@@ -107,6 +107,14 @@ describe('reference consensus resolution', () => {
     expect(resolved.metrics.lufs).toBeCloseTo(-15, 1);
   });
 
+  it('blends true peak in linear amplitude rather than averaging dB values', () => {
+    const resolved = resolveReferenceMetrics(-1, [
+      { assetId: 'quiet-peak', report: report({ truePeak: -6 }), weight: 100 },
+      { assetId: 'hot-peak', report: report({ truePeak: -3 }), weight: 50 },
+    ], 'full');
+    expect(resolved.metrics.truePeakDb).toBeCloseTo(-4.88, 1);
+  });
+
   it('excludes zero-weight references from a weighted blend', () => {
     const resolved = resolveReferenceMetrics(-1, [
       { assetId: 'included', report: report({ lufs: -18 }), weight: 100 },
