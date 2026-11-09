@@ -157,6 +157,31 @@ export class RealtimeHost {
     this.node.port.postMessage({ type: 'configure', project: JSON.parse(JSON.stringify(project)) });
   }
 
+  /**
+   * Install two offline-rendered versions for sample-aligned Reference Match
+   * audition. Ownership of the buffers is transferred to the AudioWorklet.
+   */
+  setMatchAuditionBuffers(
+    buffers: { beforeL: Float32Array; beforeR: Float32Array; afterL: Float32Array; afterR: Float32Array },
+  ): void {
+    if (!this.ready || !this.node) throw new Error('Audio engine is not ready for Reference Match audition.');
+    const transfer: Transferable[] = [
+      buffers.beforeL.buffer,
+      buffers.beforeR.buffer,
+      buffers.afterL.buffer,
+      buffers.afterR.buffer,
+    ];
+    this.node.port.postMessage({ type: 'match-audition-buffers', ...buffers }, transfer);
+  }
+
+  setMatchAudition(active: boolean, mode: 'before' | 'after' = 'before'): void {
+    this.node?.port.postMessage({ type: 'match-audition-mode', active, mode });
+  }
+
+  clearMatchAuditionBuffers(): void {
+    this.node?.port.postMessage({ type: 'clear-match-audition' });
+  }
+
   async play(position?: number): Promise<void> {
     await this.initialise();
     await this.ctx?.resume();
