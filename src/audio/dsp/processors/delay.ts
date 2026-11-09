@@ -191,9 +191,8 @@ export class Delay implements AudioProcessor {
       const dryR = R[i];
       const base = this.delaySamples;
       const pingPong = mode === 1;
-      const firstDelay = pingPong ? base * 1.5 : base;
       const tapL = this.readTap(this.bufL, base);
-      const tapR = this.readTap(this.bufR, firstDelay);
+      const tapR = this.readTap(this.bufR, base);
       let wetL = tapL;
       let wetR = tapR;
       let feedbackL = tapL * this.feedback;
