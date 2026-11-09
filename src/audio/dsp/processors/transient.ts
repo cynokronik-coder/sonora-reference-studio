@@ -60,7 +60,7 @@ export class TransientShaper implements AudioProcessor {
   }
 
   private transientWeight(fast: number, slow: number, sensitivity: number): number {
-    const residual = Math.max(0, fast - slow * (1 - sensitivity * 0.3));
+    const residual = Math.max(0, fast - slow * (1 + (1 - sensitivity) * 0.5));
     return clamp(residual / Math.max(fast, 1e-6), 0, 1);
   }
 
@@ -81,7 +81,7 @@ export class TransientShaper implements AudioProcessor {
     const sustainDb = clamp(this.values.sustain ?? 0, -100, 100) * 0.06;
     const sensitivity = clamp((this.values.sensitivity ?? 50) / 100, 0.05, 1);
     const link = clamp((this.values.link ?? 100) / 100, 0, 1);
-    const smoothing = 1 - Math.exp(-1 / (0.003 * this.sr));
+    const smoothing = 1 - Math.exp(-1 / (0.0008 * this.sr));
     let peakL = 0;
     let peakR = 0;
     let maxGain = 1;
