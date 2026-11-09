@@ -319,3 +319,54 @@ export const eqDefinition: ProcessorDefinition = {
   ],
   create: () => new ParametricEq(),
 };
+
+
+export interface EqPreset {
+  id: string;
+  name: string;
+  description: string;
+  values: ParamValues;
+}
+
+function makeEqPreset(id: string, name: string, description: string, overrides: ParamValues): EqPreset {
+  const values: ParamValues = { output: 0, linear: 0 };
+  for (let band = 0; band < EQ_BAND_COUNT; band++) {
+    values[`b${band}_on`] = 0;
+    values[`b${band}_type`] = 0;
+    values[`b${band}_freq`] = FREQ_DEFAULTS[band];
+    values[`b${band}_gain`] = 0;
+    values[`b${band}_q`] = 1;
+    values[`b${band}_route`] = 0;
+  }
+  return { id, name, description, values: { ...values, ...overrides } };
+}
+
+/** Musical EQ starting points, stored as ordinary, fully editable band values. */
+export const EQ_PRESETS: EqPreset[] = [
+  makeEqPreset('low-end-cleanup', 'Low-end cleanup', 'Remove inaudible rumble and gently clear low-mid buildup.', {
+    b0_on: 1, b0_type: 3, b0_freq: 28, b0_q: 0.707,
+    b1_on: 1, b1_type: 0, b1_freq: 280, b1_gain: -1.5, b1_q: 1,
+  }),
+  makeEqPreset('vocal-presence', 'Vocal presence', 'A high-pass foundation, subtle presence lift and restrained air.', {
+    b0_on: 1, b0_type: 3, b0_freq: 85, b0_q: 0.707,
+    b1_on: 1, b1_type: 0, b1_freq: 320, b1_gain: -1.5, b1_q: 1.1,
+    b2_on: 1, b2_type: 0, b2_freq: 3600, b2_gain: 1.8, b2_q: 0.9,
+    b3_on: 1, b3_type: 2, b3_freq: 12000, b3_gain: 1.2, b3_q: 0.7,
+  }),
+  makeEqPreset('air-shelf', 'High-frequency air', 'A gentle high shelf for brightness without a narrow presence boost.', {
+    b0_on: 1, b0_type: 2, b0_freq: 11500, b0_gain: 2, b0_q: 0.7,
+  }),
+  makeEqPreset('warm-tonal-balance', 'Warm tonal balance', 'Add restrained low warmth and soften excessive upper brightness.', {
+    b0_on: 1, b0_type: 1, b0_freq: 130, b0_gain: 1.2, b0_q: 0.7,
+    b1_on: 1, b1_type: 0, b1_freq: 420, b1_gain: -1, b1_q: 0.9,
+    b2_on: 1, b2_type: 2, b2_freq: 10500, b2_gain: -1, b2_q: 0.7,
+  }),
+  makeEqPreset('low-mid-clarity', 'Low-mid clarity', 'Reduce boxiness around the low-mid region with a broad bell cut.', {
+    b0_on: 1, b0_type: 0, b0_freq: 300, b0_gain: -2, b0_q: 0.8,
+    b1_on: 1, b1_type: 0, b1_freq: 850, b1_gain: -0.7, b1_q: 1.1,
+  }),
+  makeEqPreset('mid-side-openness', 'Mid-side openness', 'Keep the centre stable while gently opening the side-channel top end.', {
+    b0_on: 1, b0_type: 0, b0_freq: 250, b0_gain: -0.8, b0_q: 0.8, b0_route: 1,
+    b1_on: 1, b1_type: 2, b1_freq: 9000, b1_gain: 1.2, b1_q: 0.7, b1_route: 2,
+  }),
+];
