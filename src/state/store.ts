@@ -707,7 +707,8 @@ export const useApp = create<AppState>((set, get) => ({
     mutator(next);
     const projectContentChanged = JSON.stringify(previous) !== JSON.stringify(next);
     const mixContextChanged = JSON.stringify(previous.tracks) !== JSON.stringify(next.tracks) ||
-      JSON.stringify(previous.buses) !== JSON.stringify(next.buses);
+      JSON.stringify(previous.buses) !== JSON.stringify(next.buses) ||
+      previous.tempo !== next.tempo || previous.sampleRate !== next.sampleRate;
     next.updatedAt = Date.now();
     const clearAudition = projectContentChanged && state.activeSlot !== null && !options?.preserveAb;
     const coalesce = options?.coalesce;
@@ -1385,7 +1386,8 @@ export const useApp = create<AppState>((set, get) => ({
       const state = get();
       const nextSlots = [...state.abSlots.filter((item) => item.label !== label), slot].slice(-8);
       const mixContextUnchanged = JSON.stringify(currentProject.tracks) === JSON.stringify(capturedProject.tracks) &&
-        JSON.stringify(currentProject.buses) === JSON.stringify(capturedProject.buses);
+        JSON.stringify(currentProject.buses) === JSON.stringify(capturedProject.buses) &&
+        currentProject.tempo === capturedProject.tempo && currentProject.sampleRate === capturedProject.sampleRate;
       const masterUnchanged = JSON.stringify(currentProject.master) === JSON.stringify(capturedProject.master);
       const canAutoSelect = mixContextUnchanged && masterUnchanged;
       slot.stale = !mixContextUnchanged;
@@ -1640,6 +1642,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   clearAllData: async () => {
+    realtimeHost.stop();
+    realtimeHost.setComparisonGain(0);
     await db.clearAllData();
     set({
       projects: [],
