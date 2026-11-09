@@ -60,9 +60,9 @@ in the realtime path.
 
 ## True peak
 
-- `TruePeakMeter` applies a 4x oversampled low-pass chain and tracks the maximum absolute interpolated sample.
-- Analysis uses it in 512-frame chunks to measure dBTP over the whole file.
-- The limiter measures a 4x IIR-interpolated block peak and tightens the effective ceiling by the inter-sample/sample-peak ratio, with an additional 0.5 dB safety guard to cover block-based estimation and look-ahead alignment. This is a conservative engineering approximation, not certification of standards-compliant dBTP measurement; verify delivery masters with an independent compliant meter when required.
+- `Annex2TruePeakMeter` implements the 4-phase, 48-tap FIR interpolation coefficient set in ITU-R BS.1770-5 Annex 2. Offline analysis uses it in 512-frame chunks and flushes the 11-sample FIR tail after the final block.
+- `TruePeakMeter` remains the 4x IIR estimate used by the realtime limiter. It is kept separate because the limiter's look-ahead, block detector and audio-delay alignment still need a separate end-to-end audit.
+- The limiter uses the IIR estimate with a 0.5 dB safety guard. This is conservative realtime protection, not certification of standards-compliant dBTP measurement; verify delivery masters with the offline Annex 2 analysis and, for critical compliance work, an independent standards test meter.
 
 ## Loudness
 
