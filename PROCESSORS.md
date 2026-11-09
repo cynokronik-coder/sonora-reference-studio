@@ -36,6 +36,7 @@ resonance report.
   are **behaviour styles**, not emulations of specific hardware circuits.
 - Lookahead delays the audio so gain reduction arrives before the transient.
 - Sidechain high-pass filtering, auto/manual makeup and dry/wet blend.
+- Factory starting points: Transparent control, Bus glue, Punchy FET, Smooth optical and Dual mono. They load complete parameter snapshots; every value remains editable.
 - External sidechain key can be routed from another track on track or bus compressor instances. The key is tapped from the source track's raw clip signal before its own processing and fader; disconnecting it returns the detector to the compressed signal.
 
 ### Multiband Compressor
