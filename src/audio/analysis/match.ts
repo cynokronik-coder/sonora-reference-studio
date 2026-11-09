@@ -226,7 +226,11 @@ export function resolveReferenceMetrics(
 ): ResolvedReferenceMetrics {
   if (!references.length) throw new Error('At least one analysed reference is required.');
   const blended = sourceIndex === undefined || Math.round(sourceIndex) < 0;
-  const selected = blended ? references : [references[clamp(Math.round(sourceIndex), 0, references.length - 1)]];
+  const requested = blended ? references : [references[clamp(Math.round(sourceIndex), 0, references.length - 1)]];
+  const positiveWeightReferences = blended
+    ? requested.filter((entry) => Number.isFinite(entry.weight) && (entry.weight as number) > 0)
+    : requested;
+  const selected = blended && positiveWeightReferences.length ? positiveWeightReferences : requested;
   const selectedMetrics = selected.map((entry) => metricsFrom(entry.report, section));
   let weights = selected.map((entry) => blended && Number.isFinite(entry.weight) ? Math.max(0, entry.weight as number) : 1);
   if (weights.every((weight) => weight <= 0)) weights = selected.map(() => 1);
@@ -317,6 +321,14 @@ function referenceFor(
   section: 'full' | 'chorus' | 'verse',
 ): ResolvedReferenceMetrics {
   return resolveReferenceMetrics(sources[category], references, section);
+}
+
+/** Estimate true peak after a broadband gain change, before dynamics processing. */
+export function estimatePreLimiterTruePeak(sourceTruePeakDb: number, gainChangeDb: number): number {
+  if (!Number.isFinite(sourceTruePeakDb) || !Number.isFinite(gainChangeDb)) {
+    throw new RangeError('True-peak and gain estimates must be finite numbers.');
+  }
+  return sourceTruePeakDb + gainChangeDb;
 }
 
 function confidenceFor(
