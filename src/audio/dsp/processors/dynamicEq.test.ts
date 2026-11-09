@@ -116,6 +116,21 @@ describe('Dynamic EQ band detection', () => {
     expect(processor.meter().reduction).toBeFinite();
   });
 
+  it('resets detector memory and returns the bell to neutral when a band is disabled', () => {
+    const left = sine(0.5, 1000);
+    const right = left.slice();
+    const processor = createProcessor(params());
+    processBlocks(processor, left, right);
+    expect(processor.meter().reduction ?? 0).toBeGreaterThan(3);
+
+    processor.setValues(params({ b0_on: 0 }));
+    const quietLeft = sine(0.05, 1000);
+    const quietRight = quietLeft.slice();
+    processBlocks(processor, quietLeft, quietRight);
+    expect(processor.meter().reduction ?? 0).toBe(0);
+    expect(rms(quietLeft)).toBeCloseTo(rms(sine(0.05, 1000)), 4);
+  });
+
   it('reports all four dynamic bands independently', () => {
     const values = params({
       b0_freq: 120, b0_q: 1.3,
