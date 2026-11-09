@@ -23,9 +23,10 @@ function run(values: Record<string, number>, leftAmplitude = 0.8, rightAmplitude
   const left = new Float32Array(FRAME_COUNT);
   const right = new Float32Array(FRAME_COUNT);
   for (let start = 0; start < FRAME_COUNT; start += BLOCK_SIZE) {
-    left.set(tone(frequency, leftAmplitude, start, BLOCK_SIZE), start);
-    right.set(tone(frequency, rightAmplitude, start, BLOCK_SIZE), start);
-    processor.process(left.subarray(start, start + BLOCK_SIZE), right.subarray(start, start + BLOCK_SIZE), BLOCK_SIZE);
+    const frames = Math.min(BLOCK_SIZE, FRAME_COUNT - start);
+    left.set(tone(frequency, leftAmplitude, start, frames), start);
+    right.set(tone(frequency, rightAmplitude, start, frames), start);
+    processor.process(left.subarray(start, start + frames), right.subarray(start, start + frames), frames);
   }
   return { left, right, meter: processor.meter() };
 }
