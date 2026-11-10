@@ -327,6 +327,7 @@ export function resolveReferenceMetrics(
     metrics,
     assetIds: selected.map((entry) => entry.assetId),
     fallbackAssetIds,
+    metricFallbacks: metrics.metricFallbacks,
     name: blended ? 'weighted reference blend' : (selected.length === 1 ? 'selected reference' : 'reference'),
     agreement,
     quality: Number.isFinite(quality) ? quality : 0.55,
