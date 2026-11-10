@@ -153,7 +153,15 @@ export default function Analysis() {
                 </tbody>
               </table>
             </div>
-            <p className="mt-2 text-2xs text-ink-500">Tempo estimate: {report.rhythm.tempoBpm || 'not detected'} BPM · confidence {Math.round(report.rhythm.beatConfidence * 100)}% · onset density {report.rhythm.onsetDensity.toFixed(2)}/s.</p>
+            <div className="mt-2 space-y-1 text-2xs text-ink-500">
+              <p>Tempo estimate: {report.rhythm.tempoBpm || 'not detected'} BPM · confidence {Math.round(report.rhythm.beatConfidence * 100)}% · onset density {report.rhythm.onsetDensity.toFixed(2)}/s.</p>
+              {!!report.rhythm.tempoCandidatesBpm?.length && report.rhythm.tempoCandidatesBpm.length > 1 && (
+                <p>Possible half/double-time pulse: {report.rhythm.tempoCandidatesBpm.join(' / ')} BPM. Confirm the beat by listening.</p>
+              )}
+              {report.rhythm.tempoRangeBpm && (
+                <p>Local tempo range: {report.rhythm.tempoRangeBpm.min}–{report.rhythm.tempoRangeBpm.max} BPM across the track.</p>
+              )}
+            </div>
           </Panel>
 
           <div className="grid gap-3 lg:grid-cols-2">
