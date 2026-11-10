@@ -161,7 +161,7 @@ const hannWindowCache = new Map<number, Float32Array>();
  * every section while preventing unbounded retention of arbitrary sizes.
  */
 export function hannWindow(n: number): Float32Array {
-  if (!Number.isInteger(n) || n < 1) throw new RangeError('Window size must be a positive integer.');
+  if (!Number.isInteger(n) || n < 0) throw new RangeError('Window size must be a non-negative integer.');
   const cached = hannWindowCache.get(n);
   if (cached) {
     hannWindowCache.delete(n);
