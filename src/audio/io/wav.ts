@@ -176,6 +176,9 @@ export interface EncodeOptions {
   metadata?: { title?: string; artist?: string; comment?: string; software?: string };
 }
 
+const PCM_CHUNK_FRAMES = 16_384;
+const UINT32_MAX = 0xffff_ffff;
+
 function asciiChunk(text: string): Uint8Array {
   const bytes = new TextEncoder().encode(text);
   const pad = bytes.length % 2 === 0 ? 0 : 1;
@@ -184,39 +187,58 @@ function asciiChunk(text: string): Uint8Array {
   return out;
 }
 
-/** Write a RIFF/WAVE file. PCM 16/24-bit or IEEE float 32-bit. */
-export function encodeWav(L: Float32Array, R: Float32Array, options: EncodeOptions): Blob {
-  const channels = 2;
+function assertPcmPair(L: Float32Array, R: Float32Array, sampleRate: number): number {
+  if (!Number.isInteger(sampleRate) || sampleRate <= 0 || sampleRate > UINT32_MAX) {
+    throw new RangeError('Sample rate must be a positive 32-bit integer.');
+  }
   const frames = Math.min(L.length, R.length);
-  const bytesPerSample = options.bitDepth / 8;
-  const dataSize = frames * channels * bytesPerSample;
-  const metaEntries: [string, string][] = [];
-  if (options.metadata?.title) metaEntries.push(['INAM', options.metadata.title]);
-  if (options.metadata?.artist) metaEntries.push(['IART', options.metadata.artist]);
-  if (options.metadata?.comment) metaEntries.push(['ICMT', options.metadata.comment]);
-  if (options.metadata?.software) metaEntries.push(['ISFT', options.metadata.software]);
-  let infoSize = 0;
-  const infoChunks = metaEntries.map(([id, value]) => {
-    const data = asciiChunk(value);
-    infoSize += 8 + data.length;
-    return { id, data };
-  });
-  const hasInfo = infoChunks.length > 0;
-  const infoTotal = hasInfo ? 12 + infoSize : 0;
-  const headerSize = 44 + infoTotal;
-  const buffer = new ArrayBuffer(headerSize + dataSize);
-  const view = new DataView(buffer);
-  let offset = 0;
-  const writeAscii = (text: string) => {
-    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
-    offset += text.length;
-  };
+  if (!Number.isSafeInteger(frames) || frames < 1) {
+    throw new RangeError('The export contains no audio frames.');
+  }
+  return frames;
+}
 
-  writeAscii('RIFF');
+function assertContainerSize(dataSize: number, overhead: number, format: string): void {
+  if (!Number.isSafeInteger(dataSize) || dataSize < 0 || dataSize + overhead > UINT32_MAX) {
+    throw new RangeError(`${format} exceeds the 32-bit container size limit. Export a shorter region.`);
+  }
+}
+
+function nextDither(rng: { value: number }): number {
+  let value = rng.value;
+  value ^= value << 13;
+  value ^= value >>> 17;
+  value ^= value << 5;
+  rng.value = value;
+  return ((value >>> 0) / 4294967296) * 2 - 1;
+}
+
+function writeAscii(view: DataView, offset: number, text: string): number {
+  for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
+  return offset + text.length;
+}
+
+function createWavHeader(
+  frames: number,
+  options: EncodeOptions,
+  infoChunks: { id: string; data: Uint8Array }[],
+  dataSize: number,
+): Uint8Array {
+  let infoSize = 0;
+  for (const chunk of infoChunks) infoSize += 8 + chunk.data.length;
+  const infoTotal = infoChunks.length ? 12 + infoSize : 0;
+  assertContainerSize(dataSize, 36 + infoTotal, 'WAV');
+  const header = new Uint8Array(44 + infoTotal);
+  const view = new DataView(header.buffer);
+  const channels = 2;
+  const bytesPerSample = options.bitDepth / 8;
+  let offset = 0;
+
+  offset = writeAscii(view, offset, 'RIFF');
   view.setUint32(offset, 36 + dataSize + infoTotal, true);
   offset += 4;
-  writeAscii('WAVE');
-  writeAscii('fmt ');
+  offset = writeAscii(view, offset, 'WAVE');
+  offset = writeAscii(view, offset, 'fmt ');
   view.setUint32(offset, 16, true);
   offset += 4;
   view.setUint16(offset, options.bitDepth === 32 ? 3 : 1, true);
@@ -231,42 +253,64 @@ export function encodeWav(L: Float32Array, R: Float32Array, options: EncodeOptio
   offset += 2;
   view.setUint16(offset, options.bitDepth, true);
   offset += 2;
-  if (hasInfo) {
-    writeAscii('LIST');
+
+  if (infoChunks.length) {
+    offset = writeAscii(view, offset, 'LIST');
     view.setUint32(offset, 4 + infoSize, true);
     offset += 4;
-    writeAscii('INFO');
+    offset = writeAscii(view, offset, 'INFO');
     for (const chunk of infoChunks) {
-      writeAscii(chunk.id);
+      offset = writeAscii(view, offset, chunk.id);
       view.setUint32(offset, chunk.data.length, true);
       offset += 4;
-      new Uint8Array(buffer, offset, chunk.data.length).set(chunk.data);
+      header.set(chunk.data, offset);
       offset += chunk.data.length;
     }
   }
-  writeAscii('data');
+  offset = writeAscii(view, offset, 'data');
   view.setUint32(offset, dataSize, true);
-  offset += 4;
+  return header;
+}
 
-  const peak = Math.max(1e-9, maxAbs(L, R));
-  const normalize = options.bitDepth === 32 ? 1 : 1;
-  const scale = 0x7fffffff * normalize;
-  let rngState = 0x12345678;
-  const rand = () => {
-    rngState ^= rngState << 13;
-    rngState ^= rngState >>> 17;
-    rngState ^= rngState << 5;
-    return ((rngState >>> 0) / 4294967296) * 2 - 1;
-  };
+/**
+ * Write a RIFF/WAVE file as bounded interleaved PCM Blob parts.
+ * The final Blob is retained for downloads/history, but no song-sized encoded
+ * ArrayBuffer is allocated during conversion.
+ */
+export function encodeWav(L: Float32Array, R: Float32Array, options: EncodeOptions): Blob {
+  const frames = assertPcmPair(L, R, options.sampleRate);
+  const channels = 2;
+  const bytesPerSample = options.bitDepth / 8;
+  const dataSize = frames * channels * bytesPerSample;
+  const metaEntries: [string, string][] = [];
+  if (options.metadata?.title) metaEntries.push(['INAM', options.metadata.title]);
+  if (options.metadata?.artist) metaEntries.push(['IART', options.metadata.artist]);
+  if (options.metadata?.comment) metaEntries.push(['ICMT', options.metadata.comment]);
+  if (options.metadata?.software) metaEntries.push(['ISFT', options.metadata.software]);
+  const infoChunks = metaEntries.map(([id, value]) => ({ id, data: asciiChunk(value) }));
+  const header = createWavHeader(frames, options, infoChunks, dataSize);
+  const parts: BlobPart[] = [header];
+  const rng = { value: 0x12345678 };
+  const quantScale = options.bitDepth === 16 ? 32767 : 8388607;
 
-  if (options.bitDepth === 16 || options.bitDepth === 24) {
-    const quantScale = options.bitDepth === 16 ? 32767 : 8388607;
-    for (let i = 0; i < frames; i++) {
-      for (let ch = 0; ch < 2; ch++) {
-        const src = ch === 0 ? L[i] : R[i];
-        let dither = 0;
-        if (options.dither) dither = (rand() + rand()) / quantScale;
-        const sample = Math.max(-1, Math.min(1, src + dither));
+  for (let frameOffset = 0; frameOffset < frames; frameOffset += PCM_CHUNK_FRAMES) {
+    const blockFrames = Math.min(PCM_CHUNK_FRAMES, frames - frameOffset);
+    const block = new Uint8Array(blockFrames * channels * bytesPerSample);
+    const view = new DataView(block.buffer);
+    let offset = 0;
+
+    for (let i = 0; i < blockFrames; i++) {
+      const sourceIndex = frameOffset + i;
+      for (let channel = 0; channel < channels; channel++) {
+        const source = channel === 0 ? L[sourceIndex] : R[sourceIndex];
+        if (options.bitDepth === 32) {
+          view.setFloat32(offset, source, true);
+          offset += 4;
+          continue;
+        }
+
+        const dither = options.dither ? (nextDither(rng) + nextDither(rng)) / quantScale : 0;
+        const sample = Math.max(-1, Math.min(1, source + dither));
         const value = Math.round(sample * quantScale);
         if (options.bitDepth === 16) {
           view.setInt16(offset, value, true);
@@ -279,40 +323,30 @@ export function encodeWav(L: Float32Array, R: Float32Array, options: EncodeOptio
         }
       }
     }
-  } else {
-    for (let i = 0; i < frames; i++) {
-      view.setFloat32(offset, L[i], true);
-      offset += 4;
-      view.setFloat32(offset, R[i], true);
-      offset += 4;
-    }
+    parts.push(block);
   }
-  void peak;
-  void scale;
-  return new Blob([buffer], { type: 'audio/wav' });
+
+  return new Blob(parts, { type: 'audio/wav' });
 }
 
-/** Write an AIFF file (big-endian PCM). Supports 16 and 24-bit only. */
+/** Write an AIFF file as bounded big-endian PCM Blob parts (16/24-bit only). */
 export function encodeAiff(L: Float32Array, R: Float32Array, sampleRate: number, bitDepth: 16 | 24): Blob {
-  const frames = Math.min(L.length, R.length);
+  const frames = assertPcmPair(L, R, sampleRate);
   const bytesPerSample = bitDepth / 8;
   const dataSize = frames * 2 * bytesPerSample;
-  const commSize = 18;
   const ssndSize = 8 + dataSize;
-  const total = 12 + 8 + commSize + 8 + ssndSize;
-  const buffer = new ArrayBuffer(total);
-  const view = new DataView(buffer);
+  assertContainerSize(dataSize, 46, 'AIFF');
+  if (frames > UINT32_MAX) throw new RangeError('AIFF frame count exceeds the 32-bit container limit.');
+
+  const header = new Uint8Array(54);
+  const view = new DataView(header.buffer);
   let offset = 0;
-  const ascii = (text: string) => {
-    for (let i = 0; i < text.length; i++) view.setUint8(offset + i, text.charCodeAt(i));
-    offset += text.length;
-  };
-  ascii('FORM');
-  view.setUint32(offset, total - 8, false);
+  offset = writeAscii(view, offset, 'FORM');
+  view.setUint32(offset, 46 + dataSize, false);
   offset += 4;
-  ascii('AIFF');
-  ascii('COMM');
-  view.setUint32(offset, commSize, false);
+  offset = writeAscii(view, offset, 'AIFF');
+  offset = writeAscii(view, offset, 'COMM');
+  view.setUint32(offset, 18, false);
   offset += 4;
   view.setUint16(offset, 2, false);
   offset += 2;
@@ -322,34 +356,40 @@ export function encodeAiff(L: Float32Array, R: Float32Array, sampleRate: number,
   offset += 2;
   writeExtendedFloat(view, offset, sampleRate);
   offset += 10;
-  ascii('SSND');
+  offset = writeAscii(view, offset, 'SSND');
   view.setUint32(offset, ssndSize, false);
   offset += 4;
   view.setUint32(offset, 0, false);
   offset += 4;
   view.setUint32(offset, 0, false);
-  offset += 4;
+
+  const parts: BlobPart[] = [header];
   const quant = bitDepth === 16 ? 32767 : 8388607;
-  for (let i = 0; i < frames; i++) {
-    for (let ch = 0; ch < 2; ch++) {
-      const src = ch === 0 ? L[i] : R[i];
-      const value = Math.round(Math.max(-1, Math.min(1, src)) * quant);
-      if (bitDepth === 16) {
-        view.setInt16(offset, value, false);
-        offset += 2;
-      } else {
-        view.setUint8(offset, (value >> 16) & 0xff);
-        view.setUint8(offset + 1, (value >> 8) & 0xff);
-        view.setUint8(offset + 2, value & 0xff);
-        offset += 3;
+  for (let frameOffset = 0; frameOffset < frames; frameOffset += PCM_CHUNK_FRAMES) {
+    const blockFrames = Math.min(PCM_CHUNK_FRAMES, frames - frameOffset);
+    const block = new Uint8Array(blockFrames * 2 * bytesPerSample);
+    const blockView = new DataView(block.buffer);
+    let blockOffset = 0;
+
+    for (let i = 0; i < blockFrames; i++) {
+      const sourceIndex = frameOffset + i;
+      for (let channel = 0; channel < 2; channel++) {
+        const source = channel === 0 ? L[sourceIndex] : R[sourceIndex];
+        const value = Math.round(Math.max(-1, Math.min(1, source)) * quant);
+        if (bitDepth === 16) {
+          blockView.setInt16(blockOffset, value, false);
+          blockOffset += 2;
+        } else {
+          blockView.setUint8(blockOffset, (value >> 16) & 0xff);
+          blockView.setUint8(blockOffset + 1, (value >> 8) & 0xff);
+          blockView.setUint8(blockOffset + 2, value & 0xff);
+          blockOffset += 3;
+        }
       }
     }
+    parts.push(block);
   }
-  return new Blob([buffer], { type: 'audio/aiff' });
+
+  return new Blob(parts, { type: 'audio/aiff' });
 }
 
-function maxAbs(L: Float32Array, R: Float32Array): number {
-  let peak = 0;
-  for (let i = 0; i < L.length; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
-  return peak;
-}
