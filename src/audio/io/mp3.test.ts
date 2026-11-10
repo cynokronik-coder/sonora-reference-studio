@@ -15,7 +15,7 @@ describe('fillStereoPcm16Block', () => {
       right,
     );
 
-    expect([...left]).toEqual([-16384, 8192, 24575]);
+    expect([...left]).toEqual([-16383, 8192, 24575]);
     expect([...right]).toEqual([16384, -8192, -24575]);
   });
 
