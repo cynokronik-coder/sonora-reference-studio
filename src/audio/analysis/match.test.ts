@@ -99,6 +99,63 @@ function report(options: {
 }
 
 describe('reference consensus resolution', () => {
+  it('uses true peak, PLR, stereo compatibility and transient metrics from the selected segment', () => {
+    const source = report({ chorus: true, lufs: -18 });
+    Object.assign(source.sections[0], {
+      truePeakDb: -2.4,
+      plrDb: 15.6,
+      lra: 4.2,
+      monoCompatibility: 82,
+      lowSideRatioDb: -18,
+      punchScore: 0.72,
+      attackDensity: 1.8,
+      flatness: 0.34,
+      tiltDbPerOct: -0.7,
+      highEnergyDb: -25,
+      lowEnergyDb: -19,
+      tempoBpm: 128,
+    });
+
+    const resolved = resolveReferenceMetrics(-1, [
+      { assetId: 'measured-reference', report: source },
+    ], 'chorus');
+
+    expect(resolved.metrics.truePeakDb).toBeCloseTo(-2.4, 5);
+    expect(resolved.metrics.plrDb).toBeCloseTo(15.6, 5);
+    expect(resolved.metrics.monoCompatibility).toBeCloseTo(82, 5);
+    expect(resolved.metrics.lowSideDb).toBeCloseTo(-18, 5);
+    expect(resolved.metrics.punchScore).toBeCloseTo(0.72, 5);
+    expect(resolved.metrics.attackDensity).toBeCloseTo(1.8, 5);
+    expect(resolved.metrics.flatness).toBeCloseTo(0.34, 5);
+    expect(resolved.metrics.tempoBpm).toBeCloseTo(128, 5);
+    expect(resolved.metricFallbacks).toEqual([]);
+  });
+
+  it('reports full-track LRA fallback when the selected segment is too short', () => {
+    const source = report({ chorus: true, lra: 6 });
+    Object.assign(source.sections[0], {
+      truePeakDb: -2,
+      plrDb: 14,
+      lra: null,
+      monoCompatibility: 94,
+      lowSideRatioDb: -22,
+      punchScore: 0.4,
+      attackDensity: 0.8,
+      flatness: 0.2,
+      tiltDbPerOct: -1,
+      highEnergyDb: -26,
+      lowEnergyDb: -20,
+      tempoBpm: null,
+    });
+
+    const resolved = resolveReferenceMetrics(-1, [
+      { assetId: 'short-reference', report: source },
+    ], 'chorus');
+
+    expect(resolved.metrics.lra).toBeCloseTo(6, 5);
+    expect(resolved.metricFallbacks).toContain('LRA');
+  });
+
   it('selects an exact detected occurrence instead of the longest matching label', () => {
     const source = report({ chorus: true, lufs: -18 });
     source.sections.push({
