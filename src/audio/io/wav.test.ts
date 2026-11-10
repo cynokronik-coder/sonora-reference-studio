@@ -90,7 +90,7 @@ describe('chunked WAV encoding', () => {
     expect(header?.lengthFrames).toBe(2);
   });
 
-  it('rejects unsupported RIFF sizes and invalid sample rates before allocating audio chunks', () => {
+  it('rejects invalid sample rates and byte rates before allocating audio chunks', () => {
     expect(() => encodeWav(
       new Float32Array(2),
       new Float32Array(2),
@@ -101,6 +101,11 @@ describe('chunked WAV encoding', () => {
       new Float32Array(1),
       { sampleRate: 48_000, bitDepth: 16, dither: false },
     )).not.toThrow();
+    expect(() => encodeWav(
+      new Float32Array(1),
+      new Float32Array(1),
+      { sampleRate: 3_000_000_000, bitDepth: 16, dither: false },
+    )).toThrow(RangeError);
   });
 });
 
@@ -143,7 +148,7 @@ describe('chunked AIFF encoding', () => {
     expect(readSigned24(view, frameOffset, false)).toBe(-8_388_607);
     expect(readSigned24(view, frameOffset + 3, false)).toBe(8_388_607);
     expect(readSigned24(view, frameOffset + 6, false)).toBe(4_194_304);
-    expect(readSigned24(view, frameOffset + 9, false)).toBe(-4_194_304);
+    expect(readSigned24(view, frameOffset + 9, false)).toBe(-4_194_303);
     expect(blob.size).toBe(54 + frames * 6);
   });
 
