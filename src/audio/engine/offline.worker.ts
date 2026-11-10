@@ -1,5 +1,5 @@
 import { ProjectRenderer, type EngineAsset } from './renderer';
-import { analyzeLoudness } from '../analysis/loudness';
+import { analyzeLoudnessAsync } from '../analysis/loudness';
 import { copyLatencyAlignedBlock } from './offline-render';
 import type { ProjectState } from '../model/types';
 
@@ -14,6 +14,7 @@ interface RenderRequest {
 }
 
 let cancelled = false;
+let activeAnalysisController: AbortController | null = null;
 const blockSize = 512;
 const yieldIntervalMs = 24;
 
@@ -21,23 +22,33 @@ self.onmessage = (event: MessageEvent) => {
   const message = event.data as RenderRequest | { type: 'cancel' };
   if (message.type === 'cancel') {
     cancelled = true;
+    activeAnalysisController?.abort();
     return;
   }
   if (message.type !== 'render') return;
   cancelled = false;
-  void render(message).catch((error) => {
-    self.postMessage({
-      type: 'error',
-      message: error instanceof Error ? error.message : String(error),
+  const controller = new AbortController();
+  activeAnalysisController = controller;
+  void render(message, controller.signal)
+    .catch((error) => {
+      const wasCancelled = cancelled || (error instanceof Error && error.name === 'AbortError');
+      self.postMessage(wasCancelled
+        ? { type: 'cancelled' }
+        : {
+            type: 'error',
+            message: error instanceof Error ? error.message : String(error),
+          });
+    })
+    .finally(() => {
+      if (activeAnalysisController === controller) activeAnalysisController = null;
     });
-  });
 };
 
 function yieldToWorkerEvents(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-async function render(request: RenderRequest): Promise<void> {
+async function render(request: RenderRequest, signal: AbortSignal): Promise<void> {
   const sampleRate = request.sampleRate;
   if (!Number.isFinite(sampleRate) || sampleRate <= 0) {
     throw new Error('The offline render sample rate is invalid.');
@@ -92,7 +103,8 @@ async function render(request: RenderRequest): Promise<void> {
       lastReport = now;
       self.postMessage({
         type: 'progress',
-        progress: Math.min(1, written / renderFrames),
+        stage: 'Rendering audio',
+        progress: Math.min(0.85, (written / renderFrames) * 0.85),
         elapsedMs: now - started,
       });
     }
@@ -117,13 +129,34 @@ async function render(request: RenderRequest): Promise<void> {
     return;
   }
 
-  // Stats-only callers still need the complete programme for integrated
-  // loudness/LRA analysis, but do not return or transfer those PCM arrays.
-  const loudness = analyzeLoudness(outputL, outputR, sampleRate);
-  let peak = 0;
-  for (let i = 0; i < outputL.length; i++) {
-    peak = Math.max(peak, Math.abs(outputL[i]), Math.abs(outputR[i]));
+  // Loudness analysis yields between bounded PCM blocks so the worker can
+  // service Cancel while measuring long programmes instead of becoming
+  // unresponsive after the final render block.
+  self.postMessage({
+    type: 'progress',
+    stage: 'Measuring loudness',
+    progress: 0.86,
+    elapsedMs: performance.now() - started,
+  });
+  const loudness = await analyzeLoudnessAsync(outputL, outputR, sampleRate, {
+    signal,
+    onProgress: (fraction) => {
+      self.postMessage({
+        type: 'progress',
+        stage: 'Measuring loudness',
+        progress: 0.86 + fraction * 0.13,
+        elapsedMs: performance.now() - started,
+      });
+    },
+  });
+  if (cancelled || signal.aborted) {
+    self.postMessage({ type: 'cancelled' });
+    return;
   }
+  // Preserve the legacy peak scalar without another full programme scan.
+  const peak = Number.isFinite(loudness.samplePeakDb)
+    ? Math.pow(10, loudness.samplePeakDb / 20)
+    : 0;
   const resultL = request.statsOnly ? new Float32Array(0) : outputL;
   const resultR = request.statsOnly ? new Float32Array(0) : outputR;
   const bufferL = resultL.buffer;
