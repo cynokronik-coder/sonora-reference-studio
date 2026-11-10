@@ -18,6 +18,8 @@ export interface RhythmReport {
 export interface AnalyzeRhythmOptions {
   /** Skip nested structural segmentation when measuring an already-selected section. */
   includeSections?: boolean;
+  /** Reports phase name and a monotonically increasing fraction from 0 to 1. */
+  onProgress?: (stage: string, fraction: number) => void;
 }
 
 interface FeatureFrame {
@@ -43,6 +45,7 @@ export function analyzeRhythm(
   const n = Math.min(L.length, R.length);
   const duration = n / sampleRate;
   if (n < sampleRate) {
+    options.onProgress?.('Detecting tempo and sections', 1);
     return {
       tempoBpm: 0,
       beatConfidence: 0,
@@ -63,6 +66,7 @@ export function analyzeRhythm(
   const flux: number[] = [];
   let meanEnergy = 0;
   let frames = 0;
+  const totalFrames = Math.max(0, Math.floor((n - fftSize) / hop) + 1);
 
   for (let start = 0; start + fftSize <= n; start += hop) {
     for (let i = 0; i < fftSize; i++) {
@@ -80,7 +84,11 @@ export function analyzeRhythm(
     flux.push(f);
     meanEnergy += f;
     frames++;
+    if ((frames & 0x3f) === 0 || frames === totalFrames) {
+      options.onProgress?.('Detecting onsets', 0.55 * (frames / Math.max(1, totalFrames)));
+    }
   }
+  options.onProgress?.('Preparing onset envelope', 0.58);
   const fluxMean = meanEnergy / Math.max(1, frames);
   const fluxNorm = flux.map((v) => v / Math.max(1e-9, fluxMean));
   // Onset strength above the local average.
@@ -94,7 +102,13 @@ export function analyzeRhythm(
   });
 
   const frameRate = sampleRate / hop;
-  const { tempoBpm, confidence } = estimateTempo(onset, frameRate);
+  options.onProgress?.('Estimating tempo', 0.6);
+  const { tempoBpm, confidence } = estimateTempo(
+    onset,
+    frameRate,
+    (fraction) => options.onProgress?.('Estimating tempo', 0.6 + fraction * 0.22),
+  );
+  options.onProgress?.('Scoring attacks', 0.83);
   const onsetThreshold = Math.max(0.35, median(onset.filter((v) => v > 0.05)) * 1.6);
   let onsetCount = 0;
   for (let i = 1; i < onset.length - 1; i++) {
@@ -107,7 +121,16 @@ export function analyzeRhythm(
     1,
   );
 
-  const segments = options.includeSections === false ? [] : estimateSections(L, R, sampleRate, duration);
+  const segments = options.includeSections === false
+    ? []
+    : estimateSections(
+        L,
+        R,
+        sampleRate,
+        duration,
+        (fraction) => options.onProgress?.('Detecting song sections', 0.84 + fraction * 0.16),
+      );
+  options.onProgress?.('Detecting tempo and sections', 1);
   return {
     tempoBpm,
     beatConfidence: confidence,
@@ -118,7 +141,11 @@ export function analyzeRhythm(
   };
 }
 
-function estimateTempo(onset: number[], frameRate: number): { tempoBpm: number; confidence: number } {
+function estimateTempo(
+  onset: number[],
+  frameRate: number,
+  onProgress?: (fraction: number) => void,
+): { tempoBpm: number; confidence: number } {
   let mean = 0;
   for (const v of onset) mean += v;
   mean /= Math.max(1, onset.length);
@@ -131,6 +158,7 @@ function estimateTempo(onset: number[], frameRate: number): { tempoBpm: number; 
   const maxBpm = 200;
   const minLag = Math.max(2, Math.round((60 / maxBpm) * frameRate));
   const maxLag = Math.min(centered.length - 1, Math.round((60 / minBpm) * frameRate));
+  const lagCount = Math.max(1, maxLag - minLag + 1);
   for (let lag = minLag; lag <= maxLag; lag++) {
     let sum = 0;
     for (let i = 0; i + lag < centered.length; i++) sum += centered[i] * centered[i + lag];
@@ -141,23 +169,33 @@ function estimateTempo(onset: number[], frameRate: number): { tempoBpm: number; 
       bestScore = score;
       bestLag = lag;
     }
+    if (((lag - minLag) & 0x07) === 0 || lag === maxLag) {
+      onProgress?.((lag - minLag + 1) / lagCount);
+    }
   }
   const average = scoreCount ? scoreSum / scoreCount : 0;
   const confidence = average > 0 ? clamp(bestScore / (average * 4), 0, 1) : 0;
-  if (!bestLag) return { tempoBpm: 0, confidence: 0 };
+  if (!bestLag) return { tempoBpm: 0, confidence };
   let bpm = (60 * frameRate) / bestLag;
   while (bpm < 70) bpm *= 2;
   while (bpm > 180) bpm /= 2;
   return { tempoBpm: Math.round(bpm * 10) / 10, confidence };
 }
 
-function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, duration: number): SectionBoundary[] {
+function estimateSections(
+  L: Float32Array,
+  R: Float32Array,
+  sampleRate: number,
+  duration: number,
+  onProgress?: (fraction: number) => void,
+): SectionBoundary[] {
   const frameHop = Math.round(sampleRate * 0.5);
   const fftSize = 2048;
   const fft = new FFT(fftSize);
   const window = hannWindow(fftSize);
   const frames: FeatureFrame[] = [];
   const bands = [40, 80, 160, 320, 640, 1250, 2500, 5000, 8000, 12000];
+  const totalFrames = Math.max(0, Math.floor((L.length - fftSize) / frameHop) + 1);
 
   for (let start = 0; start + fftSize <= L.length; start += frameHop) {
     const re = new Float64Array(fftSize);
@@ -180,11 +218,16 @@ function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, 
       bandValues.push(Math.log10(Math.max(sum, 1e-12)));
     }
     frames.push({ time: start / sampleRate, energy: Math.sqrt(energy / fftSize), bands: bandValues });
+    if ((frames.length & 0x0f) === 0 || frames.length === totalFrames) {
+      onProgress?.(0.55 * (frames.length / Math.max(1, totalFrames)));
+    }
   }
 
   if (frames.length < 8) {
+    onProgress?.(1);
     return [{ start: 0, end: duration }];
   }
+  onProgress?.(0.56);
 
   // Normalise features so distance is not dominated by loudness alone.
   const meanBand = new Array(bands.length).fill(0);
@@ -198,8 +241,11 @@ function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, 
   ]);
 
   const context = 8; // 4 seconds each side
-  const novelty: number[] = vectors.map((_, i) => {
-    if (i < context || i >= vectors.length - context) return 0;
+  const novelty: number[] = [];
+  for (let i = 0; i < vectors.length; i++) {
+    if (i < context || i >= vectors.length - context) {
+      novelty.push(0);
+    } else {
     let distance = 0;
     for (let d = 0; d < vectors[i].length; d++) {
       let left = 0;
@@ -212,8 +258,12 @@ function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, 
       right /= context;
       distance += (left - right) * (left - right);
     }
-    return distance;
-  });
+      novelty.push(distance);
+    }
+    if ((i & 0x3f) === 0 || i === vectors.length - 1) {
+      onProgress?.(0.56 + 0.34 * ((i + 1) / Math.max(1, vectors.length)));
+    }
+  }
 
   const noveltyMean = novelty.reduce((a, b) => a + b, 0) / novelty.length;
   const threshold = noveltyMean * 1.6 + 1e-6;
@@ -232,6 +282,7 @@ function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, 
     }
   }
   boundaries.push(duration);
+  onProgress?.(0.92);
   if (boundaries.length > 13) {
     // Keep the strongest boundaries plus start/end.
     const ranked = novelty
@@ -240,12 +291,15 @@ function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, 
       .slice(0, 10)
       .map((x) => frames[x.i].time)
       .sort((a, b) => a - b);
-    return [{ start: 0, end: ranked[0] ?? duration }, ...ranked.map((t, i) => ({ start: t, end: ranked[i + 1] ?? duration }))];
+    const result = [{ start: 0, end: ranked[0] ?? duration }, ...ranked.map((t, i) => ({ start: t, end: ranked[i + 1] ?? duration }))];
+    onProgress?.(1);
+    return result;
   }
   const sections: SectionBoundary[] = [];
   for (let i = 0; i < boundaries.length - 1; i++) {
     sections.push({ start: boundaries[i], end: boundaries[i + 1] });
   }
+  onProgress?.(1);
   return sections;
 }
 
