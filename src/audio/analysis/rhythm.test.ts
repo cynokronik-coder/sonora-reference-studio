@@ -67,3 +67,32 @@ describe('rhythm analysis progress reporting', () => {
     expect(progress).toEqual([1]);
   });
 });
+
+
+describe('section FFT scratch-buffer reuse', () => {
+  it('keeps frame features deterministic across repeated multi-frame analyses', () => {
+    const frames = SAMPLE_RATE * 18;
+    const left = new Float32Array(frames);
+    const right = new Float32Array(frames);
+    for (let i = 0; i < frames; i++) {
+      const seconds = i / SAMPLE_RATE;
+      const movement = seconds < 6 ? 1 : seconds < 12 ? 0.55 : 0.8;
+      const low = Math.sin((2 * Math.PI * 90 * i) / SAMPLE_RATE);
+      const mid = Math.sin((2 * Math.PI * (seconds < 6 ? 440 : 1_200) * i) / SAMPLE_RATE);
+      const high = Math.sin((2 * Math.PI * 5_600 * i) / SAMPLE_RATE);
+      left[i] = movement * (0.12 * low + 0.07 * mid + 0.025 * high);
+      right[i] = movement * (0.11 * low + 0.065 * mid + 0.03 * high);
+    }
+
+    const first = analyzeRhythm(left, right, SAMPLE_RATE);
+    const second = analyzeRhythm(left, right, SAMPLE_RATE);
+
+    expect(second).toEqual(first);
+    expect(first.sections.length).toBeGreaterThan(0);
+    for (const section of first.sections) {
+      expect(section.start).toBeGreaterThanOrEqual(0);
+      expect(section.end).toBeGreaterThan(section.start);
+      expect(section.end).toBeLessThanOrEqual(frames / SAMPLE_RATE);
+    }
+  });
+});
