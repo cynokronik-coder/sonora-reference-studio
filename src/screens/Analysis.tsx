@@ -133,6 +133,10 @@ export default function Analysis() {
                     <th className="py-1 pr-3">Crest</th>
                     <th className="py-1 pr-3">Width</th>
                     <th className="py-1 pr-3">Correlation</th>
+                    <th className="py-1 pr-3">Tempo</th>
+                    <th className="py-1 pr-3">Grid fit</th>
+                    <th className="py-1 pr-3">Off-grid</th>
+                    <th className="py-1 pr-3">Beat phase</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -148,6 +152,10 @@ export default function Analysis() {
                       <td className="py-1 pr-3 font-mono text-ink-300">{section.crestDb.toFixed(1)}</td>
                       <td className="py-1 pr-3 font-mono text-ink-300">{section.widthDb.toFixed(1)}</td>
                       <td className="py-1 pr-3 font-mono text-ink-300">{section.correlation.toFixed(2)}</td>
+                      <td className="py-1 pr-3 font-mono text-ink-300">{section.tempoBpm !== null ? section.tempoBpm.toFixed(1) : '—'}</td>
+                      <td className="py-1 pr-3 font-mono text-ink-300">{section.beatGridConfidence !== null ? `${Math.round(section.beatGridConfidence * 100)}%` : '—'}</td>
+                      <td className="py-1 pr-3 font-mono text-ink-300">{section.offBeatRatio !== null ? `${Math.round(section.offBeatRatio * 100)}%` : '—'}</td>
+                      <td className="py-1 pr-3 font-mono text-ink-300">{section.beatPhaseSeconds !== null ? `${section.beatPhaseSeconds.toFixed(2)}s` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
