@@ -216,3 +216,10 @@ The offline worker yields to its event loop after a short wall-clock work interv
 MP3 encoding now reuses two 1,152-frame Int16 scratch buffers rather than allocating two Int16 arrays the length of the entire song. The encoder still accumulates compressed MP3 chunks for the final Blob.
 
 These changes reduce avoidable peak allocations; they do not make the export pipeline fully streaming. The worker still receives cloned source PCM assets, the final stereo Float32 programme remains resident for analysis/encoding, WAV and AIFF writers allocate a complete encoded-file buffer, and encoded-file verification decodes the completed Blob into PCM. Long-programme browser memory profiling and cancellation tests in a real browser remain necessary.
+
+
+### Chunked WAV and AIFF encoding
+
+WAV and AIFF PCM conversion now writes bounded 16,384-frame interleaved blocks and creates a Blob from a small header plus those block parts. This avoids a single song-sized encoded-file ArrayBuffer and bounds each temporary conversion allocation. WAV TPDF dither state continues across block boundaries, preserving deterministic output for a given source and settings. The RIFF/FORM 32-bit size limits are checked before block allocation.
+
+This is chunk-based Blob assembly, not direct-to-disk streaming: the final encoded Blob and its chunk parts remain available for the existing automatic download, IndexedDB export history and Verify workflow. The rendered Float32 PCM also remains resident for measurement and encoding. Direct writes to a user-selected file and truly bounded-memory export history are separate future work.
