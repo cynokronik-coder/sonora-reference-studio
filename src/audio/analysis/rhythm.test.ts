@@ -3,6 +3,7 @@ import {
   adaptiveOnsetEnvelope,
   analyzeRhythm,
   combineBandFlux,
+  compareBeatSectionTransition,
   estimateTempo,
   groupOnsetEvents,
   scoreBeatGrid,
@@ -336,5 +337,47 @@ describe('transient grouping and beat-grid confidence', () => {
     expect(report.beatGridConfidence).toBeLessThanOrEqual(1);
     expect(report.offBeatRatio).toBeGreaterThanOrEqual(0);
     expect(report.offBeatRatio).toBeLessThanOrEqual(1);
+  });
+});
+
+
+describe('section beat transition analysis', () => {
+  it('reports phase slip independently when adjacent section tempos match', () => {
+    const transition = compareBeatSectionTransition(
+      { tempoBpm: 120, beatPhaseSeconds: 0.1 },
+      { tempoBpm: 120, beatPhaseSeconds: 0.11 },
+    );
+    expect(transition.tempoChangeBpm).toBe(0);
+    expect(transition.beatPhaseShiftMs).toBeCloseTo(10, 1);
+    expect(transition.beatContinuity).toBeGreaterThan(0.9);
+  });
+
+  it('wraps phase shifts around the beat interval to the shortest signed offset', () => {
+    const transition = compareBeatSectionTransition(
+      { tempoBpm: 120, beatPhaseSeconds: 0.49 },
+      { tempoBpm: 120, beatPhaseSeconds: 0.01 },
+    );
+    expect(transition.beatPhaseShiftMs).toBeCloseTo(20, 1);
+  });
+
+  it('reports tempo changes without mislabelling them as phase shifts', () => {
+    const transition = compareBeatSectionTransition(
+      { tempoBpm: 120, beatPhaseSeconds: 0.1 },
+      { tempoBpm: 132, beatPhaseSeconds: 0.12 },
+    );
+    expect(transition.tempoChangeBpm).toBe(12);
+    expect(transition.beatPhaseShiftMs).toBeNull();
+    expect(transition.beatContinuity).toBeNull();
+  });
+
+  it('does not report continuity without two reliable neighbouring sections', () => {
+    expect(compareBeatSectionTransition(null, {
+      tempoBpm: 120,
+      beatPhaseSeconds: 0.1,
+    })).toEqual({
+      tempoChangeBpm: null,
+      beatPhaseShiftMs: null,
+      beatContinuity: null,
+    });
   });
 });
