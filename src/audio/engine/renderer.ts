@@ -96,6 +96,38 @@ export class ProjectRenderer {
     this.rebuild(project);
   }
 
+  /**
+   * Configure only the independent master stage for the optimized A/B path.
+   * The paired renderer receives the shared pre-master signal from its peer,
+   * so constructing duplicate track/bus processor graphs would waste memory.
+   */
+  configureMasterOnly(project: ProjectState, assets: EngineAsset[], sampleRate: number, blockSize: number): void {
+    this.project = project;
+    this.sr = sampleRate;
+    this.blockSize = blockSize;
+    this.assets = new Map(assets.map((a) => [a.id, a]));
+    this.assetSignature = assets.map((a) => [a.id, a.sampleRate, a.length]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))).map((entry) => entry.join(':')).join('|');
+    this.preMasterSignature = JSON.stringify({ sampleRate: this.sr, tracks: project.tracks, buses: project.buses });
+    this.trackConfigSignature = '';
+    this.trackPaths.clear();
+    this.busPaths.clear();
+    this.scratch.clear();
+    this.rawKeys.clear();
+    this.busAccum.clear();
+    this.masterChain = new ProcessorChain(this.sr, this.blockSize);
+    this.masterChain.prepare(this.sr, this.blockSize);
+    this.masterChain.update(
+      project.master.processors.map((p) => ({ id: p.id, type: p.type, enabled: p.enabled, params: p.params })),
+    );
+    this.maxLatency = 0;
+    this.masterLatency = this.masterChain.latency;
+  }
+
+  static preMasterGraphsMatch(before: ProjectState, after: ProjectState, sampleRate: number): boolean {
+    return JSON.stringify({ sampleRate, tracks: before.tracks, buses: before.buses }) ===
+      JSON.stringify({ sampleRate, tracks: after.tracks, buses: after.buses });
+  }
+
   setProject(project: ProjectState): void {
     this.project = project;
     this.rebuild(project);
