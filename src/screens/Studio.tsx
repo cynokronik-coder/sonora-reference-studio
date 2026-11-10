@@ -7,7 +7,8 @@ import { Icon } from '../ui/Icon';
 import { Mixer, TransportBar, AssistantPanel } from '../ui/Mixer';
 import { Rack } from '../ui/Rack';
 import { LevelMeter, useMeters } from '../ui/viz';
-import { findTrack } from '../audio/model/project';
+import { allAssetIds, findTrack } from '../audio/model/project';
+import { estimateProjectAudioMemory, formatMemoryBytes } from '../audio/io/memory';
 import type { TrackKind } from '../audio/model/types';
 import { Timeline } from '../ui/Timeline';
 import { StudioTimeline } from '../ui/StudioTimeline';
@@ -30,6 +31,10 @@ const TRACK_KINDS: TrackKind[] = ['audio', 'vocal', 'instrument', 'drums', 'bass
 
 export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, onOpenCommandPalette }: { onStartTour?: () => void; onExpandAssistant?: () => void; onOpenAccount?: () => void; onOpenCommandPalette?: () => void } = {}) {
   const project = useApp((s) => s.project);
+  const assetBuffers = useApp((s) => s.assetBuffers);
+  const audioMemory = useMemo(() => project
+    ? estimateProjectAudioMemory(allAssetIds(project), assetBuffers)
+    : null, [project, assetBuffers]);
   const { selectedTrackId, selectTrack, importFiles, updateTrack, removeTrack, addTrack } = useApp();
   const picker = useFilePicker();
   const [focus, setFocus] = useState<Focus>({ scope: 'master', id: null });
@@ -174,7 +179,17 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
           </div>
           <div className="min-w-0">
             <h1 className="truncate text-base font-semibold tracking-[-.02em] text-white">Sonora</h1>
-            <p className="max-w-[180px] truncate text-xs text-ink-400">{project.name} · {project.tracks.length} tracks · {(project.sampleRate / 1000).toFixed(1)} kHz</p>
+            <p className="max-w-[360px] truncate text-xs text-ink-400">
+              {project.name} · {project.tracks.length} tracks · {(project.sampleRate / 1000).toFixed(1)} kHz
+              {audioMemory && (
+                <span
+                  className={audioMemory.estimatedResidentBytes >= 512 * 1024 * 1024 ? 'ml-1.5 text-signal-amber' : 'ml-1.5 text-ink-500'}
+                  title={`Estimated audio working set: ${formatMemoryBytes(audioMemory.estimatedResidentBytes)}. Main-thread PCM: ${formatMemoryBytes(audioMemory.decodedPcmBytes)}; playback copy: ${formatMemoryBytes(audioMemory.playbackCopyBytes)}; waveform data: ${formatMemoryBytes(audioMemory.waveformBytes)}. Excludes browser decoder, analysis and export scratch memory.`}
+                >
+                  · {formatMemoryBytes(audioMemory.estimatedResidentBytes)} audio
+                </span>
+              )}
+            </p>
           </div>
         </div>
 
