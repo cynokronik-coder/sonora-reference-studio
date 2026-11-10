@@ -76,7 +76,15 @@ export class RealtimeHost {
       if (!AudioCtor) throw new Error('Web Audio is not supported in this browser.');
 
       if (this.ctx?.state === 'closed') {
+        this.ready = false;
+        this.node?.disconnect();
+        this.node = null;
+        this.comparison?.disconnect();
+        this.monitor?.disconnect();
+        this.comparison = null;
+        this.monitor = null;
         this.ctx = null;
+        this.workletLoadedFor = null;
         this.loadedAssets.clear();
         this.playing = false;
       }
@@ -135,6 +143,7 @@ export class RealtimeHost {
     this.ready = false;
     this.playing = false;
     this.loadedAssets.clear();
+    this.node?.port.close();
     this.node?.disconnect();
     this.node = null;
     this.comparison?.disconnect();
