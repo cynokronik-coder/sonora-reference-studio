@@ -38,7 +38,8 @@ export interface SpectrumAccum {
   fftSize: number;
 }
 
-const FFT_SIZE = 4096;
+export const SPECTRUM_FFT_SIZE = 4096;
+const FFT_SIZE = SPECTRUM_FFT_SIZE;
 
 export function createSpectrumAccum(sampleRate: number): SpectrumAccum {
   return { power: new Float64Array(FFT_SIZE / 2 + 1), frames: 0, sampleRate, fftSize: FFT_SIZE };
