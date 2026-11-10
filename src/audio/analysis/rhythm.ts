@@ -123,7 +123,7 @@ export function analyzeRhythm(
   const onset = adaptiveOnsetEnvelope(
     fluxNorm,
     Math.max(4, Math.round((sampleRate / hop) * 0.13)),
-    (fraction) => options.onProgress?.('Detecting onsets', 0.55 + fraction * 0.03),
+    (fraction) => options.onProgress?.('Detecting onsets', Math.min(0.58, 0.55 + fraction * 0.03)),
   );
   options.onProgress?.('Preparing onset envelope', 0.58);
 
@@ -136,8 +136,10 @@ export function analyzeRhythm(
   );
   const { tempoBpm, confidence } = tempo;
   options.onProgress?.('Scoring attacks', 0.83);
-  const positiveOnsets = onset.filter((value) => value > 0.02);
-  const onsetThreshold = Math.max(0.06, median(positiveOnsets) * 0.75);
+  // adaptiveOnsetEnvelope already removes local background and noise. A
+  // fixed normalized gate avoids loud sections raising the threshold for quiet
+  // percussion elsewhere in the same track.
+  const onsetThreshold = 0.06;
   let onsetCount = 0;
   for (let i = 1; i < onset.length - 1; i++) {
     // Strict left comparison resolves flat-topped peaks to one event.
