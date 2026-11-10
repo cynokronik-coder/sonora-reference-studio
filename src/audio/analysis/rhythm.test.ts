@@ -115,6 +115,18 @@ describe('robust tempo estimation', () => {
     expect(result.confidence).toBeGreaterThan(0);
   });
 
+  it('does not force a clearly measured 60 BPM pulse into double-time', () => {
+    const frameRate = 100;
+    const onset = new Array(frameRate * 32).fill(0);
+    for (let beat = 0; beat < 32; beat++) onset[beat * frameRate] = 1;
+
+    const result = estimateTempo(onset, frameRate);
+
+    expect(result.tempoBpm).toBeCloseTo(60, 0);
+    expect(result.candidatesBpm).toContain(60);
+    expect(result.candidatesBpm).not.toContain(120);
+  });
+
   it('reports local tempo movement instead of relying only on one whole-track peak', () => {
     const frameRate = 100;
     const duration = 24;
