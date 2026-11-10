@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { AnalysisReport } from '../audio/analysis/analyze';
 import { decodeAudioFile, resampleToRate } from '../audio/io/decode';
 import { encodeAiff, encodeWav, type WavBitDepth } from '../audio/io/wav';
+import { fillStereoPcm16Block } from '../audio/io/mp3';
 import { analyzeLoudness, normalizeToTruePeak } from '../audio/analysis/loudness';
 import { generateMatchPlan, planToNodes, type MatchPlan } from '../audio/analysis/match';
 import { interpretCommand, suggestionsFor, type AssistantProposal } from '../audio/ai/assistant';
@@ -2137,17 +2138,16 @@ async function encodeMp3(L: Float32Array, R: Float32Array, sampleRate: number): 
   } }).Mp3Encoder;
   if (!Mp3Encoder) throw new Error('MP3 encoder failed to load.');
   const encoder = new Mp3Encoder(2, sampleRate, 320);
-  const left = new Int16Array(L.length);
-  const right = new Int16Array(R.length);
-  for (let i = 0; i < L.length; i++) {
-    left[i] = Math.max(-32768, Math.min(32767, Math.round(L[i] * 32767)));
-    right[i] = Math.max(-32768, Math.min(32767, Math.round(R[i] * 32767)));
-  }
   const chunkSize = 1152;
+  // Reuse bounded scratch buffers instead of allocating a full-song Int16 pair.
+  const left = new Int16Array(chunkSize);
+  const right = new Int16Array(chunkSize);
   const chunks: BlobPart[] = [];
-  for (let offset = 0; offset < left.length; offset += chunkSize) {
-    const l = left.subarray(offset, offset + chunkSize);
-    const r = right.subarray(offset, offset + chunkSize);
+  for (let offset = 0; offset < L.length; offset += chunkSize) {
+    const frames = Math.min(chunkSize, L.length - offset);
+    fillStereoPcm16Block(L, R, offset, frames, left, right);
+    const l = left.subarray(0, frames);
+    const r = right.subarray(0, frames);
     const encoded = encoder.encodeBuffer(l, r);
     if (encoded.length) chunks.push(new Uint8Array(encoded.slice()));
   }
