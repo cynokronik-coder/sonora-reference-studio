@@ -223,7 +223,7 @@ function createWavHeader(
   options: EncodeOptions,
   infoChunks: { id: string; data: Uint8Array }[],
   dataSize: number,
-): Uint8Array {
+): Uint8Array<ArrayBuffer> {
   let infoSize = 0;
   for (const chunk of infoChunks) infoSize += 8 + chunk.data.length;
   const infoTotal = infoChunks.length ? 12 + infoSize : 0;
