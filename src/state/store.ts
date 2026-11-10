@@ -2178,7 +2178,12 @@ async function renderProject(
         const message = event.data;
         if (message.type === 'progress') {
           useApp.setState({
-            busy: { kind: 'render', label: options.label ?? 'Rendering offline', progress: message.progress as number, cancel },
+            busy: {
+              kind: 'render',
+              label: typeof message.stage === 'string' ? message.stage : options.label ?? 'Rendering offline',
+              progress: message.progress as number,
+              cancel,
+            },
           });
         } else if (message.type === 'done') {
           resolve({
@@ -2188,7 +2193,9 @@ async function renderProject(
             stats: message.stats as RenderStats,
           });
         } else if (message.type === 'cancelled') {
-          reject(new Error('Render cancelled.'));
+          const error = new Error('The offline render was cancelled.');
+          error.name = 'AbortError';
+          reject(error);
         } else if (message.type === 'error') {
           reject(new Error(message.message as string));
         }
