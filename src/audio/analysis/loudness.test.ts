@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeLoudness, loudnessOfRange, normalizeToTruePeak } from './loudness';
+import { analyzeLoudness, loudnessOfRange, normalizeToTruePeak, normalizeToTruePeakAsync } from './loudness';
 
 const SAMPLE_RATE = 48_000;
 
@@ -169,5 +169,35 @@ describe('BS.1770-5 integrated and EBU time-window loudness', () => {
     expect(report.lra).toBe(0);
     expect(report.dynamicRangeDb).toBeGreaterThanOrEqual(0);
     expect(report.dynamicRangeDb).toBeLessThan(2);
+  });
+});
+
+
+describe('cooperative true-peak normalization', () => {
+  it('matches the synchronous gain and modifies the same PCM samples in place', async () => {
+    const source = stereoTone(1_000, -3, 1);
+    const expectedL = source.left.slice();
+    const expectedR = source.right.slice();
+    const actualL = source.left.slice();
+    const actualR = source.right.slice();
+    const expectedGain = normalizeToTruePeak(expectedL, expectedR, -1);
+    const actualGain = await normalizeToTruePeakAsync(actualL, actualR, -1);
+    expect(actualGain).toBeCloseTo(expectedGain, 12);
+    expect(actualL[12_345]).toBeCloseTo(expectedL[12_345], 7);
+    expect(actualR[12_345]).toBeCloseTo(expectedR[12_345], 7);
+  });
+
+  it('reports progress and can cancel between meter blocks', async () => {
+    const source = stereoTone(1_000, -6, 2);
+    const controller = new AbortController();
+    const progress: number[] = [];
+    await expect(normalizeToTruePeakAsync(source.left, source.right, -1, {
+      signal: controller.signal,
+      onProgress: (value) => {
+        progress.push(value);
+        if (value > 0) controller.abort();
+      },
+    })).rejects.toMatchObject({ name: 'AbortError' });
+    expect(progress.length).toBeGreaterThan(0);
   });
 });
