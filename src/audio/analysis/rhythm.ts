@@ -301,12 +301,14 @@ function estimateTempoWindow(
   }
 
   const rawBpm = (60 * frameRate) / bestLag;
-  const tempoBpm = foldTempo(rawBpm);
+  // Preserve the measured pulse even below 70 BPM; low-tempo music should
+  // not be silently relabelled as double-time without supporting evidence.
+  const tempoBpm = roundTempo(rawBpm);
   const candidatesBpm = [tempoBpm];
   // The autocorrelation at one beat interval and at two beat intervals can
   // both be strong. Keep the second interpretation only when its own peak
   // has substantial support; do not present every mathematical subdivision.
-  for (const candidate of [rawBpm, rawBpm / 2, rawBpm * 2]) {
+  for (const candidate of [rawBpm / 2, rawBpm * 2]) {
     if (candidate < minBpm || candidate > maxBpm) continue;
     const lag = Math.round((60 * frameRate) / candidate);
     if (lag < minLag || lag > maxLag) continue;
@@ -321,12 +323,6 @@ function estimateTempoWindow(
   return { tempoBpm, confidence, candidatesBpm };
 }
 
-function foldTempo(value: number): number {
-  let bpm = value;
-  while (bpm < 70) bpm *= 2;
-  while (bpm > 180) bpm /= 2;
-  return bpm;
-}
 
 function roundTempo(value: number): number {
   return Math.round(value * 10) / 10;
