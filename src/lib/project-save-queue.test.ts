@@ -32,6 +32,34 @@ describe('ProjectSaveQueue', () => {
     expect(queue.pendingCount).toBe(0);
   });
 
+  it('does not let another project with autosave disabled cancel this project', async () => {
+    vi.useFakeTimers();
+    const saved: TestProject[] = [];
+    const queue = new ProjectSaveQueue<TestProject>(async (project) => {
+      saved.push(project);
+    }, 250);
+
+    queue.schedule({ id: 'one', autosave: true, revision: 3 });
+    queue.schedule({ id: 'two', autosave: false, revision: 8 });
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(saved).toEqual([{ id: 'one', autosave: true, revision: 3 }]);
+  });
+
+  it('flushes only the requested project and removes its old timer', async () => {
+    vi.useFakeTimers();
+    const saved: TestProject[] = [];
+    const queue = new ProjectSaveQueue<TestProject>(async (project) => {
+      saved.push(project);
+    }, 700);
+
+    queue.schedule({ id: 'one', autosave: true, revision: 1 });
+    await queue.flushPending('one');
+    await vi.advanceTimersByTimeAsync(1000);
+
+    expect(saved).toEqual([{ id: 'one', autosave: true, revision: 1 }]);
+  });
+
   it('persists an immutable snapshot rather than a subsequently mutated object', async () => {
     vi.useFakeTimers();
     const saved: TestProject[] = [];
