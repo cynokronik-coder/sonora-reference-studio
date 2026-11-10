@@ -17,6 +17,8 @@ export interface RhythmReport {
   beatGridConfidence?: number;
   /** Fraction of grouped transient strength away from the estimated beat grid. */
   offBeatRatio?: number;
+  /** Beat-grid phase in seconds, measured from the start of this analysed buffer. */
+  beatPhaseSeconds?: number | null;
   /** Transient events per second after collapsing closely spaced FFT peaks. */
   groupedOnsetDensity?: number;
   onsetDensity: number;
@@ -63,6 +65,7 @@ export function analyzeRhythm(
       tempoRangeBpm: null,
       beatGridConfidence: 0,
       offBeatRatio: 0,
+      beatPhaseSeconds: null,
       groupedOnsetDensity: 0,
       onsetDensity: 0,
       punchScore: 0,
@@ -183,6 +186,7 @@ export function analyzeRhythm(
     tempoRangeBpm: tempo.rangeBpm,
     beatGridConfidence: grid.confidence,
     offBeatRatio: grid.offBeatRatio,
+    beatPhaseSeconds: grid.phaseFrames === null ? null : grid.phaseFrames / frameRate,
     groupedOnsetDensity,
     onsetDensity,
     punchScore: clamp(attackSharpness * 0.7 + clamp(onsetDensity / 3, 0, 1) * 0.3, 0, 1),
@@ -248,6 +252,28 @@ export function adaptiveOnsetEnvelope(
   return onset;
 }
 
+
+
+/**
+ * Convert a section-local beat phase into a song-relative phase. A beat phase
+ * is periodic, so the result is wrapped into the current beat interval.
+ */
+export function absoluteBeatPhaseSeconds(
+  sectionStartSeconds: number,
+  localPhaseSeconds: number | null,
+  tempoBpm: number,
+): number | null {
+  if (
+    !Number.isFinite(sectionStartSeconds) ||
+    localPhaseSeconds === null ||
+    !Number.isFinite(localPhaseSeconds) ||
+    !(tempoBpm > 0) ||
+    !Number.isFinite(tempoBpm)
+  ) return null;
+  const beatPeriod = 60 / tempoBpm;
+  const absolute = sectionStartSeconds + localPhaseSeconds;
+  return ((absolute % beatPeriod) + beatPeriod) % beatPeriod;
+}
 
 export interface OnsetEvent {
   /** Frame index of the strongest peak in the grouped transient. */
