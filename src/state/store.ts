@@ -2175,7 +2175,7 @@ async function chooseDirectExportFile(
   if (typeof window === 'undefined' || !window.isSecureContext) return null;
   const picker = (window as SaveFilePickerWindow).showSaveFilePicker;
   if (!picker) return null;
-  const type = format === 'wav'
+  const type: SaveFilePickerOptions['types'][number] = format === 'wav'
     ? { description: 'WAV audio', accept: { 'audio/wav': ['.wav'] } }
     : { description: 'AIFF audio', accept: { 'audio/aiff': ['.aiff', '.aif'] } };
   return picker.call(window, { suggestedName, types: [type] });
