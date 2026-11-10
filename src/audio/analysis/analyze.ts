@@ -153,6 +153,9 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
       const sectionRhythm = sectionDuration >= 2
         ? analyzeRhythm(sectionL, sectionR, sampleRate, { includeSections: false })
         : null;
+      const sectionTempo = sectionDuration >= 8 && sectionRhythm?.tempoBpm
+        ? sectionRhythm.tempoBpm
+        : null;
       sections.push({
         index,
         label: labels[index] ?? 'section',
@@ -187,8 +190,8 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
         resonances: sectionSpectrum.resonances,
         maxBuildupDb: sectionSpectrum.maxBuildupDb,
         buildupBands: sectionSpectrum.buildupBands,
-        tempoBpm: sectionDuration >= 8 && sectionRhythm?.tempoBpm ? sectionRhythm.tempoBpm : null,
-        beatConfidence: sectionDuration >= 8 && sectionRhythm ? sectionRhythm.beatConfidence : null,
+        tempoBpm: sectionTempo,
+        beatConfidence: sectionTempo !== null && sectionRhythm ? sectionRhythm.beatConfidence : null,
         attackDensity: sectionRhythm?.onsetDensity ?? null,
         attackSharpness: sectionRhythm?.attackSharpness ?? null,
         punchScore: sectionRhythm?.punchScore ?? null,
