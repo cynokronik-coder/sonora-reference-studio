@@ -90,7 +90,7 @@ describe('ProjectRenderer paired master audition', () => {
     const pairedA = new ProjectRenderer();
     const pairedB = new ProjectRenderer();
     pairedA.configure(projectA, [asset], sampleRate, 128);
-    pairedB.configure(projectB, [asset], sampleRate, 128);
+    pairedB.configureMasterOnly(projectB, [asset], sampleRate, 128);
     expect(pairedA.canSharePreMasterWith(pairedB)).toBe(true);
 
     const baselineA = new ProjectRenderer();
