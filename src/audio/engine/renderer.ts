@@ -3,6 +3,7 @@ import { valueAtTime, findLane } from '../dsp/automation';
 import type { ParamValues, ProcessorMeter } from '../dsp/types';
 import { dbToGain, clamp } from '../dsp/util';
 import type { BusState, ProcessorNodeState, ProjectState, TrackState } from '../model/types';
+import type { AuditionBlockRenderer } from './audition';
 
 export interface EngineAsset {
   id: string;
@@ -350,7 +351,7 @@ export class ProjectRenderer {
    * chain over a copy of the same pre-master stereo block.
    */
   renderPairedBlock(
-    other: ProjectRenderer,
+    other: AuditionBlockRenderer,
     startSample: number,
     frames: number,
     beforeL: Float32Array,
@@ -358,7 +359,7 @@ export class ProjectRenderer {
     afterL: Float32Array,
     afterR: Float32Array,
   ): boolean {
-    if (!this.canSharePreMasterWith(other)) return false;
+    if (!(other instanceof ProjectRenderer) || !this.canSharePreMasterWith(other)) return false;
     if ([beforeL, beforeR, afterL, afterR].some((buffer) => buffer.length < frames)) {
       throw new RangeError('Paired render buffers must fit the requested block.');
     }
