@@ -65,6 +65,7 @@ export function analyzeSpectrumAndStereo(
   const reR = new Float64Array(fftSize);
   const imR = new Float64Array(fftSize);
   const binBand = buildBinBandMap(sampleRate, fftSize);
+  const totalFrames = Math.max(0, Math.floor((n - fftSize) / hop) + 1);
   let frames = 0;
 
   for (let start = 0; start + fftSize <= n; start += hop) {
@@ -103,17 +104,22 @@ export function analyzeSpectrumAndStereo(
     }
 
     frames++;
-    if (onProgress && (frames & 0x7f) === 0) {
-      onProgress(Math.min(1, (start + fftSize) / n));
+    if (onProgress && ((frames & 0x7f) === 0 || frames === totalFrames)) {
+      onProgress(0.8 * (frames / Math.max(1, totalFrames)));
     }
   }
 
   spectrumAccum.frames = frames;
   stereoAccum.frames = frames;
-  onProgress?.(1);
 
   return {
     spectrum: finalizeSpectrum(spectrumAccum),
-    stereo: finalizeStereoFromAccum(L, R, sampleRate, stereoAccum),
+    stereo: finalizeStereoFromAccum(
+      L,
+      R,
+      sampleRate,
+      stereoAccum,
+      (fraction) => onProgress?.(0.8 + fraction * 0.2),
+    ),
   };
 }
