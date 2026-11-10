@@ -80,6 +80,8 @@ export class ProjectRenderer {
   private maxLatency = 0;
   private masterLatency = 0;
   private trackConfigSignature = '';
+  private preMasterSignature = '';
+  private assetSignature = '';
   private meterRefs: Record<string, Record<string, ProcessorMeter>> = {};
   private channelPeaks = new Map<string, { L: number; R: number }>();
 
@@ -88,6 +90,7 @@ export class ProjectRenderer {
     this.sr = sampleRate;
     this.blockSize = blockSize;
     this.assets = new Map(assets.map((a) => [a.id, a]));
+    this.assetSignature = assets.map((a) => [a.id, a.sampleRate, a.length]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))).map((entry) => entry.join(':')).join('|');
     this.ensureBuffers(blockSize);
     this.rebuild(project);
   }
@@ -99,6 +102,7 @@ export class ProjectRenderer {
 
   setAssets(assets: EngineAsset[]): void {
     this.assets = new Map(assets.map((a) => [a.id, a]));
+    this.assetSignature = assets.map((a) => [a.id, a.sampleRate, a.length]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))).map((entry) => entry.join(':')).join('|');
   }
 
   private ensureBuffers(blockSize: number): void {
@@ -127,6 +131,10 @@ export class ProjectRenderer {
   }
 
   private rebuild(project: ProjectState): void {
+    // The master A/B path may share all pre-master DSP only when every track,
+    // bus and source asset is identical. Compute this on configuration, never
+    // inside the real-time block loop.
+    this.preMasterSignature = JSON.stringify({ sampleRate: this.sr, tracks: project.tracks, buses: project.buses });
     const signature = JSON.stringify({
       tracks: project.tracks.map((t) => [t.id, t.processors.map((p) => `${p.id}:${p.type}:${p.enabled}`)]),
       buses: project.buses.map((b) => [b.id, b.processors.map((p) => `${p.id}:${p.type}:${p.enabled}`)]),
@@ -332,6 +340,46 @@ export class ProjectRenderer {
    * Both hosts call this identically, guaranteeing export == monitoring.
    */
   renderBlock(startSample: number, frames: number, outL: Float32Array, outR: Float32Array): void {
+    this.renderPreMasterBlock(startSample, frames, outL, outR);
+    this.renderMasterStage(frames, outL, outR);
+  }
+
+  /**
+   * The Reference Match snapshots differ only in their master chain. This
+   * renders the shared track/bus graph once, then runs each independent master
+   * chain over a copy of the same pre-master stereo block.
+   */
+  renderPairedBlock(
+    other: ProjectRenderer,
+    startSample: number,
+    frames: number,
+    beforeL: Float32Array,
+    beforeR: Float32Array,
+    afterL: Float32Array,
+    afterR: Float32Array,
+  ): boolean {
+    if (!this.canSharePreMasterWith(other)) return false;
+    if ([beforeL, beforeR, afterL, afterR].some((buffer) => buffer.length < frames)) {
+      throw new RangeError('Paired render buffers must fit the requested block.');
+    }
+    this.renderPreMasterBlock(startSample, frames, beforeL, beforeR);
+    for (let i = 0; i < frames; i++) {
+      afterL[i] = beforeL[i];
+      afterR[i] = beforeR[i];
+    }
+    this.renderMasterStage(frames, beforeL, beforeR);
+    other.renderMasterStage(frames, afterL, afterR);
+    return true;
+  }
+
+  canSharePreMasterWith(other: ProjectRenderer): boolean {
+    return Boolean(this.preMasterSignature) &&
+      this.preMasterSignature === other.preMasterSignature &&
+      this.assetSignature === other.assetSignature &&
+      this.sr === other.sr;
+  }
+
+  private renderPreMasterBlock(startSample: number, frames: number, outL: Float32Array, outR: Float32Array): void {
     const project = this.project;
     if (!project) {
       outL.fill(0, 0, frames);
@@ -477,7 +525,11 @@ export class ProjectRenderer {
       }
     }
 
-    // 4. Master chain and fader.
+  }
+
+  private renderMasterStage(frames: number, outL: Float32Array, outR: Float32Array): void {
+    const project = this.project;
+    if (!project) return;
     if (this.masterChain) {
       this.masterChain.process(outL, outR, frames);
       const g = dbToGain(project.master.volumeDb);
