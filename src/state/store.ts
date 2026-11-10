@@ -467,9 +467,11 @@ export const useApp = create<AppState>((set, get) => ({
       set({ storageError: describeStorageError(error), toast: 'Could not create the project: this browser is blocking local storage.' });
       return;
     }
+    realtimeHost.stop();
     realtimeHost.setComparisonGain(0);
     realtimeHost.setMatchAudition(false);
     realtimeHost.clearMatchAuditionBuffers();
+    realtimeHost.syncAssets([]);
     set({
       project,
       assets: [],
