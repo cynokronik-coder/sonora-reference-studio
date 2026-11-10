@@ -10,7 +10,7 @@ export interface SpectrumBandBinMap {
   /** First matching 1/3-octave band for each FFT bin, or -1 when unassigned. */
   binBand: Int16Array;
   /** Every FFT bin in each band's half-open frequency interval, in ascending order. */
-  bandBins: readonly Uint16Array[];
+  bandBins: readonly Uint32Array[];
 }
 
 const SPECTRUM_BAND_MAP_CACHE_LIMIT = 8;
@@ -52,7 +52,7 @@ export function getSpectrumBandBinMap(sampleRate: number, fftSize: number): Spec
     }
   }
 
-  const bandBins = lists.map((indices) => Uint16Array.from(indices));
+  const bandBins = lists.map((indices) => Uint32Array.from(indices));
   const result = { binBand, bandBins };
   if (spectrumBandMapCache.size >= SPECTRUM_BAND_MAP_CACHE_LIMIT) {
     const oldestKey = spectrumBandMapCache.keys().next().value;
