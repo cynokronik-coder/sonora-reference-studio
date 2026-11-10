@@ -36,6 +36,7 @@ export function shouldPauseTransport(playing: boolean, contextState: string): bo
  */
 export class RealtimeHost {
   private ctx: AudioContext | null = null;
+  private workletLoadedFor: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
   private monitor: GainNode | null = null;
   private comparison: GainNode | null = null;
@@ -81,7 +82,10 @@ export class RealtimeHost {
       }
       const ctx = this.ctx ?? new AudioCtor({ latencyHint: 'interactive' });
       this.ctx = ctx;
-      await ctx.audioWorklet.addModule(workletUrl);
+      if (this.workletLoadedFor !== ctx) {
+        await ctx.audioWorklet.addModule(workletUrl);
+        this.workletLoadedFor = ctx;
+      }
 
       // A processorerror permanently silences that AudioWorkletNode. A fresh
       // node can be created on the same live AudioContext and repopulated from
@@ -303,6 +307,8 @@ export class RealtimeHost {
     this.comparison = null;
     await this.ctx?.close();
     this.ctx = null;
+    this.workletLoadedFor = null;
+    this.initialising = null;
     this.loadedAssets.clear();
   }
 }
