@@ -110,7 +110,14 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         this.matchBeforeRenderer = new ProjectRenderer();
         this.matchAfterRenderer = new ProjectRenderer();
         this.matchBeforeRenderer.configure(before, this.assets, sampleRate, this.staticBlock);
-        this.matchAfterRenderer.configure(after, this.assets, sampleRate, this.staticBlock);
+        if (ProjectRenderer.preMasterGraphsMatch(before, after, sampleRate)) {
+          // Both versions share all track/bus processing. Keep only the
+          // independent master DSP graph in the second renderer.
+          this.matchAfterRenderer.configureMasterOnly(after, this.assets, sampleRate, this.staticBlock);
+        } else {
+          // Unusual non-master differences retain the safe full-render path.
+          this.matchAfterRenderer.configure(after, this.assets, sampleRate, this.staticBlock);
+        }
         this.matchAuditionEndSample = Math.min(
           Math.round(this.matchBeforeRenderer.timelineEndSeconds * sampleRate),
           Math.round(this.matchAfterRenderer.timelineEndSeconds * sampleRate),
