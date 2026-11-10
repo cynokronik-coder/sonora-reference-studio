@@ -256,7 +256,7 @@ export function resolveReferenceMetrics(
   weights = weights.map((weight) => weight / sum);
 
   const first = selectedMetrics[0];
-  const numericKeys: (keyof Omit<Metrics, 'bands' | 'sectionFallback' | 'duration' | 'lufs' | 'truePeakDb'>)[] = [
+  const numericKeys: (keyof Omit<Metrics, 'bands' | 'sectionFallback' | 'metricFallbacks' | 'duration' | 'lufs' | 'truePeakDb'>)[] = [
     'crestDb', 'lra', 'plrDb', 'widthDb', 'correlation', 'monoCompatibility',
     'lowSideDb', 'punchScore', 'attackDensity', 'flatness', 'tiltDbPerOct',
     'highEnergyDb', 'lowEnergyDb', 'tempoBpm',
