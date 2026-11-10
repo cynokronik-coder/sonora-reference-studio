@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeAudio } from './analyze';
+import { absoluteBeatPhaseSeconds } from './rhythm';
 
 const SAMPLE_RATE = 48_000;
 
@@ -28,7 +29,7 @@ describe('complete section analysis', () => {
       onProgress: (stage, fraction) => progress.push({ stage, fraction }),
     });
 
-    expect(report.sectionMetricsVersion).toBe(2);
+    expect(report.sectionMetricsVersion).toBe(3);
     expect(report.sections.length).toBeGreaterThan(0);
     expect(progress.some((item) => item.stage === 'Measuring section loudness')).toBe(true);
     expect(progress.some((item) => item.stage === 'Calculating section metrics')).toBe(true);
@@ -54,6 +55,14 @@ describe('complete section analysis', () => {
       expect(Number.isFinite(section.flatness)).toBe(true);
       expect(Number.isFinite(section.attackDensity)).toBe(true);
       expect(Number.isFinite(section.punchScore)).toBe(true);
+      expect(Number.isFinite(section.groupedAttackDensity)).toBe(true);
+      if (section.beatGridConfidence !== null) {
+        expect(section.beatGridConfidence).toBeGreaterThanOrEqual(0);
+        expect(section.beatGridConfidence).toBeLessThanOrEqual(1);
+        expect(section.offBeatRatio).toBeGreaterThanOrEqual(0);
+        expect(section.offBeatRatio).toBeLessThanOrEqual(1);
+        expect(section.beatPhaseSeconds).not.toBeNull();
+      }
       expect(section.bands.length).toBeGreaterThan(0);
     }
 
@@ -77,7 +86,25 @@ describe('complete section analysis', () => {
     expect(section.lra).toBeNull();
     expect(section.tempoBpm).toBeNull();
     expect(section.beatConfidence).toBeNull();
+    expect(section.beatGridConfidence).toBeNull();
+    expect(section.offBeatRatio).toBeNull();
+    expect(section.beatPhaseSeconds).toBeNull();
+    expect(section.groupedAttackDensity).not.toBeNull();
     expect(section.attackDensity).not.toBeNull();
     expect(section.punchScore).not.toBeNull();
+  });
+});
+
+
+describe('section-relative beat phase', () => {
+  it('maps a local section phase to the song timeline without changing tempo', () => {
+    expect(absoluteBeatPhaseSeconds(16, 0.12, 120)).toBeCloseTo(0.12, 6);
+    expect(absoluteBeatPhaseSeconds(16.25, 0.12, 120)).toBeCloseTo(0.37, 6);
+  });
+
+  it('wraps phase to the beat interval and rejects unavailable measurements', () => {
+    expect(absoluteBeatPhaseSeconds(16.4, 0.12, 120)).toBeCloseTo(0.02, 6);
+    expect(absoluteBeatPhaseSeconds(8, null, 120)).toBeNull();
+    expect(absoluteBeatPhaseSeconds(8, 0.1, 0)).toBeNull();
   });
 });
