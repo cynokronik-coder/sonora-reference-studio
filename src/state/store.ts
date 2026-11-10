@@ -587,6 +587,8 @@ export const useApp = create<AppState>((set, get) => ({
     realtimeHost.setComparisonGain(0);
     realtimeHost.setMatchAudition(false);
     realtimeHost.clearMatchAuditionBuffers();
+    // Release the worklet's transferred PCM as well as the main-thread buffers.
+    realtimeHost.syncAssets([]);
     set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, matchPreview: null, matchAudition: null, abSlots: [], activeSlot: null, workingMix: null, loudnessMatch: false, comparisonDb: 0, screen: 'projects' });
   },
 
@@ -797,11 +799,20 @@ export const useApp = create<AppState>((set, get) => ({
       project.referenceAssetIds = project.referenceAssetIds.filter((id) => id !== assetId);
       project.tracks = project.tracks.filter((t) => !(t.kind === 'reference' && t.clips.some((c) => c.assetId === assetId)));
     });
+    const stillUsed = Boolean(get().project && allAssetIds(get().project!).includes(assetId));
     set((state) => {
       const analyses = { ...state.analyses };
-      delete analyses[assetId];
-      return { analyses, matchPlan: null, matchPreview: null };
+      if (!stillUsed) delete analyses[assetId];
+      const assets = stillUsed ? state.assets : state.assets.filter((asset) => asset.id !== assetId);
+      const assetBuffers = { ...state.assetBuffers };
+      if (!stillUsed) delete assetBuffers[assetId];
+      return { analyses, assets, assetBuffers, matchPlan: null, matchPreview: null };
     });
+    if (!stillUsed) {
+      void db.deleteAsset(assetId).catch((error) => {
+        useApp.setState({ toast: `Could not release removed reference audio: ${error instanceof Error ? error.message : String(error)}` });
+      });
+    }
   },
 
   mutate: (mutator, options) => {
@@ -1976,6 +1987,7 @@ export const useApp = create<AppState>((set, get) => ({
     realtimeHost.setComparisonGain(0);
     realtimeHost.setMatchAudition(false);
     realtimeHost.clearMatchAuditionBuffers();
+    realtimeHost.syncAssets([]);
     projectSaveQueue.cancelAll();
     await projectSaveQueue.drain();
     await db.clearAllData();
