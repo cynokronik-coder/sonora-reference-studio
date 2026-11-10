@@ -1,6 +1,13 @@
 import { create } from 'zustand';
 import type { AnalysisReport } from '../audio/analysis/analyze';
 import { decodeAudioFile, resampleToRate } from '../audio/io/decode';
+import { parseAiffHeader, parseWavHeader } from '../audio/io/wav';
+import {
+  estimateVerificationWorkingSetBytes,
+  formatMemoryEstimate,
+  MAX_VERIFY_WORKING_SET_BYTES,
+  shouldDeferVerification,
+} from '../audio/io/verification-memory';
 import { encodeAiff, encodeWav, writeAiffToWritable, writeWavToWritable, type SequentialPcmWritable, type WavBitDepth } from '../audio/io/wav';
 import { fillStereoPcm16Block } from '../audio/io/mp3';
 import { analyzeLoudness, normalizeToTruePeak } from '../audio/analysis/loudness';
@@ -1961,6 +1968,9 @@ export const useApp = create<AppState>((set, get) => ({
         truePeak: finalStats.truePeakDb,
         sizeBytes: outputBlob.size,
         settings: { ...settings },
+        verifiedLufs: encodedVerification?.lufs ?? null,
+        verifiedTruePeakDb: encodedVerification?.truePeakDb ?? null,
+        verificationNote: verificationWarning ?? undefined,
       };
       // File objects are Blobs, so the existing durable export history remains
       // available for Download and Verify after a direct-to-file write.
@@ -2283,8 +2293,48 @@ export interface EncodedFileMeasurements {
   duration: number;
 }
 
-/** Decode and re-measure the actual encoded file bytes, not the pre-encode PCM. */
+/**
+ * Estimate verification memory from a short container-header read before
+ * decodeAudioFile can materialize whole-file and decoded PCM copies.
+ */
+export async function estimateEncodedVerificationMemory(blob: Blob): Promise<number> {
+  const mime = blob.type.toLowerCase();
+  if (mime.includes('wav') || mime.includes('wave')) {
+    const header = await blob.slice(0, Math.min(blob.size, 256 * 1024)).arrayBuffer();
+    const info = parseWavHeader(header);
+    if (info?.lengthFrames !== null && info?.lengthFrames !== undefined) {
+      return estimateVerificationWorkingSetBytes({
+        encodedBytes: blob.size,
+        decodedFrames: info.lengthFrames,
+        channels: info.channels || 2,
+      });
+    }
+  } else if (mime.includes('aiff') || mime.includes('aif')) {
+    const header = await blob.slice(0, Math.min(blob.size, 256 * 1024)).arrayBuffer();
+    const info = parseAiffHeader(header);
+    if (info?.lengthFrames !== null && info?.lengthFrames !== undefined) {
+      return estimateVerificationWorkingSetBytes({
+        encodedBytes: blob.size,
+        decodedFrames: info.lengthFrames,
+        channels: info.channels || 2,
+      });
+    }
+  }
+
+  // Compressed streams (including MP3) may decode to many times their stored
+  // size. Use a conservative multiplier when a trusted duration is unavailable.
+  return estimateVerificationWorkingSetBytes({ encodedBytes: blob.size });
+}
+
+/** Decode and re-measure only when a conservative memory preflight allows it. */
 export async function verifyEncodedBlob(blob: Blob): Promise<EncodedFileMeasurements> {
+  const estimatedBytes = await estimateEncodedVerificationMemory(blob);
+  if (shouldDeferVerification(estimatedBytes)) {
+    throw new Error(
+      `Encoded-file verification was deferred to protect browser memory (${formatMemoryEstimate(estimatedBytes)} estimated; limit ${formatMemoryEstimate(MAX_VERIFY_WORKING_SET_BYTES)}). The export is saved, and the displayed measurements remain the pre-encode PCM analysis.`,
+    );
+  }
+
   const file = new File([blob], 'verification.wav', { type: blob.type });
   const decoded = await decodeAudioFile(file);
   const report = analyzeLoudness(decoded.L, decoded.R, decoded.sampleRate);
