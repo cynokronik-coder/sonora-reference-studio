@@ -113,7 +113,7 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
 
   progress('Detecting tempo and sections', 0.8);
   const rhythm = analyzeRhythm(L, R, sampleRate, {
-    onProgress: (stage, fraction) => progress(stage, 0.8 + fraction * 0.05),
+    onProgress: (stage, fraction) => progress(stage, Math.min(0.85, 0.8 + fraction * 0.05)),
   });
 
   progress('Measuring sections', 0.85);
