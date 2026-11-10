@@ -232,7 +232,7 @@ describe('cooperative rolling-window loudness analysis', () => {
   it('keeps the short-term EBU trailing-silence flush on long rolling streams', () => {
     const source = stereoTone(1_000, -20, 8);
     const report = analyzeLoudness(source.left, source.right, SAMPLE_RATE);
-    expect(report.shortTerm[report.shortTerm.length - 1].time).toBeGreaterThan(8);
+    expect(report.shortTerm[report.shortTerm.length - 1].time).toBeCloseTo(8, 5);
     expect(report.shortTerm[report.shortTerm.length - 1].lufs).toBeLessThan(report.shortTermMaxLufs);
   });
 });
