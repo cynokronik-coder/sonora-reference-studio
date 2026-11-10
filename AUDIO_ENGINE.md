@@ -232,3 +232,8 @@ On secure browser contexts with the File System Access API, the Export action ca
 Browsers without `showSaveFilePicker` retain the existing chunked Blob download path. Cancelling the native picker cancels the export instead of silently triggering a download.
 
 Direct-to-file avoids retaining a complete encoded-file Blob in the page during encoding, but the final rendered Float32 stereo PCM is still in memory for current full-programme loudness analysis and normalization. Reading the saved file back for verification and storing it in IndexedDB can also incur additional I/O/storage work. Real Safari/Chrome/Edge testing and large-session heap profiling remain necessary; do not assume File System Access support is universal.
+
+
+### Memory-aware encoded-file verification
+
+Before decoding an exported WAV/AIFF for verification, Sonora reads only a small header range and estimates the temporary working set from encoded bytes, channel count and decoded frame count. Compressed formats without a trusted duration use a conservative size multiplier. Verification is deferred when the estimate exceeds 512 MiB; the export itself is kept, and its LUFS/true-peak figures remain clearly identified as pre-encode PCM analysis rather than encoded-file verification. The history record persists the reason, and the Verify action uses the same guard so a later manual attempt cannot bypass it. Successful decoded-file measurements are stored separately as verified values. This is a conservative guardrail, not a hard browser-memory limit: codec implementations and browser overhead can allocate more than the estimate.
