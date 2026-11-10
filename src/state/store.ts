@@ -11,6 +11,7 @@ import {
 import { encodeAiff, encodeWav, writeAiffToWritable, writeWavToWritable, type SequentialPcmWritable, type WavBitDepth } from '../audio/io/wav';
 import { fillStereoPcm16Block } from '../audio/io/mp3';
 import { analyzeLoudness, analyzeLoudnessAsync, normalizeToTruePeakAsync } from '../audio/analysis/loudness';
+import { startAnalysisWorker } from '../audio/analysis/analysis-worker-client';
 import { generateMatchPlan, planToNodes, type MatchPlan } from '../audio/analysis/match';
 import { interpretCommand, suggestionsFor, type AssistantProposal } from '../audio/ai/assistant';
 import { requestSonoraAi } from '../audio/ai/client';
@@ -735,7 +736,8 @@ export const useApp = create<AppState>((set, get) => ({
       set({ busy: null, toast: `${files.length} file${files.length > 1 ? 's' : ''} imported at ${targetRate} Hz.` });
       if (role === 'target' || role === 'reference') {
         for (const meta of createdAssets) {
-          await get().analyzeAsset(meta.id);
+          const report = await get().analyzeAsset(meta.id);
+          if (!report) break;
         }
       }
     } catch (error) {
@@ -749,35 +751,34 @@ export const useApp = create<AppState>((set, get) => ({
       set({ toast: 'Audio is still loading.' });
       return null;
     }
-    set({ busy: { kind: 'analyze', label: 'Measuring audio', progress: 0 } });
+    set({ busy: { kind: 'analyze', label: 'Starting audio analysis', progress: 0 } });
     try {
       const worker = new Worker(new URL('../audio/analysis/analysis.worker.ts', import.meta.url), { type: 'module' });
-      const report = await new Promise<AnalysisReport>((resolve, reject) => {
-        worker.onmessage = (event: MessageEvent) => {
-          const message = event.data;
-          if (message.type === 'progress') {
-            set({
-              busy: {
-                kind: 'analyze',
-                label: message.stage as string,
-                progress: message.progress as number,
-              },
-            });
-          } else if (message.type === 'done') {
-            resolve(message.report as AnalysisReport);
-          } else if (message.type === 'error') {
-            reject(new Error(message.message as string));
-          }
-        };
-        worker.onerror = () => reject(new Error('Analysis worker failed'));
-        const L = buffer.L.slice();
-        const R = buffer.R.slice();
-        worker.postMessage(
-          { type: 'analyze', assetId, L, R, sampleRate: buffer.sampleRate, includeSections: true },
-          [L.buffer, R.buffer],
-        );
+      const L = buffer.L.slice();
+      const R = buffer.R.slice();
+      const task = startAnalysisWorker(
+        worker,
+        { type: 'analyze', assetId, L, R, sampleRate: buffer.sampleRate, includeSections: true },
+        [L.buffer, R.buffer],
+        (stage, progress) => set({
+          busy: {
+            kind: 'analyze',
+            label: stage,
+            progress,
+            cancel: task.cancel,
+          },
+        }),
+      );
+      set({
+        busy: {
+          kind: 'analyze',
+          label: 'Measuring audio',
+          progress: 0,
+          cancel: task.cancel,
+        },
       });
-      worker.terminate();
+      const report = await task.promise;
+      set({ busy: { kind: 'analyze', label: 'Saving analysis', progress: 0.98 } });
       const analyses = { ...get().analyses, [assetId]: report };
       await db.saveAnalysis(assetId, report);
       const current = get();
@@ -813,18 +814,28 @@ export const useApp = create<AppState>((set, get) => ({
       if (updatedProject) schedulePersist(updatedProject);
       return report;
     } catch (error) {
-      set({ busy: null, toast: error instanceof Error ? `Analysis failed: ${error.message}` : 'Analysis failed' });
+      const cancelled = error instanceof Error && error.name === 'AbortError';
+      set({
+        busy: null,
+        toast: cancelled
+          ? 'Analysis cancelled.'
+          : error instanceof Error
+            ? `Analysis failed: ${error.message}`
+            : 'Analysis failed',
+      });
       return null;
     }
   },
-
   analyzeProjectAssets: async () => {
     const ids = allAssetIds(get().project ?? emptyProject());
     for (const id of ids) {
       const report = get().analyses[id];
       // Re-run older cached reports once so the new per-section metric payload
       // is available without discarding the user's projects or imported PCM.
-      if (!report || report.sectionMetricsVersion !== 2) await get().analyzeAsset(id);
+      if (!report || report.sectionMetricsVersion !== 2) {
+        const updated = await get().analyzeAsset(id);
+        if (!updated) break;
+      }
     }
   },
 
