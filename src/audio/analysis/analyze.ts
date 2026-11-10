@@ -134,7 +134,7 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
       }
       const sectionL = L.subarray(startSample, endSample);
       const sectionR = R.subarray(startSample, endSample);
-      const sectionLoudness = analyzeLoudness(
+      const sectionLoudness = analyzeLoudnessSummary(
         sectionL,
         sectionR,
         sampleRate,
