@@ -8,7 +8,7 @@ import { interpretCommand, suggestionsFor, type AssistantProposal } from '../aud
 import { requestSonoraAi } from '../audio/ai/client';
 import { buildAssistantContext } from '../audio/ai/context';
 import { createValidatedAiProposal } from '../audio/ai/proposals';
-import { realtimeHost } from '../audio/engine/realtime';
+import { realtimeHost, shouldPauseTransport } from '../audio/engine/realtime';
 import type { AuditionMode } from '../audio/engine/audition';
 import type { EngineAsset } from '../audio/engine/renderer';
 import { createProcessorNode, createProject as newProject, createTrack, createClip, createBus, defaultMatchSettings, uid } from '../audio/model/defaults';
@@ -253,6 +253,7 @@ interface AppState {
 const projectSaveQueue = new ProjectSaveQueue<ProjectState>((project) => db.saveProject(project), 700);
 let engineTimer: ReturnType<typeof setTimeout> | null = null;
 let persistenceLifecycleAttached = false;
+let realtimeListenersAttached = false;
 
 function reportProjectSaveError(error: unknown): void {
   const detail = error instanceof Error ? error.message : String(error);
@@ -408,18 +409,29 @@ export const useApp = create<AppState>((set, get) => ({
     } catch (error) {
       set({ mode, storageError: describeStorageError(error) });
     }
-    realtimeHost.onPosition((position, playing) => {
-      set((state) => ({ transport: { ...state.transport, position, playing } }));
-    });
-    realtimeHost.onEnded(() => {
-      set((state) => ({ transport: { ...state.transport, playing: false, position: 0 } }));
-    });
-    realtimeHost.onMeters(() => {
-      // Meters are pulled by the UI at animation rate through the host's last
-      // message; the canvas components read from the exposed global below.
-      const meters = realtimeHost.lastMeters;
-      if (meters) latestMeters = meters;
-    });
+    if (!realtimeListenersAttached) {
+      realtimeHost.onPosition((position, playing) => {
+        set((state) => ({ transport: { ...state.transport, position, playing } }));
+      });
+      realtimeHost.onEnded(() => {
+        set((state) => ({ transport: { ...state.transport, playing: false, position: 0 } }));
+      });
+      realtimeHost.onMeters(() => {
+        // Meters are pulled by the UI at animation rate through the host's last
+        // message; the canvas components read from the exposed global below.
+        const meters = realtimeHost.lastMeters;
+        if (meters) latestMeters = meters;
+      });
+      realtimeHost.onError((message) => {
+        set((state) => ({
+          engineError: message,
+          toast: 'Audio stopped unexpectedly. Your project remains saved; press Play to rebuild the engine.',
+          matchAudition: null,
+          transport: { ...state.transport, playing: false },
+        }));
+      });
+      realtimeListenersAttached = true;
+    }
   },
 
   setScreen: (screen) => {
@@ -1082,21 +1094,30 @@ export const useApp = create<AppState>((set, get) => ({
     if (!project) return;
     try {
       await realtimeHost.initialise();
+      realtimeHost.loadAssets(engineAssets(project, assetBuffers));
+      realtimeHost.pushProject(project);
+      realtimeHost.setMonitorGain(get().monitorDb);
+      realtimeHost.setComparisonGain(get().matchAudition?.comparisonDb ?? get().comparisonDb);
+      realtimeHost.setLoop(transport.loopEnabled, transport.loopStart, transport.loopEnd);
+      if (shouldPauseTransport(transport.playing, realtimeHost.contextState)) {
+        realtimeHost.pause();
+        set((state) => ({ transport: { ...state.transport, playing: false } }));
+      } else {
+        // A suspended/interrupted/closed context must be resumed/rebuilt from
+        // the last UI playhead, not mistaken for a normal pause request.
+        await realtimeHost.play(transport.position);
+        set((state) => ({
+          engineError: null,
+          transport: { ...state.transport, playing: true },
+        }));
+      }
     } catch (error) {
-      set({ engineError: error instanceof Error ? error.message : String(error), toast: 'Audio engine could not start.' });
-      return;
-    }
-    realtimeHost.loadAssets(engineAssets(project, assetBuffers));
-    realtimeHost.pushProject(project);
-    realtimeHost.setMonitorGain(get().monitorDb);
-    realtimeHost.setComparisonGain(get().matchAudition?.comparisonDb ?? get().comparisonDb);
-    realtimeHost.setLoop(transport.loopEnabled, transport.loopStart, transport.loopEnd);
-    if (transport.playing) {
-      realtimeHost.pause();
-      set((state) => ({ transport: { ...state.transport, playing: false } }));
-    } else {
-      await realtimeHost.play(transport.position);
-      set((state) => ({ transport: { ...state.transport, playing: true } }));
+      const message = error instanceof Error ? error.message : String(error);
+      set((state) => ({
+        engineError: message,
+        toast: `Audio engine could not start: ${message}`,
+        transport: { ...state.transport, playing: false },
+      }));
     }
   },
 
