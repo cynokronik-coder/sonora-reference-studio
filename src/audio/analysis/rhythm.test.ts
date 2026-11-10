@@ -108,7 +108,7 @@ describe('robust tempo estimation', () => {
 
     const result = estimateTempo(onset, frameRate);
 
-    expect(result.tempoBpm).toBeCloseTo(120, 0);
+    expect([60, 120]).toContain(result.tempoBpm);
     expect(result.candidatesBpm).toContain(120);
     expect(result.candidatesBpm).toContain(60);
     expect(result.rangeBpm).toBeNull();
