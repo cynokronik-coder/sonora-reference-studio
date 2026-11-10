@@ -195,24 +195,28 @@ function estimateSections(
   const window = hannWindow(fftSize);
   const frames: FeatureFrame[] = [];
   const bands = [40, 80, 160, 320, 640, 1250, 2500, 5000, 8000, 12000];
+  const sixthOctave = Math.pow(2, 1 / 6);
+  const bandRanges = bands.map((center) => ({
+    low: Math.floor((center / sixthOctave * fftSize) / sampleRate),
+    high: Math.ceil((center * sixthOctave * fftSize) / sampleRate),
+  }));
+  const re = new Float64Array(fftSize);
+  const im = new Float64Array(fftSize);
   const totalFrames = Math.max(0, Math.floor((L.length - fftSize) / frameHop) + 1);
 
   for (let start = 0; start + fftSize <= L.length; start += frameHop) {
-    const re = new Float64Array(fftSize);
-    const im = new Float64Array(fftSize);
     let energy = 0;
     for (let i = 0; i < fftSize; i++) {
       const x = (L[start + i] + R[start + i]) * 0.5;
       energy += x * x;
       re[i] = x * window[i];
+      im[i] = 0;
     }
     fft.forward(re, im);
     const bandValues: number[] = [];
-    for (const center of bands) {
-      const low = Math.floor((center / Math.pow(2, 1 / 6) * fftSize) / sampleRate);
-      const high = Math.ceil((center * Math.pow(2, 1 / 6) * fftSize) / sampleRate);
+    for (const range of bandRanges) {
       let sum = 0;
-      for (let k = Math.max(1, low); k <= Math.min(fftSize / 2, high); k++) {
+      for (let k = Math.max(1, range.low); k <= Math.min(fftSize / 2, range.high); k++) {
         sum += re[k] * re[k] + im[k] * im[k];
       }
       bandValues.push(Math.log10(Math.max(sum, 1e-12)));
