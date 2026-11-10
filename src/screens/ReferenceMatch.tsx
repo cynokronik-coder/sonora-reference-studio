@@ -10,6 +10,7 @@ import type { MatchSettings } from '../audio/model/types';
 import { computeMatchPreview } from '../audio/analysis/preview';
 import { formatTime } from '../audio/dsp/util';
 import { TransportBar } from '../ui/Mixer';
+import { realtimeHost, type AuditionPerformance } from '../audio/engine/realtime';
 
 function sectionOptions(report: AnalysisReport | undefined, automaticLabel: string): { value: number; label: string }[] {
   const occurrences: Record<string, number> = {};
@@ -59,6 +60,7 @@ export default function ReferenceMatch() {
   } = useApp();
   const picker = useFilePicker();
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [auditionPerformance, setAuditionPerformance] = useState<AuditionPerformance | null>(null);
 
   const targetId = project?.targetAssetIds[0];
   const targetMeta = assets.find((a) => a.id === targetId);
@@ -85,6 +87,10 @@ export default function ReferenceMatch() {
   useEffect(() => {
     if (matchPlan) setExcluded(new Set());
   }, [matchPlan]);
+
+  useEffect(() => realtimeHost.onMeters((meters) => {
+    setAuditionPerformance(meters.auditionPerformance);
+  }), []);
 
   const preview = useMemo(() => (project ? computeMatchPreview(project, analyses) : null), [project, analyses]);
 
@@ -627,6 +633,23 @@ export default function ReferenceMatch() {
                     <Icon name={selectedSectionLoopActive ? 'repeat-2' : 'repeat'} size={13} />
                     {selectedSectionLoopActive ? 'Stop section loop' : 'Loop selected section'}
                   </Button>
+                </div>
+              )}
+
+              {matchAudition && auditionPerformance && (
+                <div className="mt-3 rounded-lg border border-white/[.07] bg-[#0D0D1B]/55 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-2xs font-semibold uppercase tracking-wide text-ink-400">Live DSP block budget</p>
+                    <span className={`font-mono text-2xs ${auditionPerformance.utilizationPercent >= 90 ? 'text-signal-amber' : 'text-ink-300'}`}>
+                      {auditionPerformance.utilizationPercent.toFixed(0)}% of real-time budget
+                    </span>
+                  </div>
+                  <p className="mt-1 text-2xs text-ink-500">
+                    Average {auditionPerformance.averageMs.toFixed(2)} ms · peak {auditionPerformance.maxMs.toFixed(2)} ms · block deadline {auditionPerformance.blockBudgetMs.toFixed(2)} ms
+                  </p>
+                  {auditionPerformance.utilizationPercent >= 90 && (
+                    <p className="mt-1 text-2xs text-signal-amber">High DSP load: reduce processor complexity or buffer pressure if you hear dropouts.</p>
+                  )}
                 </div>
               )}
 
