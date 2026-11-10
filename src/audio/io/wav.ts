@@ -232,6 +232,10 @@ function createWavHeader(
   const view = new DataView(header.buffer);
   const channels = 2;
   const bytesPerSample = options.bitDepth / 8;
+  const byteRate = options.sampleRate * channels * bytesPerSample;
+  if (!Number.isSafeInteger(byteRate) || byteRate > UINT32_MAX) {
+    throw new RangeError('WAV byte rate exceeds the 32-bit header limit.');
+  }
   let offset = 0;
 
   offset = writeAscii(view, offset, 'RIFF');
@@ -247,7 +251,7 @@ function createWavHeader(
   offset += 2;
   view.setUint32(offset, options.sampleRate, true);
   offset += 4;
-  view.setUint32(offset, options.sampleRate * channels * bytesPerSample, true);
+  view.setUint32(offset, byteRate, true);
   offset += 4;
   view.setUint16(offset, channels * bytesPerSample, true);
   offset += 2;
