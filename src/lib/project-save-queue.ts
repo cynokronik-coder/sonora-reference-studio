@@ -67,15 +67,16 @@ export class ProjectSaveQueue<T extends SaveableProject> {
   }
 
   /** Flush one project's delayed snapshot, if any. */
-  flushPending(projectId: string): Promise<void> {
+  async flushPending(projectId: string): Promise<void> {
     const entry = this.pending.get(projectId);
     if (!entry) {
       this.clearTimer(projectId);
-      return Promise.resolve();
+      await this.drain();
+      return;
     }
     this.pending.delete(projectId);
     this.clearTimer(projectId);
-    return this.enqueue(entry);
+    await this.enqueue(entry);
   }
 
   cancel(projectId: string): void {
