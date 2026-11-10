@@ -137,6 +137,9 @@ export default function Analysis() {
                     <th className="py-1 pr-3">Grid fit</th>
                     <th className="py-1 pr-3">Off-grid</th>
                     <th className="py-1 pr-3">Beat phase</th>
+                    <th className="py-1 pr-3">Tempo Δ</th>
+                    <th className="py-1 pr-3">Phase shift</th>
+                    <th className="py-1 pr-3">Continuity</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -156,6 +159,9 @@ export default function Analysis() {
                       <td className="py-1 pr-3 font-mono text-ink-300">{section.beatGridConfidence !== null ? `${Math.round(section.beatGridConfidence * 100)}%` : '—'}</td>
                       <td className="py-1 pr-3 font-mono text-ink-300">{section.offBeatRatio !== null ? `${Math.round(section.offBeatRatio * 100)}%` : '—'}</td>
                       <td className="py-1 pr-3 font-mono text-ink-300">{section.beatPhaseSeconds !== null ? `${section.beatPhaseSeconds.toFixed(2)}s` : '—'}</td>
+                      <td className="py-1 pr-3 font-mono text-ink-300">{section.tempoChangeBpm !== null ? `${section.tempoChangeBpm > 0 ? '+' : ''}${section.tempoChangeBpm.toFixed(1)}` : '—'}</td>
+                      <td className="py-1 pr-3 font-mono text-ink-300">{section.beatPhaseShiftMs !== null ? `${section.beatPhaseShiftMs > 0 ? '+' : ''}${section.beatPhaseShiftMs.toFixed(0)} ms` : '—'}</td>
+                      <td className="py-1 pr-3 font-mono text-ink-300">{section.beatContinuity !== null ? `${Math.round(section.beatContinuity * 100)}%` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
