@@ -6,7 +6,14 @@ import {
 } from './spectrum';
 import { type StereoReport } from './stereo';
 import { analyzeSpectrumAndStereo } from './spectral-analysis';
-import { absoluteBeatPhaseSeconds, analyzeRhythm, labelSections, type RhythmReport } from './rhythm';
+import {
+  absoluteBeatPhaseSeconds,
+  analyzeRhythm,
+  compareBeatSectionTransition,
+  labelSections,
+  type BeatSectionState,
+  type RhythmReport,
+} from './rhythm';
 import type { SectionBoundary } from './rhythm';
 
 export interface SectionReport {
@@ -56,12 +63,16 @@ export interface SectionReport {
   beatGridConfidence: number | null;
   offBeatRatio: number | null;
   beatPhaseSeconds: number | null;
+  /** Difference from the preceding section; phase is null for a significant tempo change. */
+  tempoChangeBpm: number | null;
+  beatPhaseShiftMs: number | null;
+  beatContinuity: number | null;
 }
 
 export interface AnalysisReport {
   version: 1;
   /** Version of the expanded per-section measurement payload. Older stored reports require re-analysis. */
-  sectionMetricsVersion?: 3;
+  sectionMetricsVersion?: 4;
   createdAt: number;
   sampleRate: number;
   channels: number;
@@ -153,12 +164,14 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
       ...boundary,
       lufs: measuredBoundaries[index]?.sectionLoudness.integratedLufs ?? -Infinity,
     })));
+    let previousBeatState: BeatSectionState | null = null;
     measuredBoundaries.forEach((measured, index) => {
       const sectionStart = index / Math.max(1, boundaries.length);
       const sectionEnd = (index + 1) / Math.max(1, boundaries.length);
       const sectionProgress = (fraction: number) =>
         progress('Calculating section metrics', 0.91 + (sectionStart + fraction / boundaries.length) * 0.09);
       if (!measured) {
+        previousBeatState = null;
         progress('Calculating section metrics', 0.91 + sectionEnd * 0.09);
         return;
       }
@@ -195,6 +208,10 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
             sectionTempo!,
           )
         : null;
+      const currentBeatState = hasSectionBeatEvidence && sectionTempo && sectionBeatPhase !== null
+        ? { tempoBpm: sectionTempo, beatPhaseSeconds: sectionBeatPhase }
+        : null;
+      const beatTransition = compareBeatSectionTransition(previousBeatState, currentBeatState);
       sections.push({
         index,
         label: labels[index] ?? 'section',
@@ -238,7 +255,11 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
         beatGridConfidence: hasSectionBeatEvidence ? sectionRhythm?.beatGridConfidence ?? null : null,
         offBeatRatio: hasSectionBeatEvidence ? sectionRhythm?.offBeatRatio ?? null : null,
         beatPhaseSeconds: sectionBeatPhase,
+        tempoChangeBpm: beatTransition.tempoChangeBpm,
+        beatPhaseShiftMs: beatTransition.beatPhaseShiftMs,
+        beatContinuity: beatTransition.beatContinuity,
       });
+      previousBeatState = currentBeatState;
       sectionProgress(1);
     });
   }
@@ -288,6 +309,9 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
         ? rhythm.offBeatRatio ?? null
         : null,
       beatPhaseSeconds: duration >= 8 ? rhythm.beatPhaseSeconds ?? null : null,
+      tempoChangeBpm: null,
+      beatPhaseShiftMs: null,
+      beatContinuity: null,
     });
   }
 
@@ -300,7 +324,7 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
   progress('Done', 1);
   return {
     version: 1,
-    sectionMetricsVersion: 3,
+    sectionMetricsVersion: 4,
     createdAt: Date.now(),
     sampleRate,
     channels: 2,
