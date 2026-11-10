@@ -121,20 +121,29 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
   const includeSections = options.includeSections ?? true;
   if (includeSections) {
     const boundaries = rhythm.sections.length ? rhythm.sections : [{ start: 0, end: duration }];
-    const labels = labelSections(
-      boundaries.map((b) => ({
-        ...b,
-        lufs: quickLufs(L, R, sampleRate, b.start, b.end),
-      })),
-    );
-    boundaries.forEach((boundary: SectionBoundary, index: number) => {
-      const startSample = Math.floor(boundary.start * sampleRate);
+    // Measure segment loudness once. The same measured values drive automatic
+    // labels and the full section report, avoiding duplicate DSP passes.
+    const measuredBoundaries = boundaries.map((boundary) => {
+      const startSample = Math.max(0, Math.floor(boundary.start * sampleRate));
       const endSample = Math.min(n, Math.ceil(boundary.end * sampleRate));
-      if (endSample - startSample < sampleRate * 0.5) return;
+      if (endSample - startSample < sampleRate * 0.5) return null;
       const sectionL = L.subarray(startSample, endSample);
       const sectionR = R.subarray(startSample, endSample);
+      return {
+        boundary,
+        sectionL,
+        sectionR,
+        sectionLoudness: analyzeLoudness(sectionL, sectionR, sampleRate),
+      };
+    });
+    const labels = labelSections(boundaries.map((boundary, index) => ({
+      ...boundary,
+      lufs: measuredBoundaries[index]?.sectionLoudness.integratedLufs ?? -Infinity,
+    })));
+    measuredBoundaries.forEach((measured, index) => {
+      if (!measured) return;
+      const { boundary, sectionL, sectionR, sectionLoudness } = measured;
       const sectionDuration = sectionL.length / sampleRate;
-      const sectionLoudness = analyzeLoudness(sectionL, sectionR, sampleRate);
       const sectionStereo = analyzeStereo(sectionL, sectionR, sampleRate);
       const sectionAccum = createSpectrumAccum(sampleRate);
       accumulateSpectrum(sectionAccum, sectionL, sectionR);
@@ -257,13 +266,6 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
     resonances: spectrum.resonances,
     warnings,
   };
-}
-
-function quickLufs(L: Float32Array, R: Float32Array, sr: number, start: number, end: number): number {
-  const s = Math.max(0, Math.floor(start * sr));
-  const e = Math.min(L.length, Math.ceil(end * sr));
-  if (e - s < sr * 0.3) return -Infinity;
-  return analyzeLoudness(L.subarray(s, e), R.subarray(s, e), sr).integratedLufs;
 }
 
 export function bandsRelativeMap(bands: BandLevel[]): Map<number, number> {
