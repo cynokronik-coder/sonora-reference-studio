@@ -312,7 +312,7 @@ function syncEngine(project: ProjectState, buffers: Record<string, AssetBuffer>)
   if (engineTimer) clearTimeout(engineTimer);
   engineTimer = setTimeout(() => {
     try {
-      realtimeHost.loadAssets(engineAssets(project, buffers));
+      realtimeHost.syncAssets(engineAssets(project, buffers));
       realtimeHost.pushProject(project);
     } catch (error) {
       useApp.setState({ engineError: error instanceof Error ? error.message : String(error) });
@@ -1094,7 +1094,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (!project) return;
     try {
       await realtimeHost.initialise();
-      realtimeHost.loadAssets(engineAssets(project, assetBuffers));
+      realtimeHost.syncAssets(engineAssets(project, assetBuffers));
       realtimeHost.pushProject(project);
       realtimeHost.setMonitorGain(get().monitorDb);
       realtimeHost.setComparisonGain(get().matchAudition?.comparisonDb ?? get().comparisonDb);
@@ -1262,7 +1262,7 @@ export const useApp = create<AppState>((set, get) => ({
         throw new Error('The original and matched renders do not share the same sample timeline.');
       }
 
-      realtimeHost.loadAssets(engineAssets(current.project, current.assetBuffers));
+      realtimeHost.syncAssets(engineAssets(current.project, current.assetBuffers));
       realtimeHost.pushProject(current.project);
       realtimeHost.setMatchAuditionProjects({ before: beforeProject, after: afterProject });
       const comparisonDb = loudnessMatchedMonitorGain([
