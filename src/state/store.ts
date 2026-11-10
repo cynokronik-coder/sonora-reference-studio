@@ -497,6 +497,14 @@ export const useApp = create<AppState>((set, get) => ({
 
   openProject: async (id) => {
     set({ busy: { kind: 'load', label: 'Opening project', progress: 0 } });
+    if (get().project?.id !== id) {
+      // Drop the previous project's worklet PCM before decoding a new session.
+      realtimeHost.stop();
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.clearMatchAuditionBuffers();
+      realtimeHost.syncAssets([]);
+      set((state) => ({ transport: { ...state.transport, playing: false } }));
+    }
     try {
       await realtimeHost.initialise().catch((error) => {
         set({ engineError: error instanceof Error ? error.message : String(error) });
