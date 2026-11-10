@@ -129,6 +129,47 @@ describe('renderAuditionBlock', () => {
     expect([...right]).toEqual([-60, -61]);
   });
 
+
+  it('uses a shared pre-master render when the before renderer supports it', () => {
+    let pairedCalls = 0;
+    const before = {
+      renderBlock() { throw new Error('The optimized path should not render the graph twice.'); },
+      renderPairedBlock(
+        _other: typeof after,
+        position: number,
+        frames: number,
+        beforeL: Float32Array,
+        beforeR: Float32Array,
+        afterL: Float32Array,
+        afterR: Float32Array,
+      ) {
+        pairedCalls++;
+        for (let i = 0; i < frames; i++) {
+          beforeL[i] = (position + i) / 10;
+          beforeR[i] = -(position + i) / 10;
+          afterL[i] = (position + i) / 5;
+          afterR[i] = -(position + i) / 5;
+        }
+        return true;
+      },
+    };
+    const after = {
+      renderBlock() { throw new Error('The optimized path should not render the graph twice.'); },
+    };
+    const scratch: StereoAuditionBuffers = {
+      beforeL: new Float32Array(4), beforeR: new Float32Array(4),
+      afterL: new Float32Array(4), afterR: new Float32Array(4),
+    };
+    const left = new Float32Array(2);
+    const right = new Float32Array(2);
+
+    renderAuditionBlock(before, after, 20, 'after', scratch, left, right);
+
+    expect(pairedCalls).toBe(1);
+    expect([...left]).toEqual([4, 4.2]);
+    expect([...right]).toEqual([-4, -4.2]);
+  });
+
   it('crossfades rendered blocks and rejects undersized scratch buffers', () => {
     const makeRenderer = (value: number) => ({
       renderBlock(_position: number, frames: number, left: Float32Array, right: Float32Array) {
