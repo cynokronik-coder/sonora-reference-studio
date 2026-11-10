@@ -756,6 +756,7 @@ export const useApp = create<AppState>((set, get) => ({
       const worker = new Worker(new URL('../audio/analysis/analysis.worker.ts', import.meta.url), { type: 'module' });
       const L = buffer.L.slice();
       const R = buffer.R.slice();
+      let cancelAnalysis = () => {};
       const task = startAnalysisWorker(
         worker,
         { type: 'analyze', assetId, L, R, sampleRate: buffer.sampleRate, includeSections: true },
@@ -765,10 +766,11 @@ export const useApp = create<AppState>((set, get) => ({
             kind: 'analyze',
             label: stage,
             progress,
-            cancel: task.cancel,
+            cancel: cancelAnalysis,
           },
         }),
       );
+      cancelAnalysis = task.cancel;
       set({
         busy: {
           kind: 'analyze',
