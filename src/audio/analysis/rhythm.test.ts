@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { adaptiveOnsetEnvelope, analyzeRhythm, combineBandFlux, estimateTempo } from './rhythm';
+import {
+  adaptiveOnsetEnvelope,
+  analyzeRhythm,
+  combineBandFlux,
+  estimateTempo,
+  groupOnsetEvents,
+  scoreBeatGrid,
+} from './rhythm';
 
 const SAMPLE_RATE = 48_000;
 
@@ -245,5 +252,89 @@ describe('adaptive multiband onset detection', () => {
 
     expect(detected.onsetDensity).toBeGreaterThan(baseline.onsetDensity + 1);
     expect(Number.isFinite(detected.attackSharpness)).toBe(true);
+  });
+});
+
+
+describe('transient grouping and beat-grid confidence', () => {
+  it('collapses close FFT peaks while retaining separate sixteenth-note hits', () => {
+    const onset = new Array(120).fill(0);
+    onset[10] = 0.3;
+    onset[12] = 0.8;
+    onset[14] = 0.45;
+    onset[29] = 0.25;
+    onset[54] = 0.5;
+    onset[56] = 0.7;
+    const events = groupOnsetEvents(onset, 100, 0.06, 45);
+
+    expect(events).toEqual([
+      { frame: 12, strength: 0.8 },
+      { frame: 29, strength: 0.25 },
+      { frame: 56, strength: 0.7 },
+    ]);
+  });
+
+  it('gives a stable beat grid higher confidence than a heavily ornamented pattern', () => {
+    const frameRate = 100;
+    const period = 50; // 120 BPM
+    const steady = Array.from({ length: 16 }, (_, beat) => ({
+      frame: beat * period,
+      strength: 1,
+    }));
+    const ornamented = [
+      ...steady,
+      ...Array.from({ length: 16 }, (_, beat) => ({
+        frame: beat * period + period / 2,
+        strength: 0.8,
+      })),
+    ].sort((a, b) => a.frame - b.frame);
+
+    const steadyScore = scoreBeatGrid(steady, 120, frameRate);
+    const ornamentedScore = scoreBeatGrid(ornamented, 120, frameRate);
+
+    expect(steadyScore.confidence).toBeGreaterThan(0.95);
+    expect(steadyScore.offBeatRatio).toBeLessThan(0.05);
+    expect(ornamentedScore.confidence).toBeLessThan(steadyScore.confidence);
+    expect(ornamentedScore.offBeatRatio).toBeGreaterThan(0.25);
+  });
+
+  it('does not claim beat-grid confidence when tempo or event evidence is insufficient', () => {
+    expect(scoreBeatGrid([], 120, 100)).toEqual({
+      confidence: 0,
+      offBeatRatio: 0,
+      phaseFrames: null,
+    });
+    expect(scoreBeatGrid([{ frame: 0, strength: 1 }], 120, 100).confidence).toBe(0);
+    expect(scoreBeatGrid(
+      Array.from({ length: 8 }, (_, index) => ({ frame: index * 50, strength: 1 })),
+      0,
+      100,
+    ).confidence).toBe(0);
+  });
+
+  it('reports grouped density and beat-grid metrics from real decoded audio analysis', () => {
+    const duration = 12;
+    const length = SAMPLE_RATE * duration;
+    const left = new Float32Array(length);
+    const right = new Float32Array(length);
+    for (let i = 0; i < length; i++) {
+      const time = i / SAMPLE_RATE;
+      const beatPhase = time % 0.5;
+      const kick = 0.35 * Math.exp(-beatPhase / 0.018) * Math.sin(2 * Math.PI * 72 * time);
+      const hatPhase = time % 0.25;
+      const hat = 0.025 * Math.exp(-hatPhase / 0.004) * Math.sin(2 * Math.PI * 7_000 * time);
+      left[i] = kick + hat;
+      right[i] = kick + hat;
+    }
+
+    const report = analyzeRhythm(left, right, SAMPLE_RATE, { includeSections: false });
+
+    expect(report.groupedOnsetDensity).toBeGreaterThan(0);
+    expect(Number.isFinite(report.beatGridConfidence)).toBe(true);
+    expect(Number.isFinite(report.offBeatRatio)).toBe(true);
+    expect(report.beatGridConfidence).toBeGreaterThanOrEqual(0);
+    expect(report.beatGridConfidence).toBeLessThanOrEqual(1);
+    expect(report.offBeatRatio).toBeGreaterThanOrEqual(0);
+    expect(report.offBeatRatio).toBeLessThanOrEqual(1);
   });
 });
