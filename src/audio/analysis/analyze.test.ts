@@ -29,7 +29,7 @@ describe('complete section analysis', () => {
       onProgress: (stage, fraction) => progress.push({ stage, fraction }),
     });
 
-    expect(report.sectionMetricsVersion).toBe(3);
+    expect(report.sectionMetricsVersion).toBe(4);
     expect(report.sections.length).toBeGreaterThan(0);
     expect(progress.some((item) => item.stage === 'Measuring section loudness')).toBe(true);
     expect(progress.some((item) => item.stage === 'Calculating section metrics')).toBe(true);
@@ -63,6 +63,10 @@ describe('complete section analysis', () => {
         expect(section.offBeatRatio).toBeLessThanOrEqual(1);
         expect(section.beatPhaseSeconds).not.toBeNull();
       }
+      if (section.beatContinuity !== null) {
+        expect(section.beatContinuity).toBeGreaterThanOrEqual(0);
+        expect(section.beatContinuity).toBeLessThanOrEqual(1);
+      }
       expect(section.bands.length).toBeGreaterThan(0);
     }
 
@@ -89,6 +93,9 @@ describe('complete section analysis', () => {
     expect(section.beatGridConfidence).toBeNull();
     expect(section.offBeatRatio).toBeNull();
     expect(section.beatPhaseSeconds).toBeNull();
+    expect(section.tempoChangeBpm).toBeNull();
+    expect(section.beatPhaseShiftMs).toBeNull();
+    expect(section.beatContinuity).toBeNull();
     expect(section.groupedAttackDensity).not.toBeNull();
     expect(section.attackDensity).not.toBeNull();
     expect(section.punchScore).not.toBeNull();
