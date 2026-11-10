@@ -27,6 +27,7 @@ import { allAssetIds, chainFor, cloneProject, findTrack, type ChainScope } from 
 import { BUILT_IN_PRESETS, createPreset, type PresetCategory, type PresetDefinition } from '../audio/presets/library';
 import { computePeaks } from '../lib/peaks';
 import * as db from '../lib/db';
+import { ProjectSaveQueue } from '../lib/project-save-queue';
 import { computeMatchPreview } from '../audio/analysis/preview';
 import { loudnessMatchedMonitorGain } from '../audio/analysis/ab';
 
@@ -249,15 +250,45 @@ interface AppState {
   clearAllData: () => Promise<void>;
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
+const projectSaveQueue = new ProjectSaveQueue<ProjectState>((project) => db.saveProject(project), 700);
 let engineTimer: ReturnType<typeof setTimeout> | null = null;
+let persistenceLifecycleAttached = false;
+
+function reportProjectSaveError(error: unknown): void {
+  const detail = error instanceof Error ? error.message : String(error);
+  useApp.setState({
+    storageError: describeStorageError(error),
+    toast: `Project autosave failed: ${detail}`,
+  });
+}
+
+const projectSaveLifecycle = {
+  onSaved: (snapshot: ProjectState) => {
+    const active = useApp.getState().project;
+    if (active?.id === snapshot.id && active.updatedAt <= snapshot.updatedAt) {
+      useApp.setState({ lastSavedAt: Date.now() });
+    }
+  },
+  onError: (error: unknown) => reportProjectSaveError(error),
+};
 
 function schedulePersist(project: ProjectState): void {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    if (useApp.getState().project?.autosave === false) return;
-    void db.saveProject(project);
-  }, 700);
+  projectSaveQueue.schedule(project, projectSaveLifecycle);
+}
+
+function flushPendingProjectSaves(): void {
+  void projectSaveQueue.flushAll().catch(reportProjectSaveError);
+}
+
+function attachPersistenceLifecycle(): void {
+  if (persistenceLifecycleAttached || typeof window === 'undefined') return;
+  persistenceLifecycleAttached = true;
+  window.addEventListener('pagehide', flushPendingProjectSaves);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushPendingProjectSaves();
+    });
+  }
 }
 
 function engineAssets(project: ProjectState, buffers: Record<string, AssetBuffer>): EngineAsset[] {
@@ -357,6 +388,7 @@ export const useApp = create<AppState>((set, get) => ({
   verifying: false,
 
   init: async () => {
+    attachPersistenceLifecycle();
     let mode: Mode = 'advanced';
     try {
       mode = (localStorage.getItem('sonora:mode') as Mode) ?? 'advanced';
@@ -458,6 +490,9 @@ export const useApp = create<AppState>((set, get) => ({
         set({ engineError: error instanceof Error ? error.message : String(error) });
       });
       const rate = realtimeHost.sampleRate;
+      // Finish a pending autosave before reading the stored copy. This prevents
+      // reopening a project from racing its own delayed, newer edits.
+      await projectSaveQueue.flushPending(id);
       const project = await db.getProject(id);
       if (!project) throw new Error('Project not found');
       const assets = await db.listAssets(id);
@@ -544,6 +579,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   deleteProjectById: async (id) => {
+    projectSaveQueue.cancel(id);
+    await projectSaveQueue.drain();
     await db.deleteProject(id);
     if (get().project?.id === id) get().closeProject();
     await get().init();
@@ -867,7 +904,7 @@ export const useApp = create<AppState>((set, get) => ({
       project.master.processors = structuredClone(state.workingMix.processors);
       project.master.volumeDb = state.workingMix.volumeDb;
     }
-    await db.saveProject(project);
+    await projectSaveQueue.flush(project, projectSaveLifecycle);
     set({ lastSavedAt: Date.now() });
   },
 
@@ -1918,6 +1955,8 @@ export const useApp = create<AppState>((set, get) => ({
     realtimeHost.setComparisonGain(0);
     realtimeHost.setMatchAudition(false);
     realtimeHost.clearMatchAuditionBuffers();
+    projectSaveQueue.cancelAll();
+    await projectSaveQueue.drain();
     await db.clearAllData();
     set({
       projects: [],
