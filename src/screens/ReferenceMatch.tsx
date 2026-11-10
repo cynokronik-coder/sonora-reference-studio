@@ -630,7 +630,7 @@ export default function ReferenceMatch() {
                       }
                     }}
                   >
-                    <Icon name={selectedSectionLoopActive ? 'repeat-2' : 'repeat'} size={13} />
+                    <Icon name={selectedSectionLoopActive ? 'repeat' : 'repeat'} size={13} />
                     {selectedSectionLoopActive ? 'Stop section loop' : 'Loop selected section'}
                   </Button>
                 </div>
