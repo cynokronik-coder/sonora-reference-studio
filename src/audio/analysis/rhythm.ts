@@ -171,7 +171,7 @@ export function estimateTempo(
   candidatesBpm: number[];
   rangeBpm: { min: number; max: number } | null;
 } {
-  const global = estimateTempoWindow(onset, frameRate, onProgress);
+  const global = estimateTempoWindow(onset, frameRate, (fraction) => onProgress?.(fraction * 0.55));
   if (!global.tempoBpm || onset.length < Math.round(frameRate * 16)) {
     onProgress?.(1);
     return {
