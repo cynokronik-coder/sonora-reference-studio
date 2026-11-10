@@ -16,7 +16,9 @@ interface FFTPlan {
 }
 
 const FFT_PLAN_CACHE_LIMIT = 12;
+const FFT_PLAN_CACHE_MAX_BYTES = 8 * 1024 * 1024;
 const fftPlanCache = new Map<number, FFTPlan>();
+let fftPlanCacheBytes = 0;
 
 function getFFTPlan(size: number): FFTPlan {
   const cached = fftPlanCache.get(size);
@@ -36,10 +38,19 @@ function getFFTPlan(size: number): FFTPlan {
   }
 
   const plan = { levels, cos, sin };
-  fftPlanCache.set(size, plan);
-  if (fftPlanCache.size > FFT_PLAN_CACHE_LIMIT) {
-    const oldestSize = fftPlanCache.keys().next().value;
-    if (oldestSize !== undefined) fftPlanCache.delete(oldestSize);
+  const planBytes = size * Float64Array.BYTES_PER_ELEMENT;
+  if (planBytes <= FFT_PLAN_CACHE_MAX_BYTES) {
+    while (
+      fftPlanCache.size >= FFT_PLAN_CACHE_LIMIT ||
+      fftPlanCacheBytes + planBytes > FFT_PLAN_CACHE_MAX_BYTES
+    ) {
+      const oldestSize = fftPlanCache.keys().next().value;
+      if (oldestSize === undefined) break;
+      fftPlanCache.delete(oldestSize);
+      fftPlanCacheBytes -= oldestSize * Float64Array.BYTES_PER_ELEMENT;
+    }
+    fftPlanCache.set(size, plan);
+    fftPlanCacheBytes += planBytes;
   }
   return plan;
 }
@@ -153,7 +164,9 @@ export class FFT {
 }
 
 const WINDOW_CACHE_LIMIT = 12;
+const WINDOW_CACHE_MAX_BYTES = 4 * 1024 * 1024;
 const hannWindowCache = new Map<number, Float32Array>();
+let hannWindowCacheBytes = 0;
 
 /**
  * Cached Hann window. The returned shared array is read-only and must not be
@@ -171,10 +184,19 @@ export function hannWindow(n: number): Float32Array {
 
   const window = new Float32Array(n);
   for (let i = 0; i < n; i++) window[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n);
-  hannWindowCache.set(n, window);
-  if (hannWindowCache.size > WINDOW_CACHE_LIMIT) {
-    const oldestSize = hannWindowCache.keys().next().value;
-    if (oldestSize !== undefined) hannWindowCache.delete(oldestSize);
+  const windowBytes = n * Float32Array.BYTES_PER_ELEMENT;
+  if (windowBytes <= WINDOW_CACHE_MAX_BYTES) {
+    while (
+      hannWindowCache.size >= WINDOW_CACHE_LIMIT ||
+      hannWindowCacheBytes + windowBytes > WINDOW_CACHE_MAX_BYTES
+    ) {
+      const oldestSize = hannWindowCache.keys().next().value;
+      if (oldestSize === undefined) break;
+      hannWindowCache.delete(oldestSize);
+      hannWindowCacheBytes -= oldestSize * Float32Array.BYTES_PER_ELEMENT;
+    }
+    hannWindowCache.set(n, window);
+    hannWindowCacheBytes += windowBytes;
   }
   return window;
 }
