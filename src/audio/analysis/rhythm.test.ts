@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeRhythm, estimateTempo } from './rhythm';
+import { adaptiveOnsetEnvelope, analyzeRhythm, combineBandFlux, estimateTempo } from './rhythm';
 
 const SAMPLE_RATE = 48_000;
 
@@ -162,5 +162,85 @@ describe('robust tempo estimation', () => {
     for (let i = 1; i < progress.length; i++) {
       expect(progress[i]).toBeGreaterThanOrEqual(progress[i - 1]);
     }
+  });
+});
+
+
+describe('adaptive multiband onset detection', () => {
+  it('lets a quiet active frequency band contribute despite a dominant loud band', () => {
+    const loudBandOnly = combineBandFlux([2, 0, 0], [1_000, 0, 0], 1_000);
+    const withQuietPercussion = combineBandFlux([2, 0.2, 0], [1_000, 2, 0], 1_002);
+
+    expect(withQuietPercussion).toBeGreaterThan(loudBandOnly * 10);
+    expect(combineBandFlux([0, 0], [0, 0], 0)).toBe(0);
+  });
+
+  it('retains weak irregular attacks over a slowly changing background', () => {
+    const flux = Array.from({ length: 280 }, (_, i) =>
+      0.6 + i * 0.00025 + 0.009 * Math.sin(i * 0.31) + 0.004 * Math.sin(i * 0.73)
+    );
+    const attacks = [26, 43, 67, 84, 109, 123, 151, 176, 194, 221, 239, 263];
+    const strengths = [0.16, 0.09, 0.13, 0.08, 0.12, 0.07, 0.15, 0.09, 0.11, 0.08, 0.14, 0.09];
+    attacks.forEach((frame, index) => { flux[frame] += strengths[index]; });
+
+    const envelope = adaptiveOnsetEnvelope(flux, 12);
+    for (const frame of attacks) {
+      expect(envelope[frame]).toBeGreaterThan(0.04);
+      expect(envelope[frame]).toBeGreaterThan(envelope[frame - 1]);
+      expect(envelope[frame]).toBeGreaterThanOrEqual(envelope[frame + 1]);
+    }
+  });
+
+  it('does not turn a smooth noisy floor into a stream of false attacks', () => {
+    const flux = Array.from({ length: 500 }, (_, i) =>
+      0.8 + 0.008 * Math.sin(i * 0.17) + 0.006 * Math.sin(i * 0.43)
+    );
+
+    const envelope = adaptiveOnsetEnvelope(flux, 12);
+
+    expect(envelope.every((value) => value === 0)).toBe(true);
+  });
+
+  it('detects quiet syncopated high-frequency percussion over a strong sustained bass', () => {
+    const duration = 8;
+    const length = SAMPLE_RATE * duration;
+    const withoutPercussionL = new Float32Array(length);
+    const withoutPercussionR = new Float32Array(length);
+    const withPercussionL = new Float32Array(length);
+    const withPercussionR = new Float32Array(length);
+    const hitTimes = [
+      0.25, 0.75, 1.125, 1.5, 2.0, 2.375, 2.75, 3.25,
+      3.625, 4.0, 4.5, 4.875, 5.25, 5.75, 6.125, 6.5,
+      7.0, 7.375,
+    ];
+
+    for (let i = 0; i < length; i++) {
+      const time = i / SAMPLE_RATE;
+      const bass = 0.22 * Math.sin(2 * Math.PI * 72 * time)
+        + 0.07 * Math.sin(2 * Math.PI * 144 * time);
+      withoutPercussionL[i] = bass;
+      withoutPercussionR[i] = bass * 0.98;
+      withPercussionL[i] = bass;
+      withPercussionR[i] = bass * 0.98;
+      for (const hitTime of hitTimes) {
+        const elapsed = time - hitTime;
+        if (elapsed >= 0 && elapsed < 0.035) {
+          const decay = Math.exp(-elapsed / 0.009);
+          const percussion = 0.012 * decay * (
+            Math.sin(2 * Math.PI * 2_400 * time)
+            + 0.7 * Math.sin(2 * Math.PI * 5_200 * time)
+            + 0.35 * Math.sin(2 * Math.PI * 8_600 * time)
+          );
+          withPercussionL[i] += percussion;
+          withPercussionR[i] += percussion * 0.9;
+        }
+      }
+    }
+
+    const baseline = analyzeRhythm(withoutPercussionL, withoutPercussionR, SAMPLE_RATE, { includeSections: false });
+    const detected = analyzeRhythm(withPercussionL, withPercussionR, SAMPLE_RATE, { includeSections: false });
+
+    expect(detected.onsetDensity).toBeGreaterThan(baseline.onsetDensity + 1);
+    expect(detected.attackSharpness).toBeGreaterThan(baseline.attackSharpness);
   });
 });
