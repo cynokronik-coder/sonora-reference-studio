@@ -31,7 +31,7 @@ export interface SpectrumReport {
   buildupBands: number[];
 }
 
-interface SpectrumAccum {
+export interface SpectrumAccum {
   power: Float64Array; // per FFT bin
   frames: number;
   sampleRate: number;
