@@ -77,7 +77,7 @@ export default function ReferenceMatch() {
   const primaryReference = references.find((reference) => reference.report) ?? references[0];
   const primaryReferenceMeta = primaryReference?.meta;
   const primaryReferencePeaks = primaryReference ? assetBuffers[primaryReference.id]?.peaks ?? null : null;
-  const sectionAnalysisCurrent = (report: AnalysisReport | undefined) => report?.sectionMetricsVersion === 2;
+  const sectionAnalysisCurrent = (report: AnalysisReport | undefined) => report?.sectionMetricsVersion === 3;
   const readyReports = Number(sectionAnalysisCurrent(targetReport)) + Number(sectionAnalysisCurrent(referenceReport));
   const analysisReadiness = Math.round((readyReports / 2) * 100);
   const hasStaleSectionReports =
