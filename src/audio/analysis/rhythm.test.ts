@@ -216,8 +216,8 @@ describe('adaptive multiband onset detection', () => {
 
     for (let i = 0; i < length; i++) {
       const time = i / SAMPLE_RATE;
-      const bass = 0.22 * Math.sin(2 * Math.PI * 72 * time)
-        + 0.07 * Math.sin(2 * Math.PI * 144 * time);
+      const bass = 0.22 * Math.sin(2 * Math.PI * 93.75 * time)
+        + 0.07 * Math.sin(2 * Math.PI * 140.625 * time);
       withoutPercussionL[i] = bass;
       withoutPercussionR[i] = bass * 0.98;
       withPercussionL[i] = bass;
