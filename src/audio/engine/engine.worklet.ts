@@ -56,6 +56,15 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
   private matchAuditionActive = false;
   private matchAuditionMode: AuditionMode = 'before';
   private matchAuditionTransition: AuditionTransition | null = null;
+  private auditionTimingTotalMs = 0;
+  private auditionTimingMaxMs = 0;
+  private auditionTimingBlocks = 0;
+  private auditionPerformance: {
+    averageMs: number;
+    maxMs: number;
+    blockBudgetMs: number;
+    utilizationPercent: number;
+  } | null = null;
 
   constructor() {
     super();
@@ -120,6 +129,7 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
           };
         } else if (!nextActive) {
           this.matchAuditionTransition = null;
+          this.resetAuditionPerformance();
         }
         this.matchAuditionMode = nextMode;
         this.matchAuditionActive = nextActive;
@@ -131,6 +141,7 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         this.matchAfterRenderer = null;
         this.matchAuditionEndSample = 0;
         this.matchAuditionTransition = null;
+        this.resetAuditionPerformance();
         this.renderer.reset();
         break;
       }
@@ -172,6 +183,31 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
     }
   }
 
+  private resetAuditionPerformance(): void {
+    this.auditionTimingTotalMs = 0;
+    this.auditionTimingMaxMs = 0;
+    this.auditionTimingBlocks = 0;
+    this.auditionPerformance = null;
+  }
+
+  private recordAuditionPerformance(renderMs: number, frames: number): void {
+    this.auditionTimingTotalMs += renderMs;
+    this.auditionTimingMaxMs = Math.max(this.auditionTimingMaxMs, renderMs);
+    this.auditionTimingBlocks++;
+    if (this.auditionTimingBlocks < 32) return;
+    const averageMs = this.auditionTimingTotalMs / this.auditionTimingBlocks;
+    const blockBudgetMs = (frames / sampleRate) * 1000;
+    this.auditionPerformance = {
+      averageMs,
+      maxMs: this.auditionTimingMaxMs,
+      blockBudgetMs,
+      utilizationPercent: blockBudgetMs > 0 ? (averageMs / blockBudgetMs) * 100 : 0,
+    };
+    this.auditionTimingTotalMs = 0;
+    this.auditionTimingMaxMs = 0;
+    this.auditionTimingBlocks = 0;
+  }
+
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
     const output = outputs[0];
     if (!output || output.length === 0) return true;
@@ -196,6 +232,7 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
           afterL: this.matchAuditionAfterL, afterR: this.matchAuditionAfterR,
         };
       }
+      const renderStartedAt = performance.now();
       const elapsed = renderAuditionBlock(
         this.matchBeforeRenderer!,
         this.matchAfterRenderer!,
@@ -210,6 +247,7 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         this.matchAuditionTransition.elapsedFrames = elapsed;
         if (elapsed >= this.matchAuditionTransition.totalFrames) this.matchAuditionTransition = null;
       }
+      this.recordAuditionPerformance(performance.now() - renderStartedAt, outL.length);
     } else {
       this.renderer.renderBlock(this.position, outL.length, outL, outR);
     }
@@ -247,6 +285,7 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         playing: true,
         gr: auditionActive ? {} : this.renderer.meterSnapshot(),
         peaks: auditionActive ? {} : this.renderer.peakSnapshot(),
+        auditionPerformance: auditionActive ? this.auditionPerformance : null,
       });
     } else if (this.position - this.lastPositionPost > sampleRate * 0.05) {
       this.lastPositionPost = this.position;
