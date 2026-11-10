@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeLoudness, loudnessOfRange, normalizeToTruePeak, normalizeToTruePeakAsync } from './loudness';
+import { analyzeLoudness, analyzeLoudnessAsync, loudnessOfRange, normalizeToTruePeak, normalizeToTruePeakAsync } from './loudness';
 
 const SAMPLE_RATE = 48_000;
 
@@ -199,5 +199,40 @@ describe('cooperative true-peak normalization', () => {
       },
     })).rejects.toMatchObject({ name: 'AbortError' });
     expect(progress.length).toBeGreaterThan(0);
+  });
+});
+
+
+describe('cooperative rolling-window loudness analysis', () => {
+  it('matches synchronous BS.1770/EBU results across cooperative block boundaries', async () => {
+    const source = stereoTone(997, -16, 12.5);
+    const expected = analyzeLoudness(source.left, source.right, SAMPLE_RATE);
+    const progress: number[] = [];
+    const actual = await analyzeLoudnessAsync(source.left, source.right, SAMPLE_RATE, {
+      blockFrames: 4_096,
+      onProgress: (fraction) => progress.push(fraction),
+    });
+    expect(actual).toEqual(expected);
+    expect(progress.length).toBeGreaterThan(1);
+    expect(progress[progress.length - 1]).toBe(1);
+  });
+
+  it('can cancel between bounded loudness-analysis blocks', async () => {
+    const source = stereoTone(1_000, -12, 4);
+    const controller = new AbortController();
+    await expect(analyzeLoudnessAsync(source.left, source.right, SAMPLE_RATE, {
+      blockFrames: 1_024,
+      signal: controller.signal,
+      onProgress: (fraction) => {
+        if (fraction > 0) controller.abort();
+      },
+    })).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
+  it('keeps the short-term EBU trailing-silence flush on long rolling streams', () => {
+    const source = stereoTone(1_000, -20, 8);
+    const report = analyzeLoudness(source.left, source.right, SAMPLE_RATE);
+    expect(report.shortTerm[report.shortTerm.length - 1].time).toBeGreaterThan(8);
+    expect(report.shortTerm[report.shortTerm.length - 1].lufs).toBeLessThan(report.shortTermMaxLufs);
   });
 });
