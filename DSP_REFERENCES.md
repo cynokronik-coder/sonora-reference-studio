@@ -79,3 +79,12 @@ The Limiter's 4x IIR true-peak mode is a safety estimate only. It must not be pr
 - EBU Tech 3342, Loudness Range: https://tech.ebu.ch/publications/tech3342
   - Defines LRA using 3 s short-term loudness, -70 LUFS absolute gating, -20 LU relative gating and the 10th–95th percentile range. For file-based measurement it specifies at least 1.5 s trailing silence to flush the final short-term window.
 - Sonora's offline analysis now uses a dedicated Annex 2 FIR true-peak meter. The realtime limiter remains an IIR approximation with an added safety margin and is not claimed to be a standards-compliant Annex 2 meter.
+
+
+## Sample-rate conversion
+
+- Julius O. Smith III, *Digital Audio Resampling*: https://ccrma.stanford.edu/~jos/resample/
+  - Background on bandlimited interpolation, rational/polyphase conversion and anti-alias filtering.
+- James Kaiser, “Nonrecursive digital filter design using the I0-sinh window function,” *Proceedings of the 1974 IEEE International Symposium on Circuits and Systems*.
+  - Background for the Kaiser window used to shape the finite low-pass interpolation kernel.
+- Sonora uses a polyphase lookup table with a Kaiser-windowed sinc kernel, DC-normalized phases and a ratio-dependent filter radius. The implementation is not advertised as bit-identical to a third-party SRC library or as having passed a formal conformance benchmark.
