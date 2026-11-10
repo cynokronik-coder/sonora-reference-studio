@@ -222,18 +222,21 @@ describe('adaptive multiband onset detection', () => {
       withoutPercussionR[i] = bass * 0.98;
       withPercussionL[i] = bass;
       withPercussionR[i] = bass * 0.98;
-      for (const hitTime of hitTimes) {
+    }
+    for (const hitTime of hitTimes) {
+      const start = Math.round(hitTime * SAMPLE_RATE);
+      const end = Math.min(length, start + Math.ceil(0.035 * SAMPLE_RATE));
+      for (let i = start; i < end; i++) {
+        const time = i / SAMPLE_RATE;
         const elapsed = time - hitTime;
-        if (elapsed >= 0 && elapsed < 0.035) {
-          const decay = Math.exp(-elapsed / 0.009);
-          const percussion = 0.012 * decay * (
-            Math.sin(2 * Math.PI * 2_400 * time)
-            + 0.7 * Math.sin(2 * Math.PI * 5_200 * time)
-            + 0.35 * Math.sin(2 * Math.PI * 8_600 * time)
-          );
-          withPercussionL[i] += percussion;
-          withPercussionR[i] += percussion * 0.9;
-        }
+        const decay = Math.exp(-elapsed / 0.009);
+        const percussion = 0.012 * decay * (
+          Math.sin(2 * Math.PI * 2_400 * time)
+          + 0.7 * Math.sin(2 * Math.PI * 5_200 * time)
+          + 0.35 * Math.sin(2 * Math.PI * 8_600 * time)
+        );
+        withPercussionL[i] += percussion;
+        withPercussionR[i] += percussion * 0.9;
       }
     }
 
