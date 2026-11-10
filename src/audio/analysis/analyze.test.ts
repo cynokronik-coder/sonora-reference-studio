@@ -1,0 +1,74 @@
+import { describe, expect, it } from 'vitest';
+import { analyzeAudio } from './analyze';
+
+const SAMPLE_RATE = 48_000;
+
+function stereoTone(durationSeconds: number, rightGain = 0.8) {
+  const frames = Math.round(durationSeconds * SAMPLE_RATE);
+  const left = new Float32Array(frames);
+  const right = new Float32Array(frames);
+  for (let i = 0; i < frames; i++) {
+    const sample = 0.2 * Math.sin((2 * Math.PI * 1_000 * i) / SAMPLE_RATE);
+    left[i] = sample;
+    right[i] = sample * rightGain;
+  }
+  return { left, right };
+}
+
+describe('complete section analysis', () => {
+  it('stores measured loudness, stereo, spectral and rhythm metrics for detected sections', () => {
+    const audio = stereoTone(20);
+    const report = analyzeAudio({
+      assetId: 'section-analysis-test',
+      L: audio.left,
+      R: audio.right,
+      sampleRate: SAMPLE_RATE,
+    });
+
+    expect(report.sectionMetricsVersion).toBe(2);
+    expect(report.sections.length).toBeGreaterThan(0);
+
+    for (const section of report.sections) {
+      expect(Number.isFinite(section.lufs)).toBe(true);
+      expect(Number.isFinite(section.truePeakDb)).toBe(true);
+      expect(Number.isFinite(section.samplePeakDb)).toBe(true);
+      expect(Number.isFinite(section.rmsDb)).toBe(true);
+      expect(Number.isFinite(section.crestDb)).toBe(true);
+      expect(Number.isFinite(section.plrDb)).toBe(true);
+      expect(Number.isFinite(section.widthDb)).toBe(true);
+      expect(Number.isFinite(section.correlation)).toBe(true);
+      expect(Number.isFinite(section.monoCompatibility)).toBe(true);
+      expect(Number.isFinite(section.lowSideRatioDb)).toBe(true);
+      expect(Number.isFinite(section.centroidHz)).toBe(true);
+      expect(Number.isFinite(section.rolloffHz)).toBe(true);
+      expect(Number.isFinite(section.tiltDbPerOct)).toBe(true);
+      expect(Number.isFinite(section.flatness)).toBe(true);
+      expect(Number.isFinite(section.attackDensity)).toBe(true);
+      expect(Number.isFinite(section.punchScore)).toBe(true);
+      expect(section.bands.length).toBeGreaterThan(0);
+    }
+
+    const longSection = report.sections.find((section) => section.end - section.start >= 10);
+    expect(longSection).toBeDefined();
+    expect(Number.isFinite(longSection?.lra)).toBe(true);
+    expect(longSection?.truePeakDb).toBeGreaterThanOrEqual(longSection?.samplePeakDb ?? 0);
+  });
+
+  it('marks LRA and tempo unavailable for short segments instead of fabricating values', () => {
+    const audio = stereoTone(4);
+    const report = analyzeAudio({
+      assetId: 'short-section-analysis-test',
+      L: audio.left,
+      R: audio.right,
+      sampleRate: SAMPLE_RATE,
+    });
+    const section = report.sections[0];
+
+    expect(section.end - section.start).toBeCloseTo(4, 1);
+    expect(section.lra).toBeNull();
+    expect(section.tempoBpm).toBeNull();
+    expect(section.beatConfidence).toBeNull();
+    expect(section.attackDensity).not.toBeNull();
+    expect(section.punchScore).not.toBeNull();
+  });
+});
