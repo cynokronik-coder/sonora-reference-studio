@@ -1,5 +1,5 @@
 /**
- * Iterative radix-2 FFT with precomputed twiddles and bit-reversal.
+ * Iterative radix-2 FFT with cached, immutable transform plans.
  * Used by the spectrum analyser, linear-phase EQ, true-peak detector and
  * the reverb's damping filters. Real-only helpers avoid wasted work.
  */
@@ -7,6 +7,41 @@ export function nextPow2(n: number): number {
   let p = 1;
   while (p < n) p <<= 1;
   return p;
+}
+
+interface FFTPlan {
+  levels: number;
+  cos: Float64Array;
+  sin: Float64Array;
+}
+
+const FFT_PLAN_CACHE_LIMIT = 12;
+const fftPlanCache = new Map<number, FFTPlan>();
+
+function getFFTPlan(size: number): FFTPlan {
+  const cached = fftPlanCache.get(size);
+  if (cached) {
+    // Refresh insertion order for bounded least-recently-used eviction.
+    fftPlanCache.delete(size);
+    fftPlanCache.set(size, cached);
+    return cached;
+  }
+
+  const levels = Math.round(Math.log2(size));
+  const cos = new Float64Array(size / 2);
+  const sin = new Float64Array(size / 2);
+  for (let i = 0; i < size / 2; i++) {
+    cos[i] = Math.cos((2 * Math.PI * i) / size);
+    sin[i] = Math.sin((2 * Math.PI * i) / size);
+  }
+
+  const plan = { levels, cos, sin };
+  fftPlanCache.set(size, plan);
+  if (fftPlanCache.size > FFT_PLAN_CACHE_LIMIT) {
+    const oldestSize = fftPlanCache.keys().next().value;
+    if (oldestSize !== undefined) fftPlanCache.delete(oldestSize);
+  }
+  return plan;
 }
 
 export class FFT {
@@ -18,13 +53,10 @@ export class FFT {
   constructor(size: number) {
     if ((size & (size - 1)) !== 0 || size < 2) throw new Error('FFT size must be a power of two >= 2');
     this.size = size;
-    this.levels = Math.round(Math.log2(size));
-    this.cos = new Float64Array(size / 2);
-    this.sin = new Float64Array(size / 2);
-    for (let i = 0; i < size / 2; i++) {
-      this.cos[i] = Math.cos((2 * Math.PI * i) / size);
-      this.sin[i] = Math.sin((2 * Math.PI * i) / size);
-    }
+    const plan = getFFTPlan(size);
+    this.levels = plan.levels;
+    this.cos = plan.cos;
+    this.sin = plan.sin;
   }
 
   /** In-place complex forward transform. */
@@ -120,10 +152,31 @@ export class FFT {
   }
 }
 
+const WINDOW_CACHE_LIMIT = 12;
+const hannWindowCache = new Map<number, Float32Array>();
+
+/**
+ * Cached Hann window. The returned shared array is read-only and must not be
+ * modified by callers. A bounded cache avoids rebuilding the same window for
+ * every section while preventing unbounded retention of arbitrary sizes.
+ */
 export function hannWindow(n: number): Float32Array {
-  const w = new Float32Array(n);
-  for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n);
-  return w;
+  if (!Number.isInteger(n) || n < 1) throw new RangeError('Window size must be a positive integer.');
+  const cached = hannWindowCache.get(n);
+  if (cached) {
+    hannWindowCache.delete(n);
+    hannWindowCache.set(n, cached);
+    return cached;
+  }
+
+  const window = new Float32Array(n);
+  for (let i = 0; i < n; i++) window[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n);
+  hannWindowCache.set(n, window);
+  if (hannWindowCache.size > WINDOW_CACHE_LIMIT) {
+    const oldestSize = hannWindowCache.keys().next().value;
+    if (oldestSize !== undefined) hannWindowCache.delete(oldestSize);
+  }
+  return window;
 }
 
 export function blackmanHarris(n: number): Float32Array {
