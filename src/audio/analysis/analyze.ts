@@ -1,4 +1,4 @@
-import { analyzeLoudness, type LoudnessReport } from './loudness';
+import { analyzeLoudness, analyzeLoudnessSummary, type LoudnessReport } from './loudness';
 import {
   type BandLevel,
   type Resonance,
