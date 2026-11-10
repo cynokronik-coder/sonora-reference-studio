@@ -506,7 +506,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
   if (tgt.metricFallbacks.length) {
     warnings.push({
       kind: 'limitation',
-      message: `The selected target segment is too short for reliable ${tgt.metricFallbacks.join(', ')} measurements. Those values use the full-track analysis.`,
+      message: `The selected target segment cannot provide reliable ${tgt.metricFallbacks.join(', ')} measurements. Those values use the full-track analysis.`,
     });
   }
   const refFor = (category: keyof CategorySource) => {
@@ -530,7 +530,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
       measurementFallbackWarnings.add(metricFallbackKey);
       warnings.push({
         kind: 'limitation',
-        message: `One or more selected reference segments are too short for reliable ${resolved.metricFallbacks.join(', ')} measurements. Those values use full-track analysis.`,
+        message: `One or more selected reference segments cannot provide reliable ${resolved.metricFallbacks.join(', ')} measurements. Those values use full-track analysis.`,
       });
     }
     return resolved;
