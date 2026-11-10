@@ -20,6 +20,118 @@ export interface StereoReport {
   bandWidth: BandStereo[];
 }
 
+export interface StereoSpectralAccum {
+  midPower: Float64Array;
+  sidePower: Float64Array;
+  crossRe: Float64Array;
+  leftPower: Float64Array;
+  rightPower: Float64Array;
+  frames: number;
+}
+
+export function createStereoSpectralAccum(): StereoSpectralAccum {
+  const count = BAND_CENTERS.length;
+  return {
+    midPower: new Float64Array(count),
+    sidePower: new Float64Array(count),
+    crossRe: new Float64Array(count),
+    leftPower: new Float64Array(count),
+    rightPower: new Float64Array(count),
+    frames: 0,
+  };
+}
+
+/**
+ * Finish stereo descriptors from a shared FFT accumulation. The time-domain
+ * global width/correlation/mono checks are kept separate from the FFT pass,
+ * while all per-band spectral metrics reuse the shared transforms.
+ */
+export function finalizeStereoFromAccum(
+  L: Float32Array,
+  R: Float32Array,
+  sampleRate: number,
+  accum: StereoSpectralAccum,
+  onProgress?: (fraction: number) => void,
+): StereoReport {
+  const n = Math.min(L.length, R.length);
+  if (n === 0) {
+    return {
+      widthDb: -60, correlation: 1, midEnergyDb: -120, sideEnergyDb: -120,
+      balanceDb: 0, monoCompatibility: 100, lowSideRatioDb: -60, bandWidth: [],
+    };
+  }
+
+  let midSum = 0;
+  let sideSum = 0;
+  let dot = 0;
+  let lSum = 0;
+  let rSum = 0;
+  for (let i = 0; i < n; i++) {
+    const left = L[i];
+    const right = R[i];
+    const mid = (left + right) * 0.5;
+    const side = (left - right) * 0.5;
+    midSum += mid * mid;
+    sideSum += side * side;
+    dot += left * right;
+    lSum += left * left;
+    rSum += right * right;
+    if (onProgress && (i & 0xfffff) === 0) onProgress(i / n);
+  }
+
+  const correlation = lSum > 1e-12 && rSum > 1e-12 ? dot / Math.sqrt(lSum * rSum) : 1;
+  const widthDb = gainToDb(Math.sqrt(sideSum / Math.max(1e-12, midSum)));
+  const midEnergyDb = gainToDb(Math.sqrt(midSum / n));
+  const sideEnergyDb = gainToDb(Math.sqrt(sideSum / n));
+  const balanceDb = gainToDb(Math.sqrt(lSum / n)) - gainToDb(Math.sqrt(rSum / n));
+
+  const win = Math.max(16, Math.round(sampleRate * 0.05));
+  let cancelled = 0;
+  let totalEnergy = 0;
+  for (let start = 0; start + win <= n; start += win) {
+    let cross = 0;
+    let energy = 0;
+    for (let i = start; i < start + win; i++) {
+      cross += L[i] * R[i];
+      energy += L[i] * L[i] + R[i] * R[i];
+    }
+    totalEnergy += energy;
+    if (cross < 0) cancelled += energy;
+  }
+  const monoCompatibility = totalEnergy > 0 ? Math.max(0, 100 * (1 - cancelled / totalEnergy)) : 100;
+
+  const bandWidth: BandStereo[] = BAND_CENTERS.map((center, i) => {
+    const mid = accum.midPower[i] / Math.max(1, accum.frames);
+    const side = accum.sidePower[i] / Math.max(1, accum.frames);
+    const corr = accum.leftPower[i] > 1e-12 && accum.rightPower[i] > 1e-12
+      ? accum.crossRe[i] / Math.sqrt(accum.leftPower[i] * accum.rightPower[i])
+      : 1;
+    return {
+      center,
+      widthDb: gainToDb(Math.sqrt(side / Math.max(1e-15, mid))),
+      correlation: corr,
+      sideEnergyDb: 10 * Math.log10(Math.max(side, 1e-15)),
+    };
+  });
+
+  const lowBands = bandWidth.filter((band) => band.center <= 120);
+  const lowSideRatioDb = lowBands.length
+    ? lowBands.reduce((sum, band) => sum + band.widthDb, 0) / lowBands.length
+    : -60;
+
+  if (onProgress) onProgress(1);
+  return {
+    widthDb,
+    correlation,
+    midEnergyDb,
+    sideEnergyDb,
+    balanceDb,
+    monoCompatibility,
+    lowSideRatioDb,
+    bandWidth,
+  };
+}
+
 /**
  * Stereo measurement.
  *
