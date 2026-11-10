@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { copyAuditionBlock, renderAuditionBlock, type StereoAuditionBuffers } from './audition';
+import { copyAuditionBlock, renderAuditionBlock, type AuditionBlockRenderer, type StereoAuditionBuffers } from './audition';
 
 function buffers(): StereoAuditionBuffers {
   return {
@@ -135,7 +135,7 @@ describe('renderAuditionBlock', () => {
     const before = {
       renderBlock() { throw new Error('The optimized path should not render the graph twice.'); },
       renderPairedBlock(
-        _other: typeof after,
+        _other: AuditionBlockRenderer,
         position: number,
         frames: number,
         beforeL: Float32Array,
@@ -166,8 +166,10 @@ describe('renderAuditionBlock', () => {
     renderAuditionBlock(before, after, 20, 'after', scratch, left, right);
 
     expect(pairedCalls).toBe(1);
-    expect([...left]).toEqual([4, 4.2]);
-    expect([...right]).toEqual([-4, -4.2]);
+    expect(left[0]).toBeCloseTo(4, 6);
+    expect(left[1]).toBeCloseTo(4.2, 6);
+    expect(right[0]).toBeCloseTo(-4, 6);
+    expect(right[1]).toBeCloseTo(-4.2, 6);
   });
 
   it('crossfades rendered blocks and rejects undersized scratch buffers', () => {
