@@ -10,7 +10,7 @@ import {
 } from '../audio/io/verification-memory';
 import { encodeAiff, encodeWav, writeAiffToWritable, writeWavToWritable, type SequentialPcmWritable, type WavBitDepth } from '../audio/io/wav';
 import { fillStereoPcm16Block } from '../audio/io/mp3';
-import { analyzeLoudness, normalizeToTruePeak } from '../audio/analysis/loudness';
+import { analyzeLoudness, normalizeToTruePeakAsync } from '../audio/analysis/loudness';
 import { generateMatchPlan, planToNodes, type MatchPlan } from '../audio/analysis/match';
 import { interpretCommand, suggestionsFor, type AssistantProposal } from '../audio/ai/assistant';
 import { requestSonoraAi } from '../audio/ai/client';
@@ -547,7 +547,15 @@ export const useApp = create<AppState>((set, get) => ({
           const converted =
             decoded.sampleRate === targetRate
               ? { L: decoded.L, R: decoded.R }
-              : await resampleToRate(decoded.L, decoded.R, decoded.sampleRate, targetRate);
+              : await resampleToRate(decoded.L, decoded.R, decoded.sampleRate, targetRate, {
+                  onProgress: (fraction) => set({
+                    busy: {
+                      kind: 'decode',
+                      label: `Resampling ${meta.name}`,
+                      progress: (count + fraction) / Math.max(1, assets.length),
+                    },
+                  }),
+                });
           buffers[meta.id] = {
             L: converted.L,
             R: converted.R,
@@ -650,7 +658,15 @@ export const useApp = create<AppState>((set, get) => ({
         const converted =
           decoded.sampleRate === targetRate
             ? { L: decoded.L, R: decoded.R }
-            : await resampleToRate(decoded.L, decoded.R, decoded.sampleRate, targetRate);
+            : await resampleToRate(decoded.L, decoded.R, decoded.sampleRate, targetRate, {
+                onProgress: (fraction) => set({
+                  busy: {
+                    kind: 'import',
+                    label: `Resampling ${file.name}`,
+                    progress: (index + fraction) / Math.max(1, files.length),
+                  },
+                }),
+              });
         const id = uid('asset');
         const peaks = computePeaks(converted.L, converted.R);
         const meta: AudioAssetMeta = {
@@ -1875,21 +1891,47 @@ export const useApp = create<AppState>((set, get) => ({
       let L = result.L;
       let R = result.R;
       let sampleRate = result.sampleRate;
+      const processingController = new AbortController();
+      const cancelProcessing = () => processingController.abort();
 
       // Convert to the requested delivery rate first. True-peak normalization
       // must operate on the final PCM rate, because SRC can change the
-      // reconstructed inter-sample maximum.
+      // reconstructed inter-sample maximum. The converter yields between
+      // bounded output blocks and can be cancelled without a browser-wide
+      // OfflineAudioBuffer allocation.
       if (settings.sampleRate !== sampleRate) {
-        set({ busy: { kind: 'render', label: `Resampling to ${settings.sampleRate} Hz`, progress: 0.9 } });
-        const resampled = await resampleToRate(L, R, sampleRate, settings.sampleRate);
+        const label = `Resampling to ${settings.sampleRate} Hz`;
+        set({ busy: { kind: 'render', label, progress: 0.9, cancel: cancelProcessing } });
+        const resampled = await resampleToRate(L, R, sampleRate, settings.sampleRate, {
+          signal: processingController.signal,
+          onProgress: (fraction) => set({
+            busy: {
+              kind: 'render',
+              label,
+              progress: 0.9 + fraction * 0.025,
+              cancel: cancelProcessing,
+            },
+          }),
+        });
         L = resampled.L;
         R = resampled.R;
         sampleRate = settings.sampleRate;
       }
 
       if (settings.normalize) {
-        set({ busy: { kind: 'render', label: 'Normalising to the true-peak target', progress: 0.93 } });
-        normalizeToTruePeak(L, R, project.targetTruePeak ?? -1);
+        const label = 'Normalising to the true-peak target';
+        set({ busy: { kind: 'render', label, progress: 0.93, cancel: cancelProcessing } });
+        await normalizeToTruePeakAsync(L, R, project.targetTruePeak ?? -1, {
+          signal: processingController.signal,
+          onProgress: (fraction) => set({
+            busy: {
+              kind: 'render',
+              label,
+              progress: 0.93 + fraction * 0.02,
+              cancel: cancelProcessing,
+            },
+          }),
+        });
       }
 
       const pcmReport = analyzeLoudness(L, R, sampleRate);
@@ -2000,7 +2042,7 @@ export const useApp = create<AppState>((set, get) => ({
         });
       }
     } catch (error) {
-      const cancelled = error instanceof DOMException && error.name === 'AbortError';
+      const cancelled = error instanceof Error && error.name === 'AbortError';
       set({ busy: null, toast: cancelled ? 'Export cancelled.' : error instanceof Error ? error.message : 'Export failed.' });
     }
   },
