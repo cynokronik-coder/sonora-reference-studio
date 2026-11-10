@@ -10,7 +10,7 @@ import {
 } from '../audio/io/verification-memory';
 import { encodeAiff, encodeWav, writeAiffToWritable, writeWavToWritable, type SequentialPcmWritable, type WavBitDepth } from '../audio/io/wav';
 import { fillStereoPcm16Block } from '../audio/io/mp3';
-import { analyzeLoudness, normalizeToTruePeakAsync } from '../audio/analysis/loudness';
+import { analyzeLoudness, analyzeLoudnessAsync, normalizeToTruePeakAsync } from '../audio/analysis/loudness';
 import { generateMatchPlan, planToNodes, type MatchPlan } from '../audio/analysis/match';
 import { interpretCommand, suggestionsFor, type AssistantProposal } from '../audio/ai/assistant';
 import { requestSonoraAi } from '../audio/ai/client';
@@ -1934,7 +1934,19 @@ export const useApp = create<AppState>((set, get) => ({
         });
       }
 
-      const pcmReport = analyzeLoudness(L, R, sampleRate);
+      const loudnessLabel = 'Measuring final PCM loudness';
+      set({ busy: { kind: 'render', label: loudnessLabel, progress: 0.95, cancel: cancelProcessing } });
+      const pcmReport = await analyzeLoudnessAsync(L, R, sampleRate, {
+        signal: processingController.signal,
+        onProgress: (fraction) => set({
+          busy: {
+            kind: 'render',
+            label: loudnessLabel,
+            progress: 0.95 + fraction * 0.025,
+            cancel: cancelProcessing,
+          },
+        }),
+      });
       let finalStats: RenderStats = {
         ...result.stats,
         lufs: pcmReport.integratedLufs,
@@ -2379,7 +2391,7 @@ export async function verifyEncodedBlob(blob: Blob): Promise<EncodedFileMeasurem
 
   const file = new File([blob], 'verification.wav', { type: blob.type });
   const decoded = await decodeAudioFile(file);
-  const report = analyzeLoudness(decoded.L, decoded.R, decoded.sampleRate);
+  const report = await analyzeLoudnessAsync(decoded.L, decoded.R, decoded.sampleRate);
   return {
     lufs: report.integratedLufs,
     truePeakDb: report.truePeakDb,
