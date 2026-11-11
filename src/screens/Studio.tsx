@@ -15,7 +15,7 @@ type Workspace = 'arrangement' | 'mixer' | 'processing';
 
 const TRACK_KINDS: TrackKind[] = ['audio', 'vocal', 'instrument', 'drums', 'bass', 'instrumental', 'stem'];
 
-export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount }: { onStartTour?: () => void; onExpandAssistant?: () => void; onOpenAccount?: () => void } = {}) {
+export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, onOpenCommandPalette }: { onStartTour?: () => void; onExpandAssistant?: () => void; onOpenAccount?: () => void; onOpenCommandPalette?: () => void } = {}) {
   const project = useApp((s) => s.project);
   const { selectedTrackId, selectTrack, importFiles, updateTrack, removeTrack, addTrack } = useApp();
   const picker = useFilePicker();
@@ -100,6 +100,11 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount }
         </nav>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          <button type="button" onClick={onOpenCommandPalette} title="Search Sonora (⌘K / Ctrl+K)" aria-label="Search Sonora" className="focus-ring inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-xl border border-white/[.08] bg-white/[.025] px-2.5 text-ink-300 transition-colors hover:border-[#A77AFF]/35 hover:bg-[#8957FF]/[.08] hover:text-[#C4A2FF] sm:px-3">
+            <Icon name="search" size={17} />
+            <span className="hidden text-xs font-medium xl:inline">Search</span>
+            <kbd className="hidden rounded border border-white/[.1] px-1.5 py-0.5 font-mono text-[9px] text-ink-500 xl:inline">⌘K</kbd>
+          </button>
           <button type="button" data-tour="studio-tracks" onClick={() => setTracksOpen(true)} title="Manage tracks and buses" aria-label={`Open tracks, ${project.tracks.length} tracks`} className="inline-flex rounded-lg border border-white/[.08] bg-white/[.025] px-2.5 py-2 text-[10px] text-ink-300 transition-colors hover:bg-white/[.06] hover:text-white">
             Tracks <span className="ml-1 text-ink-500">{project.tracks.length}</span>
           </button>

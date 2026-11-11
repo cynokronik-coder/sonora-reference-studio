@@ -11,6 +11,7 @@ interface TopNavigationProps {
   onModeChange: (mode: Mode) => void;
   onNavigate: (screen: Screen) => void;
   onOpenAssistant: () => void;
+  onOpenCommandPalette: () => void;
   onUndo: () => void;
   onRedo: () => void;
   onOpenLanding: () => void;
@@ -44,6 +45,7 @@ export default function TopNavigation({
   onModeChange,
   onNavigate,
   onOpenAssistant,
+  onOpenCommandPalette,
   onUndo,
   onRedo,
   onOpenLanding,
@@ -183,6 +185,11 @@ export default function TopNavigation({
       </nav>
 
       <div className="flex shrink-0 items-center gap-1.5">
+        <button type="button" onClick={onOpenCommandPalette} title="Search Sonora (⌘K / Ctrl+K)" aria-label="Search Sonora" className="focus-ring inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-xl border border-white/[.08] bg-white/[.025] px-2.5 text-ink-300 transition-colors hover:border-[#A77AFF]/35 hover:bg-[#8957FF]/[.08] hover:text-[#C4A2FF] sm:px-3">
+          <Icon name="search" size={17} />
+          <span className="hidden text-xs font-medium xl:inline">Search</span>
+          <kbd className="hidden rounded border border-white/[.1] px-1.5 py-0.5 font-mono text-[9px] text-ink-500 xl:inline">⌘K</kbd>
+        </button>
         {projectName && (
           <div className="hidden max-w-[170px] items-center gap-2 rounded-lg border border-white/[.07] bg-white/[.025] px-2.5 py-1.5 xl:flex">
             <span className="h-1.5 w-1.5 rounded-full bg-[#8EDB75]" />
