@@ -71,11 +71,11 @@ function sessionFromPayload(payload: AuthPayload): AuthSession {
   };
 }
 
-async function authRequest(path: string, body?: Record<string, unknown>, accessToken?: string): Promise<AuthPayload> {
+async function authRequest(path: string, body?: Record<string, unknown>, accessToken?: string, method: 'POST' | 'PUT' = 'POST'): Promise<AuthPayload> {
   const config = getSupabaseConfig();
   if (!config.configured) throw new Error('Supabase Auth is not configured. Add VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY.');
   const response = await fetch(`${config.url}/auth/v1/${path}`, {
-    method: body ? 'POST' : 'GET',
+    method: body ? method : 'GET',
     headers: {
       apikey: config.anonKey,
       'Content-Type': 'application/json',
@@ -121,18 +121,26 @@ async function recoverSessionFromRedirect(): Promise<AuthSession | null> {
     };
     persistSession(session);
     // Remove tokens from the URL and browser history after validation.
-    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}#account`);
+    const destination = params.get('type') === 'recovery' ? '#reset-password' : '#account';
+    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}${destination}`);
     return session;
   } catch {
-    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}#account`);
+    const destination = params.get('type') === 'recovery' ? '#reset-password' : '#account';
+    window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}${destination}`);
     return null;
   }
 }
 
 export async function getAuthSession(): Promise<AuthSession | null> {
   if (currentSession === undefined) {
-    currentSession = readStoredSession();
-    if (!currentSession) await recoverSessionFromRedirect();
+    const hash = typeof window !== 'undefined' ? window.location.hash : '';
+    const isRecoveryCallback = hash.includes('type=recovery') || hash.includes('access_token=') && hash.includes('type=recovery');
+    if (isRecoveryCallback) {
+      await recoverSessionFromRedirect();
+    } else {
+      currentSession = readStoredSession();
+      if (!currentSession) await recoverSessionFromRedirect();
+    }
   }
   const session = currentSession;
   if (!session) return null;
@@ -186,6 +194,19 @@ export async function signUpWithPassword(email: string, password: string): Promi
     return { session, confirmationRequired: false };
   }
   return { session: null, confirmationRequired: true };
+}
+
+export async function requestPasswordReset(email: string): Promise<void> {
+  const config = getSupabaseConfig();
+  if (!config.configured) throw new Error('Supabase Auth is not configured.');
+  const redirectTo = `${window.location.origin}/#reset-password`;
+  await authRequest(`recover?redirect_to=${encodeURIComponent(redirectTo)}`, { email: email.trim() });
+}
+
+export async function updatePassword(password: string): Promise<void> {
+  const session = await getAuthSession();
+  if (!session) throw new Error('This password reset link is invalid or expired. Request a new one.');
+  await authRequest('user', { password }, session.access_token, 'PUT');
 }
 
 export async function signOut(): Promise<void> {
