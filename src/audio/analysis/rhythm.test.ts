@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  absoluteBarPhaseSeconds,
   adaptiveOnsetEnvelope,
   analyzeRhythm,
   combineBandFlux,
   compareBeatSectionTransition,
+  estimateMeterAndDownbeat,
   estimateTempo,
   groupOnsetEvents,
   scoreBeatGrid,
@@ -379,5 +381,74 @@ describe('section beat transition analysis', () => {
       beatPhaseShiftMs: null,
       beatContinuity: null,
     });
+  });
+});
+
+
+describe('meter and downbeat estimation', () => {
+  it('identifies a repeating four-beat bar and its strongest downbeat', () => {
+    const frameRate = 100;
+    const period = 50;
+    const phase = 7;
+    const pattern = [1, 0.25, 0.62, 0.22];
+    const events = Array.from({ length: 32 }, (_, beat) => ({
+      frame: Math.round(phase + beat * period),
+      strength: pattern[beat % 4],
+    }));
+
+    const result = estimateMeterAndDownbeat(events, 120, frameRate, phase);
+
+    expect(result.beatsPerBar).toBe(4);
+    expect(result.downbeatOffsetBeats).toBe(0);
+    expect(result.barPhaseFrames).toBeCloseTo(7, 5);
+    expect(result.meterConfidence).toBeGreaterThan(0.5);
+    expect(result.downbeatConfidence).toBeGreaterThan(0.35);
+  });
+
+  it('detects a three-beat grouping and offsets the downbeat within the beat grid', () => {
+    const frameRate = 100;
+    const period = 50;
+    const phase = 4;
+    const pattern = [0.2, 0.55, 1];
+    const events = Array.from({ length: 24 }, (_, beat) => ({
+      frame: Math.round(phase + beat * period),
+      strength: pattern[beat % 3],
+    }));
+
+    const result = estimateMeterAndDownbeat(events, 120, frameRate, phase);
+
+    expect(result.beatsPerBar).toBe(3);
+    expect(result.downbeatOffsetBeats).toBe(2);
+    expect(result.barPhaseFrames).toBeCloseTo(104, 5);
+  });
+
+  it('does not invent a meter or downbeat for uniform beat strengths', () => {
+    const events = Array.from({ length: 32 }, (_, beat) => ({
+      frame: beat * 50,
+      strength: 1,
+    }));
+
+    const result = estimateMeterAndDownbeat(events, 120, 100, 0);
+
+    expect(result.beatsPerBar).toBeNull();
+    expect(result.downbeatOffsetBeats).toBeNull();
+    expect(result.barPhaseFrames).toBeNull();
+    expect(result.meterConfidence).toBe(0);
+    expect(result.downbeatConfidence).toBe(0);
+  });
+
+  it('returns unavailable results when the section is too short or unanchored', () => {
+    const events = Array.from({ length: 8 }, (_, beat) => ({
+      frame: beat * 50,
+      strength: beat % 4 === 0 ? 1 : 0.2,
+    }));
+    expect(estimateMeterAndDownbeat(events, 120, 100, 0).beatsPerBar).toBeNull();
+    expect(estimateMeterAndDownbeat(events, 120, 100, null).beatsPerBar).toBeNull();
+  });
+
+  it('maps the first downbeat phase to the full song timeline', () => {
+    expect(absoluteBarPhaseSeconds(16.25, 0.1, 120, 4)).toBeCloseTo(0.35, 6);
+    expect(absoluteBarPhaseSeconds(16.9, 0.1, 120, 4)).toBeCloseTo(1.0, 6);
+    expect(absoluteBarPhaseSeconds(0, null, 120, 4)).toBeNull();
   });
 });
