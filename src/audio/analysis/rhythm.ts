@@ -19,6 +19,16 @@ export interface RhythmReport {
   offBeatRatio?: number;
   /** Beat-grid phase in seconds, measured from the start of this analysed buffer. */
   beatPhaseSeconds?: number | null;
+  /** Estimated number of quarter-note beats in a repeating bar; null when ambiguous. */
+  beatsPerBar?: number | null;
+  /** Downbeat location as a zero-based beat offset from the detected beat-grid phase. */
+  downbeatOffsetBeats?: number | null;
+  /** Phase of the next bar downbeat within the repeating bar period, in seconds. */
+  barPhaseSeconds?: number | null;
+  /** Confidence that the accent pattern repeats at the estimated bar length. */
+  meterConfidence?: number;
+  /** Confidence that one beat position is a distinct downbeat. */
+  downbeatConfidence?: number;
   /** Transient events per second after collapsing closely spaced FFT peaks. */
   groupedOnsetDensity?: number;
   onsetDensity: number;
@@ -66,6 +76,11 @@ export function analyzeRhythm(
       beatGridConfidence: 0,
       offBeatRatio: 0,
       beatPhaseSeconds: null,
+      beatsPerBar: null,
+      downbeatOffsetBeats: null,
+      barPhaseSeconds: null,
+      meterConfidence: 0,
+      downbeatConfidence: 0,
       groupedOnsetDensity: 0,
       onsetDensity: 0,
       punchScore: 0,
@@ -167,6 +182,7 @@ export function analyzeRhythm(
   );
   const { tempoBpm, confidence } = tempo;
   const grid = scoreBeatGrid(onsetEvents, tempoBpm, frameRate);
+  const meter = estimateMeterAndDownbeat(onsetEvents, tempoBpm, frameRate, grid.phaseFrames);
   options.onProgress?.('Scoring attacks', 0.83);
 
   const segments = options.includeSections === false
@@ -187,6 +203,11 @@ export function analyzeRhythm(
     beatGridConfidence: grid.confidence,
     offBeatRatio: grid.offBeatRatio,
     beatPhaseSeconds: grid.phaseFrames === null ? null : grid.phaseFrames / frameRate,
+    beatsPerBar: meter.beatsPerBar,
+    downbeatOffsetBeats: meter.downbeatOffsetBeats,
+    barPhaseSeconds: meter.barPhaseFrames === null ? null : meter.barPhaseFrames / frameRate,
+    meterConfidence: meter.meterConfidence,
+    downbeatConfidence: meter.downbeatConfidence,
     groupedOnsetDensity,
     onsetDensity,
     punchScore: clamp(attackSharpness * 0.7 + clamp(onsetDensity / 3, 0, 1) * 0.3, 0, 1),
@@ -258,6 +279,170 @@ export function adaptiveOnsetEnvelope(
  * Convert a section-local beat phase into a song-relative phase. A beat phase
  * is periodic, so the result is wrapped into the current beat interval.
  */
+
+
+export interface MeterDownbeatEstimate {
+  beatsPerBar: number | null;
+  downbeatOffsetBeats: number | null;
+  barPhaseFrames: number | null;
+  meterConfidence: number;
+  downbeatConfidence: number;
+}
+
+/**
+ * Infer a repeating beat-group size from accent recurrence, then identify a
+ * distinct downbeat within that group. This is intentionally conservative:
+ * uniform beats or ambiguous accent rotations return null rather than an
+ * invented 4/4 label.
+ */
+export function estimateMeterAndDownbeat(
+  events: OnsetEvent[],
+  tempoBpm: number,
+  frameRate: number,
+  phaseFrames: number | null,
+): MeterDownbeatEstimate {
+  const empty: MeterDownbeatEstimate = {
+    beatsPerBar: null,
+    downbeatOffsetBeats: null,
+    barPhaseFrames: null,
+    meterConfidence: 0,
+    downbeatConfidence: 0,
+  };
+  if (
+    events.length < 12 ||
+    !(tempoBpm > 0) ||
+    !(frameRate > 0) ||
+    phaseFrames === null ||
+    !Number.isFinite(phaseFrames)
+  ) return empty;
+
+  const periodFrames = (60 * frameRate) / tempoBpm;
+  if (!Number.isFinite(periodFrames) || periodFrames < 2) return empty;
+
+  const beatStrength = new Map<number, number>();
+  let minBeat = Number.POSITIVE_INFINITY;
+  let maxBeat = Number.NEGATIVE_INFINITY;
+  const tolerance = periodFrames * 0.22;
+  for (const event of events) {
+    const beatIndex = Math.round((event.frame - phaseFrames) / periodFrames);
+    const beatFrame = phaseFrames + beatIndex * periodFrames;
+    const distance = Math.abs(event.frame - beatFrame);
+    if (distance > tolerance) continue;
+    const weight = Math.max(0, event.strength) * (1 - distance / tolerance);
+    beatStrength.set(beatIndex, (beatStrength.get(beatIndex) ?? 0) + weight);
+    minBeat = Math.min(minBeat, beatIndex);
+    maxBeat = Math.max(maxBeat, beatIndex);
+  }
+  if (!Number.isFinite(minBeat) || maxBeat - minBeat + 1 < 9) return empty;
+
+  const strengths = new Array<number>(maxBeat - minBeat + 1).fill(0);
+  for (const [beatIndex, strength] of beatStrength) strengths[beatIndex - minBeat] = strength;
+
+  const candidates = [3, 4, 5, 6, 7]
+    .filter((beats) => strengths.length >= beats * 3)
+    .map((beats) => ({ beats, score: periodicBeatCorrelation(strengths, beats) }))
+    .filter((item): item is { beats: number; score: number } => item.score !== null)
+    .sort((a, b) => b.score - a.score);
+
+  if (!candidates.length) return empty;
+  const best = candidates[0];
+  const secondScore = candidates[1]?.score ?? 0;
+  const margin = best.score - secondScore;
+  const meterConfidence = clamp(
+    (best.score - 0.25) * 1.25,
+    0,
+    1,
+  ) * clamp(margin * 2.2, 0, 1);
+  if (best.score < 0.45 || margin < 0.08 || meterConfidence < 0.25) {
+    return { ...empty, meterConfidence };
+  }
+
+  const slotStrength = new Array<number>(best.beats).fill(0);
+  const slotCount = new Array<number>(best.beats).fill(0);
+  for (let beatIndex = minBeat; beatIndex <= maxBeat; beatIndex++) {
+    const slot = positiveModulo(beatIndex, best.beats);
+    slotStrength[slot] += beatStrength.get(beatIndex) ?? 0;
+    slotCount[slot]++;
+  }
+  const slotMeans = slotStrength.map((value, index) => value / Math.max(1, slotCount[index]));
+  const rankedSlots = slotMeans
+    .map((strength, index) => ({ strength, index }))
+    .sort((a, b) => b.strength - a.strength);
+  const strongest = rankedSlots[0];
+  const nextStrongest = rankedSlots[1]?.strength ?? 0;
+  const contrast = strongest.strength > 1e-12
+    ? (strongest.strength - nextStrongest) / strongest.strength
+    : 0;
+  const downbeatConfidence = meterConfidence * clamp(contrast * 2.2, 0, 1);
+  const downbeatOffsetBeats = downbeatConfidence >= 0.35 ? strongest.index : null;
+  const barPhaseFrames = downbeatOffsetBeats === null
+    ? null
+    : positiveModulo(
+        phaseFrames + downbeatOffsetBeats * periodFrames,
+        best.beats * periodFrames,
+      );
+
+  return {
+    beatsPerBar: best.beats,
+    downbeatOffsetBeats,
+    barPhaseFrames,
+    meterConfidence,
+    downbeatConfidence,
+  };
+}
+
+function periodicBeatCorrelation(values: number[], lag: number): number | null {
+  const count = values.length - lag;
+  if (count < lag * 2) return null;
+  let meanA = 0;
+  let meanB = 0;
+  for (let i = 0; i < count; i++) {
+    meanA += values[i];
+    meanB += values[i + lag];
+  }
+  meanA /= count;
+  meanB /= count;
+
+  let covariance = 0;
+  let energyA = 0;
+  let energyB = 0;
+  for (let i = 0; i < count; i++) {
+    const a = values[i] - meanA;
+    const b = values[i + lag] - meanB;
+    covariance += a * b;
+    energyA += a * a;
+    energyB += b * b;
+  }
+  const denominator = Math.sqrt(energyA * energyB);
+  return denominator > 1e-12 ? covariance / denominator : null;
+}
+
+function positiveModulo(value: number, modulus: number): number {
+  return ((value % modulus) + modulus) % modulus;
+}
+
+/**
+ * Map a section-local downbeat phase onto the song timeline, wrapped within
+ * the section's inferred bar length.
+ */
+export function absoluteBarPhaseSeconds(
+  sectionStartSeconds: number,
+  localBarPhaseSeconds: number | null,
+  tempoBpm: number,
+  beatsPerBar: number | null,
+): number | null {
+  if (
+    !Number.isFinite(sectionStartSeconds) ||
+    localBarPhaseSeconds === null ||
+    !Number.isFinite(localBarPhaseSeconds) ||
+    !(tempoBpm > 0) ||
+    !Number.isFinite(tempoBpm) ||
+    !beatsPerBar ||
+    !Number.isFinite(beatsPerBar)
+  ) return null;
+  const barPeriod = (60 / tempoBpm) * beatsPerBar;
+  return positiveModulo(sectionStartSeconds + localBarPhaseSeconds, barPeriod);
+}
 
 export interface BeatSectionState {
   tempoBpm: number;
