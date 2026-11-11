@@ -5,24 +5,31 @@ import { formatTime } from '../audio/dsp/util';
 const FLOW = [
   {
     number: '01',
-    title: 'Bring in your song',
-    text: 'Upload the finished stereo mix you want to improve, or import separate stems into the Mixing Studio.',
-    action: 'Import target',
+    title: 'Import your song',
+    text: 'Bring in the stereo mix you want to improve, or import separate stems when you want to mix individual parts.',
+    action: 'Import song',
     destination: 'target' as const,
   },
   {
     number: '02',
-    title: 'Choose a sound reference',
-    text: 'Add a released track whose tonal balance, punch or stereo image you admire.',
+    title: 'Add a reference',
+    text: 'Choose a released track whose tonal balance, punch or stereo image you want to learn from.',
     action: 'Add reference',
     destination: 'reference' as const,
   },
   {
     number: '03',
-    title: 'Build an editable match',
-    text: 'Compare measured characteristics, generate a suggested chain and adjust every processor.',
-    action: 'Open matching',
+    title: 'Match and refine',
+    text: 'Review the measured differences, generate an editable processor chain, then refine it in Studio.',
+    action: 'Build your match',
     destination: 'match' as const,
+  },
+  {
+    number: '04',
+    title: 'Verify and export',
+    text: 'Check loudness and true peak in Mastering, then render your finished file in Export.',
+    action: 'Review master',
+    destination: 'mastering' as const,
   },
 ];
 
@@ -75,7 +82,8 @@ export default function Dashboard() {
   const hasReference = Boolean(project?.referenceAssetIds.length);
   const hasChain = Boolean(project?.master.processors.length);
   const duration = Math.max(0, ...(project?.tracks.flatMap((track) => track.clips.map((clip) => clip.start + clip.duration)) ?? []));
-  const completed = [hasTarget, hasReference, hasChain || Boolean(lastRenderStats), exports.length > 0].filter(Boolean).length;
+  const stepsDone = [hasTarget, hasReference, hasChain || Boolean(lastRenderStats), exports.length > 0];
+  const completed = stepsDone.filter(Boolean).length;
 
   const importTarget = () => picker.open(AUDIO_ACCEPT, true, (files) => void importFiles(files, 'target'));
   const importReference = () => picker.open(AUDIO_ACCEPT, true, (files) => void importFiles(files, 'reference'));
@@ -170,10 +178,16 @@ export default function Dashboard() {
             </HelpTip>
           </div>
         </div>
-        <div className="grid gap-3 lg:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           {FLOW.map((step, index) => {
-            const done = index === 0 ? hasTarget : index === 1 ? hasReference : hasChain;
-            const action = index === 0 ? importTarget : index === 1 ? importReference : () => go('reference');
+            const done = stepsDone[index];
+            const action = step.destination === 'target'
+              ? importTarget
+              : step.destination === 'reference'
+                ? importReference
+                : step.destination === 'match'
+                  ? () => go('reference')
+                  : () => go('mastering');
             return (
               <article key={step.number} className="group rounded-xl border border-ink-700 bg-gradient-to-br from-ink-800/80 to-ink-900/80 p-4 transition-colors hover:border-ink-500">
                 <div className="flex items-center justify-between">

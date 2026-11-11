@@ -69,6 +69,12 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         }
         break;
       }
+      case 'removeAssets': {
+        const removed = new Set((message.ids as string[]) ?? []);
+        this.assets = this.assets.filter((asset) => !removed.has(asset.id));
+        this.renderer.setAssets(this.assets);
+        break;
+      }
       case 'configure': {
         this.project = message.project as ProjectState;
         // Always pass the full asset set: configure() rebuilds the renderer, and

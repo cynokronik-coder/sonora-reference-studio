@@ -224,6 +224,7 @@ interface AppState {
 
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let engineTimer: ReturnType<typeof setTimeout> | null = null;
+let engineListenersRegistered = false;
 
 function schedulePersist(project: ProjectState): void {
   if (saveTimer) clearTimeout(saveTimer);
@@ -347,18 +348,21 @@ export const useApp = create<AppState>((set, get) => ({
     } catch (error) {
       set({ mode, storageError: describeStorageError(error) });
     }
-    realtimeHost.onPosition((position, playing) => {
-      set((state) => ({ transport: { ...state.transport, position, playing } }));
-    });
-    realtimeHost.onEnded(() => {
-      set((state) => ({ transport: { ...state.transport, playing: false, position: 0 } }));
-    });
-    realtimeHost.onMeters(() => {
-      // Meters are pulled by the UI at animation rate through the host's last
-      // message; the canvas components read from the exposed global below.
-      const meters = realtimeHost.lastMeters;
-      if (meters) latestMeters = meters;
-    });
+    if (!engineListenersRegistered) {
+      realtimeHost.onPosition((position, playing) => {
+        set((state) => ({ transport: { ...state.transport, position, playing } }));
+      });
+      realtimeHost.onEnded(() => {
+        set((state) => ({ transport: { ...state.transport, playing: false, position: 0 } }));
+      });
+      realtimeHost.onMeters(() => {
+        // Meters are pulled by the UI at animation rate through the host's last
+        // message; the canvas components read from the exposed global below.
+        const meters = realtimeHost.lastMeters;
+        if (meters) latestMeters = meters;
+      });
+      engineListenersRegistered = true;
+    }
   },
 
   setScreen: (screen) => set({ screen }),
@@ -559,7 +563,12 @@ export const useApp = create<AppState>((set, get) => ({
 
       const assets = [...get().assets, ...createdAssets];
       const buffers = { ...get().assetBuffers, ...newBuffers };
-      set({ assets, assetBuffers: buffers });
+      set({
+        assets,
+        assetBuffers: buffers,
+        matchPlan: null,
+        matchPreview: null,
+      });
 
       get().mutate((next) => {
         for (const meta of createdAssets) {
@@ -612,10 +621,11 @@ export const useApp = create<AppState>((set, get) => ({
       return null;
     }
     set({ busy: { kind: 'analyze', label: 'Measuring audio', progress: 0 } });
+    let worker: Worker | null = null;
     try {
-      const worker = new Worker(new URL('../audio/analysis/analysis.worker.ts', import.meta.url), { type: 'module' });
+      worker = new Worker(new URL('../audio/analysis/analysis.worker.ts', import.meta.url), { type: 'module' });
       const report = await new Promise<AnalysisReport>((resolve, reject) => {
-        worker.onmessage = (event: MessageEvent) => {
+        worker!.onmessage = (event: MessageEvent) => {
           const message = event.data;
           if (message.type === 'progress') {
             set({
@@ -631,15 +641,14 @@ export const useApp = create<AppState>((set, get) => ({
             reject(new Error(message.message as string));
           }
         };
-        worker.onerror = () => reject(new Error('Analysis worker failed'));
+        worker!.onerror = () => reject(new Error('Analysis worker failed'));
         const L = buffer.L.slice();
         const R = buffer.R.slice();
-        worker.postMessage(
+        worker!.postMessage(
           { type: 'analyze', assetId, L, R, sampleRate: buffer.sampleRate, includeSections: true },
           [L.buffer, R.buffer],
         );
       });
-      worker.terminate();
       const analyses = { ...get().analyses, [assetId]: report };
       await db.saveAnalysis(assetId, report);
       const assets = get().assets.map((a) =>
@@ -650,9 +659,10 @@ export const useApp = create<AppState>((set, get) => ({
     } catch (error) {
       set({ busy: null, toast: error instanceof Error ? `Analysis failed: ${error.message}` : 'Analysis failed' });
       return null;
+    } finally {
+      worker?.terminate();
     }
   },
-
   analyzeProjectAssets: async () => {
     const ids = allAssetIds(get().project ?? emptyProject());
     for (const id of ids) {
@@ -1363,18 +1373,6 @@ export const useApp = create<AppState>((set, get) => ({
       let L = result.L;
       let R = result.R;
       let sampleRate = result.sampleRate;
-      if (settings.normalize) {
-        let peak = 0;
-        for (let i = 0; i < L.length; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
-        const targetPeak = Math.pow(10, project.targetTruePeak / 20);
-        if (peak > 0) {
-          const gain = targetPeak / peak;
-          for (let i = 0; i < L.length; i++) {
-            L[i] *= gain;
-            R[i] *= gain;
-          }
-        }
-      }
       if (settings.sampleRate !== sampleRate) {
         set({ busy: { kind: 'render', label: `Resampling to ${settings.sampleRate} Hz`, progress: 0.92 } });
         const resampled = await resampleToRate(L, R, sampleRate, settings.sampleRate);
@@ -1382,6 +1380,34 @@ export const useApp = create<AppState>((set, get) => ({
         R = resampled.R;
         sampleRate = settings.sampleRate;
       }
+
+      // Measure after sample-rate conversion so normalization targets the file that will be delivered.
+      let measured = analyzeLoudness(L, R, sampleRate);
+      if (
+        settings.normalize &&
+        Number.isFinite(project.targetTruePeak) &&
+        Number.isFinite(measured.truePeakDb) &&
+        measured.samplePeakDb > -90
+      ) {
+        const gainDb = project.targetTruePeak - measured.truePeakDb;
+        const gain = Math.pow(10, gainDb / 20);
+        if (Number.isFinite(gain) && gain > 0) {
+          for (let i = 0; i < L.length; i++) {
+            L[i] *= gain;
+            R[i] *= gain;
+          }
+          measured = analyzeLoudness(L, R, sampleRate);
+        }
+      }
+      const exportStats: RenderStats = {
+        ...result.stats,
+        lufs: measured.integratedLufs,
+        truePeakDb: measured.truePeakDb,
+        samplePeakDb: measured.samplePeakDb,
+        lra: measured.lra,
+        crestDb: measured.crestDb,
+        duration: L.length / sampleRate,
+      };
       const filename = sanitizeFilename(settings.filename || project.name);
       let blob: Blob;
       if (settings.format === 'wav') {
@@ -1413,25 +1439,25 @@ export const useApp = create<AppState>((set, get) => ({
         sampleRate,
         bitDepth: settings.format === 'mp3' ? 16 : settings.bitDepth,
         duration: L.length / sampleRate,
-        lufs: result.stats.lufs,
-        truePeak: result.stats.truePeakDb,
+        lufs: exportStats.lufs,
+        truePeak: exportStats.truePeakDb,
         sizeBytes: blob.size,
         settings: { ...settings },
       };
       await db.saveExport(record, blob);
       set((state) => ({
         exports: [record, ...state.exports],
-        lastRenderStats: result.stats,
+        lastRenderStats: exportStats,
         busy: null,
-        toast: `Exported ${record.name} · ${result.stats.lufs.toFixed(1)} LUFS · ${result.stats.truePeakDb.toFixed(1)} dBTP.`,
+        toast: `Exported ${record.name} · ${exportStats.lufs.toFixed(1)} LUFS · ${exportStats.truePeakDb.toFixed(1)} dBTP.`,
       }));
       if (settings.mode === 'master') {
         const masterVersion = {
           id: uid('master'),
           name: filename,
           createdAt: Date.now(),
-          lufs: result.stats.lufs,
-          truePeak: result.stats.truePeakDb,
+          lufs: exportStats.lufs,
+          truePeak: exportStats.truePeakDb,
           processors: structuredClone(project.master.processors),
         };
         get().mutate((p) => {
