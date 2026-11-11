@@ -28,6 +28,14 @@
   --sonora-text-secondary: #B9B7C9;
   --sonora-text-muted: #85849C;
 
+  --sonora-duration-fast: 120ms;
+  --sonora-duration-normal: 180ms;
+  --sonora-duration-smooth: 240ms;
+  --sonora-duration-panel: 280ms;
+  --sonora-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --sonora-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --sonora-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
   --sonora-radius-panel: 22px;
   --sonora-radius-card: 17px;
   --sonora-radius-control: 13px;
@@ -238,12 +246,47 @@ input[type='range']:focus-visible::-moz-range-thumb {
 @keyframes sonora-flyout-in {
   from {
     opacity: 0;
-    transform: translateY(5px) scale(0.99);
+    transform: translateY(5px) scale(0.97);
   }
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
   }
+}
+
+.sonora-flyout-motion {
+  animation: sonora-flyout-in 180ms var(--sonora-ease-out) both;
+}
+
+.sonora-tour-motion {
+  animation: sonora-tour-pop 180ms var(--sonora-ease-out) both;
+}
+
+.sonora-meter-fill {
+  transform-origin: bottom;
+  transition: transform 75ms linear;
+}
+
+.sonora-meter-fill--top {
+  transform-origin: top;
+}
+
+@keyframes sonora-workspace-enter {
+  from { opacity: 0.55; transform: translate3d(7px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+.sonora-workspace-motion {
+  animation: sonora-workspace-enter 190ms var(--sonora-ease-out) both;
+}
+
+.sonora-button-motion {
+  transition: color 150ms var(--sonora-ease),
+    background-color 150ms var(--sonora-ease),
+    border-color 150ms var(--sonora-ease),
+    box-shadow 150ms var(--sonora-ease),
+    filter 150ms var(--sonora-ease),
+    transform 160ms var(--sonora-ease-out);
 }
 
 @keyframes sonora-tour-pop {
@@ -273,6 +316,11 @@ textarea {
   min-height: 40px;
 }
 
+@keyframes sonora-reduced-motion-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -281,6 +329,15 @@ textarea {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+
+  .sonora-flyout-surface,
+  .sonora-tour-surface {
+    animation: sonora-reduced-motion-fade 120ms var(--sonora-ease-out) both !important;
+  }
+
+  .sonora-button-motion:active {
+    transform: none;
   }
 }
 

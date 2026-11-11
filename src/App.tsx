@@ -261,8 +261,8 @@ export default function App() {
       <CommandPalette open={commandPaletteOpen} hasProject={Boolean(project)} onClose={() => setCommandPaletteOpen(false)} onNavigate={navigateToScreen} />
 
       {assistantFullScreen && (
-        <div className="fixed inset-0 z-[100] flex bg-[#070710]/95 p-3 backdrop-blur-xl sm:p-5 lg:p-7">
-          <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-[30px] border border-white/[.12] bg-[#0D0D1B] shadow-[0_28px_100px_rgba(0,0,0,.68)]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-[#070710]/95 p-3 backdrop-blur-xl sm:p-5 lg:p-7">
+          <div className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/[.12] bg-[#0D0D1B] shadow-[0_28px_100px_rgba(0,0,0,.68)] sm:rounded-[30px]">
             <AssistantPanel onClose={() => setAssistantFullScreen(false)} />
           </div>
         </div>

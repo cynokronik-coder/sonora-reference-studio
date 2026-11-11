@@ -9,14 +9,17 @@ import { LevelMeter, useMeters } from '../ui/viz';
 import { findTrack } from '../audio/model/project';
 import type { TrackKind } from '../audio/model/types';
 import { Timeline } from '../ui/Timeline';
+import { StudioTimeline } from '../ui/StudioTimeline';
+import Mastering from './Mastering';
 
 type Focus = { scope: 'master' | 'track' | 'bus'; id: string | null };
-type Workspace = 'arrangement' | 'mixer' | 'processing';
+type Workspace = 'arrangement' | 'mixer' | 'processing' | 'mastering';
 
 const TRACK_KINDS: TrackKind[] = ['audio', 'vocal', 'instrument', 'drums', 'bass', 'instrumental', 'stem'];
 
 export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, onOpenCommandPalette }: { onStartTour?: () => void; onExpandAssistant?: () => void; onOpenAccount?: () => void; onOpenCommandPalette?: () => void } = {}) {
   const project = useApp((s) => s.project);
+  const busy = useApp((s) => s.busy);
   const { selectedTrackId, selectTrack, importFiles, updateTrack, removeTrack, addTrack } = useApp();
   const picker = useFilePicker();
   const [focus, setFocus] = useState<Focus>({ scope: 'master', id: null });
@@ -84,17 +87,18 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
         </div>
 
         <nav aria-label="Studio navigation" className="no-scrollbar flex min-w-0 items-center justify-center gap-0.5 overflow-x-auto px-1">
-          <button type="button" onClick={() => setWorkspace('arrangement')} aria-current={workspace === 'arrangement' ? 'page' : undefined} className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium transition-all sm:px-5 sm:text-sm ${workspace === 'arrangement' ? 'bg-[#8957FF]/15 text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
-            <Icon name="waveform" size={15} className={workspace === 'arrangement' ? 'text-[#C4A2FF]' : 'text-ink-500'} /> Studio
-            {workspace === 'arrangement' && <span className="absolute inset-x-4 -bottom-[1px] h-[2px] rounded-full bg-gradient-to-r from-[#8957FF] to-[#C4A2FF]" />}
+          <button type="button" onClick={() => setWorkspace('arrangement')} aria-current={workspace !== 'mastering' ? 'page' : undefined} className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium transition-colors sm:px-5 sm:text-sm ${workspace !== 'mastering' ? 'bg-[#8957FF]/15 text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
+            <Icon name="waveform" size={15} className={workspace !== 'mastering' ? 'text-[#C4A2FF]' : 'text-ink-500'} /> Studio
+            {workspace !== 'mastering' && <span className="absolute inset-x-4 -bottom-[1px] h-[2px] rounded-full bg-gradient-to-r from-[#8957FF] to-[#C4A2FF]" />}
           </button>
-          <button type="button" onClick={() => useApp.getState().setScreen('mastering')} className="flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-[11px] font-medium text-ink-400 transition-colors hover:bg-white/[.04] hover:text-white sm:px-4 sm:text-xs">
-            <Icon name="equalizer" size={15} className="text-ink-500" /> Mastering
+          <button type="button" onClick={() => setWorkspace('mastering')} aria-current={workspace === 'mastering' ? 'page' : undefined} className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium transition-colors sm:px-5 sm:text-sm ${workspace === 'mastering' ? 'bg-[#8957FF]/15 text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
+            <Icon name="equalizer" size={15} className={workspace === 'mastering' ? 'text-[#C4A2FF]' : 'text-ink-500'} /> Mastering
+            {workspace === 'mastering' && <span className="absolute inset-x-4 -bottom-[1px] h-[2px] rounded-full bg-gradient-to-r from-[#8957FF] to-[#C4A2FF]" />}
           </button>
-          <button type="button" onClick={() => useApp.getState().setScreen('reference')} className="flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-[11px] font-medium text-ink-400 transition-colors hover:bg-white/[.04] hover:text-white sm:px-4 sm:text-xs">
+          <button type="button" onClick={() => useApp.getState().setScreen('reference')} className="focus-ring flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium text-ink-400 transition-colors hover:bg-white/[.04] hover:text-white sm:px-5 sm:text-sm">
             <Icon name="audio-lines" size={15} className="text-ink-500" /> Reference
           </button>
-          <button type="button" onClick={() => setAssistantOpen((open) => !open)} aria-pressed={assistantOpen} className={`flex h-9 shrink-0 items-center gap-2 rounded-xl px-3 text-[11px] font-medium transition-colors sm:px-4 sm:text-xs ${assistantOpen ? 'bg-[#8957FF]/15 text-[#C4A2FF]' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
+          <button type="button" onClick={() => setAssistantOpen((open) => !open)} aria-pressed={assistantOpen} className={`focus-ring flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-medium transition-colors sm:px-5 sm:text-sm ${assistantOpen ? 'bg-[#8957FF]/15 text-[#C4A2FF]' : 'text-ink-400 hover:bg-white/[.04] hover:text-white'}`}>
             <Icon name="sparkles" size={15} /> AI Assistant
           </button>
         </nav>
@@ -120,6 +124,7 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
       </header>
 
       <div data-tour="studio-transport" className="shrink-0"><TransportBar /></div>
+      <StudioTimeline />
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <aside data-tour="studio-tracks" className="hidden w-[220px] shrink-0 flex-col border-r border-white/[.07] bg-[#0D0D1B]/92 lg:flex xl:w-[240px]">
@@ -210,64 +215,84 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
 
         <section className="relative z-0 flex min-w-0 flex-1 flex-col overflow-hidden">
           <div className="flex h-[52px] shrink-0 items-center justify-between gap-3 border-b border-white/[.07] bg-[#11111F] px-5">
-            <div className="flex items-center gap-1 rounded-xl border border-white/[.07] bg-black/20 p-1">
-              {(['arrangement', 'mixer', 'processing'] as Workspace[]).map((tab) => (
-                <button key={tab} type="button" onClick={() => setWorkspace(tab)} className={`rounded-lg px-3 py-1.5 text-[10px] font-medium capitalize transition-all ${workspace === tab ? 'bg-[#8957FF]/20 text-[#C4A2FF] shadow-violet-soft' : 'text-ink-500 hover:text-ink-200'}`}>
-                  {tab === 'arrangement' ? 'Arrangement' : tab === 'mixer' ? 'Mixer' : 'Processing'}
-                </button>
-              ))}
-            </div>
-            <span className="hidden w-[240px] shrink-0 whitespace-nowrap text-right text-xs text-ink-500 sm:inline">{workspace === 'arrangement' ? 'Arrange and edit your tracks' : workspace === 'mixer' ? 'Balance channels and buses' : 'Shape your sound'}</span>
+            {workspace === 'mastering' ? (
+              <>
+                <div className="flex items-center gap-2 text-sm font-semibold text-white"><Icon name="equalizer" size={16} className="text-[#C4A2FF]" /> Mastering workspace</div>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <Badge tone="neutral">{project.master.processors.length} processors</Badge>
+                  <Button size="sm" variant="primary" disabled={busy?.kind === 'render'} onClick={() => void useApp.getState().verifyMaster()}>
+                    <Icon name="sparkles" size={13} /> {busy?.kind === 'render' ? 'Mastering…' : 'Start mastering'}
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => useApp.getState().setScreen('export')}>
+                    <Icon name="download" size={13} /> Export
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-1 rounded-xl border border-white/[.07] bg-black/20 p-1">
+                  {(['arrangement', 'mixer', 'processing'] as Workspace[]).map((tab) => (
+                    <button key={tab} type="button" onClick={() => setWorkspace(tab)} aria-pressed={workspace === tab} className={`rounded-lg px-3 py-1.5 text-[10px] font-medium capitalize transition-colors ${workspace === tab ? 'bg-[#8957FF]/20 text-[#C4A2FF] shadow-violet-soft' : 'text-ink-500 hover:text-ink-200'}`}>
+                      {tab === 'arrangement' ? 'Arrangement' : tab === 'mixer' ? 'Mixer' : 'Processing'}
+                    </button>
+                  ))}
+                </div>
+                <span className="hidden w-[240px] shrink-0 whitespace-nowrap text-right text-xs text-ink-500 sm:inline">{workspace === 'arrangement' ? 'Arrange and edit your tracks' : workspace === 'mixer' ? 'Balance channels and buses' : 'Shape your sound'}</span>
+              </>
+            )}
           </div>
 
-          <div data-tour="studio-timeline" className="min-h-0 flex-1 overflow-hidden bg-[#090914]">
-            {workspace === 'arrangement' && (
-              <Timeline onSelectTrack={chooseTrack} showTrackHeaders={false} externalScrollTop={trackScrollTop} onVerticalScroll={setTrackScrollTop} />
-            )}
-            {workspace === 'mixer' && (
-              <div className="flex h-full min-h-0 flex-col overflow-hidden">
-                <div className="flex min-h-0 flex-1 overflow-auto">
-                  <Mixer focus={effectiveFocus} onFocus={(scope, id) => setFocus({ scope, id })} />
+          <div data-tour="studio-timeline" className="studio-fixed-frame min-h-0 flex-1 overflow-hidden bg-[#090914]">
+            <div key={workspace + (workspace === 'processing' ? processingCategory : '')} className="studio-workspace-motion flex h-full min-h-0 flex-col">
+              {workspace === 'arrangement' && (
+                <Timeline onSelectTrack={chooseTrack} showTrackHeaders={false} externalScrollTop={trackScrollTop} onVerticalScroll={setTrackScrollTop} />
+              )}
+              {workspace === 'mixer' && (
+                <div className="flex h-full min-h-0 flex-col overflow-hidden">
+                  <div className="flex min-h-0 flex-1 overflow-auto">
+                    <Mixer focus={effectiveFocus} onFocus={(scope, id) => setFocus({ scope, id })} />
+                  </div>
                 </div>
-              </div>
-            )}
-            {workspace === 'processing' && (
-              <div className="flex h-full min-h-0 flex-col overflow-hidden">
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <div className="flex shrink-0 items-center justify-between border-b border-white/[.06] px-4 py-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-semibold text-ink-100">{processingCategory === 'eq' ? 'Equalizer' : processingCategory === 'dynamics' ? 'Dynamics' : 'Effects'}</p>
-                      <p className="mt-0.5 truncate text-[10px] text-ink-500">{focusLabel} · {processors.filter((processor) => processor.enabled).length} active / {processors.length} total</p>
+              )}
+              {workspace === 'processing' && (
+                <div className="flex h-full min-h-0 flex-col overflow-hidden">
+                  <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                    <div className="flex shrink-0 items-center justify-between border-b border-white/[.06] px-4 py-2">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-ink-100">{processingCategory === 'eq' ? 'Equalizer' : processingCategory === 'dynamics' ? 'Dynamics' : 'Effects'}</p>
+                        <p className="mt-0.5 truncate text-[10px] text-ink-500">{focusLabel} · {processors.filter((processor) => processor.enabled).length} active / {processors.length} total</p>
+                      </div>
+                      <label className="flex items-center gap-2 text-[10px] text-ink-500">Channel
+                        <select aria-label="Choose channel processing chain" value={focusValue} onChange={(event) => selectFocusValue(event.target.value)} className="max-w-[180px] rounded-control border border-white/[.09] bg-[#171727] px-2 py-1.5 text-xs text-ink-100">
+                          <option value="master">Master</option>
+                          {project.tracks.map((track) => <option key={track.id} value={'track:' + track.id}>{track.name}</option>)}
+                          {project.buses.map((bus) => <option key={bus.id} value={'bus:' + bus.id}>{bus.name}</option>)}
+                        </select>
+                      </label>
                     </div>
-                    <label className="flex items-center gap-2 text-[10px] text-ink-500">Channel
-                      <select aria-label="Choose channel processing chain" value={focusValue} onChange={(event) => selectFocusValue(event.target.value)} className="max-w-[180px] rounded-control border border-white/[.09] bg-[#171727] px-2 py-1.5 text-xs text-ink-100">
-                        <option value="master">Master</option>
-                        {project.tracks.map((track) => <option key={track.id} value={'track:' + track.id}>{track.name}</option>)}
-                        {project.buses.map((bus) => <option key={bus.id} value={'bus:' + bus.id}>{bus.name}</option>)}
-                      </select>
-                    </label>
-                  </div>
-                  <div className="min-h-0 flex-1 overflow-auto">
-                    <Rack
-                      scope={effectiveFocus.scope}
-                      trackId={effectiveFocus.id}
-                      processors={processors}
-                      selectedId={selectedProcessorId}
-                      onSelect={(id) => useApp.getState().selectProcessor(id)}
-                      meters={meters.gr[effectiveFocus.scope === 'master' ? 'master' : effectiveFocus.id ?? ''] ?? {}}
-                      emptyHint={effectiveFocus.scope === 'master' ? 'Add mastering processors or generate a chain from Reference Match.' : 'Add processors to this channel or load a preset.'}
-                      filterCategory={processingCategory}
-                    />
+                    <div className="min-h-0 flex-1 overflow-auto">
+                      <Rack
+                        scope={effectiveFocus.scope}
+                        trackId={effectiveFocus.id}
+                        processors={processors}
+                        selectedId={selectedProcessorId}
+                        onSelect={(id) => useApp.getState().selectProcessor(id)}
+                        meters={meters.gr[effectiveFocus.scope === 'master' ? 'master' : effectiveFocus.id ?? ''] ?? {}}
+                        emptyHint={effectiveFocus.scope === 'master' ? 'Add mastering processors or generate a chain from Reference Match.' : 'Add processors to this channel or load a preset.'}
+                        filterCategory={processingCategory}
+                      />
+                    </div>
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+              {workspace === 'mastering' && <Mastering embedded />}
+            </div>
           </div>
 
           <div data-tour="studio-processing" className="flex h-[92px] shrink-0 items-center justify-center border-t border-white/[.07] bg-[#0D0D1B]/95 px-3 sm:h-[104px] sm:px-6">
             <div className="grid w-full max-w-[760px] grid-cols-5 gap-3">
               {[
-                { id: 'mix', label: 'Mix', icon: 'sliders' as const, action: () => setWorkspace('arrangement'), active: workspace !== 'processing' },
+                { id: 'mix', label: 'Mix', icon: 'sliders' as const, action: () => setWorkspace('arrangement'), active: workspace === 'arrangement' || workspace === 'mixer' },
                 { id: 'effects', label: 'Effects', icon: 'sparkles' as const, action: () => { setWorkspace('processing'); setProcessingCategory('effects'); }, active: workspace === 'processing' && processingCategory === 'effects' },
                 { id: 'eq', label: 'EQ', icon: 'equalizer' as const, action: () => { setWorkspace('processing'); setProcessingCategory('eq'); }, active: workspace === 'processing' && processingCategory === 'eq' },
                 { id: 'dynamics', label: 'Dynamics', icon: 'activity' as const, action: () => { setWorkspace('processing'); setProcessingCategory('dynamics'); }, active: workspace === 'processing' && processingCategory === 'dynamics' },
@@ -287,10 +312,10 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
             <aside data-tour="studio-assistant" className="absolute inset-y-0 right-0 z-40 hidden w-[420px] max-w-[44%] border-l border-white/[.10] bg-[#0D0D1B] shadow-floating xl:flex 2xl:w-[480px]">
               <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
             </aside>
-            <div className="fixed inset-0 z-[70] bg-[#05050c]/65 backdrop-blur-sm xl:hidden" onClick={() => setAssistantOpen(false)}>
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[#05050c]/65 p-3 backdrop-blur-sm sm:p-5 xl:hidden" onClick={() => setAssistantOpen(false)}>
               <aside
                 data-tour="studio-assistant"
-                className="absolute inset-y-0 right-0 flex w-[min(520px,96vw)] flex-col border-l border-white/[.10] bg-[#0D0D1B] shadow-floating"
+                className="flex h-full max-h-full w-full max-w-[640px] min-w-0 flex-col overflow-hidden rounded-2xl border border-white/[.10] bg-[#0D0D1B] shadow-floating"
                 onClick={(event) => event.stopPropagation()}
               >
                 <div className="min-h-0 flex-1"><AssistantPanel onClose={() => setAssistantOpen(false)} onExpand={() => { setAssistantOpen(false); onExpandAssistant?.(); }} /></div>
