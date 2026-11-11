@@ -7,6 +7,7 @@ import {
 import { type StereoReport } from './stereo';
 import { analyzeSpectrumAndStereo } from './spectral-analysis';
 import {
+  absoluteBarPhaseSeconds,
   absoluteBeatPhaseSeconds,
   analyzeRhythm,
   compareBeatSectionTransition,
@@ -67,12 +68,17 @@ export interface SectionReport {
   tempoChangeBpm: number | null;
   beatPhaseShiftMs: number | null;
   beatContinuity: number | null;
+  beatsPerBar: number | null;
+  downbeatOffsetBeats: number | null;
+  barPhaseSeconds: number | null;
+  meterConfidence: number | null;
+  downbeatConfidence: number | null;
 }
 
 export interface AnalysisReport {
   version: 1;
   /** Version of the expanded per-section measurement payload. Older stored reports require re-analysis. */
-  sectionMetricsVersion?: 4;
+  sectionMetricsVersion?: 5;
   createdAt: number;
   sampleRate: number;
   channels: number;
@@ -212,6 +218,15 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
         ? { tempoBpm: sectionTempo, beatPhaseSeconds: sectionBeatPhase }
         : null;
       const beatTransition = compareBeatSectionTransition(previousBeatState, currentBeatState);
+      const sectionBeatsPerBar = hasSectionBeatEvidence ? sectionRhythm?.beatsPerBar ?? null : null;
+      const sectionBarPhase = hasSectionBeatEvidence && sectionTempo && sectionBeatsPerBar
+        ? absoluteBarPhaseSeconds(
+            boundary.start,
+            sectionRhythm?.barPhaseSeconds ?? null,
+            sectionTempo,
+            sectionBeatsPerBar,
+          )
+        : null;
       sections.push({
         index,
         label: labels[index] ?? 'section',
@@ -258,6 +273,11 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
         tempoChangeBpm: beatTransition.tempoChangeBpm,
         beatPhaseShiftMs: beatTransition.beatPhaseShiftMs,
         beatContinuity: beatTransition.beatContinuity,
+        beatsPerBar: sectionBeatsPerBar,
+        downbeatOffsetBeats: hasSectionBeatEvidence ? sectionRhythm?.downbeatOffsetBeats ?? null : null,
+        barPhaseSeconds: sectionBarPhase,
+        meterConfidence: hasSectionBeatEvidence ? sectionRhythm?.meterConfidence ?? 0 : null,
+        downbeatConfidence: hasSectionBeatEvidence ? sectionRhythm?.downbeatConfidence ?? 0 : null,
       });
       previousBeatState = currentBeatState;
       sectionProgress(1);
@@ -312,6 +332,11 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
       tempoChangeBpm: null,
       beatPhaseShiftMs: null,
       beatContinuity: null,
+      beatsPerBar: rhythm.beatsPerBar ?? null,
+      downbeatOffsetBeats: rhythm.downbeatOffsetBeats ?? null,
+      barPhaseSeconds: duration >= 8 ? rhythm.barPhaseSeconds ?? null : null,
+      meterConfidence: duration >= 8 ? rhythm.meterConfidence ?? 0 : null,
+      downbeatConfidence: duration >= 8 ? rhythm.downbeatConfidence ?? 0 : null,
     });
   }
 
@@ -324,7 +349,7 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
   progress('Done', 1);
   return {
     version: 1,
-    sectionMetricsVersion: 4,
+    sectionMetricsVersion: 5,
     createdAt: Date.now(),
     sampleRate,
     channels: 2,
