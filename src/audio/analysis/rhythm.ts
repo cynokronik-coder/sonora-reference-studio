@@ -346,7 +346,13 @@ export function estimateMeterAndDownbeat(
 
   if (!candidates.length) return empty;
   const best = candidates[0];
-  const secondScore = candidates[1]?.score ?? 0;
+  // A rhythm that repeats every three beats also repeats every six beats.
+  // Ignore longer integer multiples when measuring meter ambiguity so the
+  // estimator prefers the shortest bar grouping supported by the accents.
+  const nonHarmonicAlternatives = candidates.filter(
+    (candidate) => candidate.beats % best.beats !== 0,
+  );
+  const secondScore = nonHarmonicAlternatives[0]?.score ?? 0;
   const margin = best.score - secondScore;
   const meterConfidence = clamp(
     (best.score - 0.25) * 1.25,
