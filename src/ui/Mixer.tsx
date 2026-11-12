@@ -653,4 +653,3 @@ export function AssistantPanel({ onClose, onExpand, draggable = false }: { onClo
     </div>
   );
 }
-
