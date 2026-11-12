@@ -40,8 +40,11 @@ resonance report.
 - External sidechain key can be routed from another track on track or bus compressor instances. The key is tapped from the source track's raw clip signal before its own processing and fader; disconnecting it returns the detector to the compressed signal.
 
 ### Multiband Compressor
-Three bands from LR4 crossovers at adjustable splits. Each band runs an independent compressor with its own threshold,
-ratio, attack, release, knee, makeup, character and mix. Bands sum after compression.
+- Three bands split by cascaded LR4 filters at adjustable low/mid and mid/high frequencies. The neutral configuration is tested across 44.1, 48 and 96 kHz, including tones close to both crossover points.
+- Every band has its own threshold, ratio, attack, release, knee, makeup, dry/wet, behaviour style and stereo-link amount.
+- External sidechain audio is passed through a second, matched LR4 crossover. The low-band compressor therefore detects the low band of the key, the mid compressor detects the mid band, and the high compressor detects the high band; a broadband external key does not make all three detectors react identically.
+- **Compression enabled** bypasses gain reduction for that band while keeping the band audible. **Solo band** auditions one or more frequency regions without changing the source project.
+- The meter reports the strongest band reduction plus per-band gain reduction. Factory starting points include Low-end control, Gentle multiband glue, Presence smoothing, Modern density, and Dynamic and open. All settings remain editable.
 
 ### De-esser
 LR4 split above a tunable frequency; the high band is detected and dynamically reduced. Wideband mode applies the same
