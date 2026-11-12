@@ -15,6 +15,101 @@ function sineAsset(id: string, amplitude: number, sampleRate: number, length: nu
 }
 
 describe('ProjectRenderer external sidechain routing', () => {
+  it('routes a raw track key into a master-chain Dynamic EQ', () => {
+    const sampleRate = 48000;
+    const blockSize = 128;
+    const assetLength = 32768;
+    const targetAsset = sineAsset('target-dyn-eq', 0.02, sampleRate, assetLength);
+    const keyAsset = sineAsset('key-dyn-eq', 0.8, sampleRate, assetLength);
+    const project = createProject('Dynamic EQ master sidechain test', sampleRate);
+    const target = createTrack('audio', 'Target', 0);
+    const key = createTrack('audio', 'Key', 1);
+    target.clips.push(createClip(targetAsset.id, assetLength / sampleRate));
+    key.volumeDb = -120;
+    key.clips.push(createClip(keyAsset.id, assetLength / sampleRate));
+
+    const dynamicEq = createProcessorNode('dynamicEq', {
+      b0_on: 1,
+      b0_freq: 1_000,
+      b0_q: 8,
+      b0_threshold: -24,
+      b0_ratio: 4,
+      b0_knee: 0,
+      b0_range: 12,
+      b0_attack: 0.1,
+      b0_release: 100,
+      b0_link: 100,
+      b0_mode: 0,
+    });
+    dynamicEq.sidechainFrom = key.id;
+    project.tracks = [target, key];
+    project.master.processors.push(dynamicEq);
+
+    const renderer = new ProjectRenderer();
+    renderer.configure(project, [targetAsset, keyAsset], sampleRate, blockSize);
+    const outL = new Float32Array(blockSize);
+    const outR = new Float32Array(blockSize);
+    for (let block = 0; block < 32; block++) {
+      renderer.renderBlock(block * blockSize, blockSize, outL, outR);
+    }
+
+    const meter = renderer.meterSnapshot().master?.[dynamicEq.id];
+    expect(meter?.reduction ?? 0).toBeGreaterThan(5);
+    expect(Math.abs(meter?.bands?.[0] ?? 0)).toBeGreaterThan(5);
+  });
+
+  it('applies processor parameter automation to Dynamic EQ controls', () => {
+    const sampleRate = 48000;
+    const blockSize = 128;
+    const assetLength = 32768;
+    const asset = sineAsset('automation-dyn-eq', 0.8, sampleRate, assetLength);
+    const project = createProject('Dynamic EQ automation test', sampleRate);
+    const track = createTrack('audio', 'Automated EQ', 0);
+    track.clips.push(createClip(asset.id, assetLength / sampleRate));
+    const dynamicEq = createProcessorNode('dynamicEq', {
+      b0_on: 1,
+      b0_freq: 1_000,
+      b0_q: 8,
+      b0_threshold: -20,
+      b0_ratio: 20,
+      b0_knee: 0,
+      b0_range: 18,
+      b0_attack: 0.1,
+      b0_release: 10,
+      b0_link: 100,
+      b0_mode: 0,
+    });
+    track.processors.push(dynamicEq);
+    track.automation.push({
+      id: 'dynamic-eq-threshold',
+      target: 'send',
+      processorId: dynamicEq.id,
+      param: 'b0_threshold',
+      points: [
+        { time: 0, value: -20, curve: 0 },
+        { time: 0.04, value: 0, curve: 0 },
+      ],
+      enabled: true,
+    });
+    project.tracks = [track];
+
+    const renderer = new ProjectRenderer();
+    renderer.configure(project, [asset], sampleRate, blockSize);
+    const outL = new Float32Array(blockSize);
+    const outR = new Float32Array(blockSize);
+    let activeReduction = 0;
+    for (let block = 0; block < 8; block++) {
+      renderer.renderBlock(block * blockSize, blockSize, outL, outR);
+      activeReduction = renderer.meterSnapshot()[track.id]?.[dynamicEq.id]?.reduction ?? 0;
+    }
+    for (let block = 8; block < 48; block++) {
+      renderer.renderBlock(block * blockSize, blockSize, outL, outR);
+    }
+    const releasedReduction = renderer.meterSnapshot()[track.id]?.[dynamicEq.id]?.reduction ?? 0;
+    expect(activeReduction).toBeGreaterThan(3);
+    expect(releasedReduction).toBeLessThan(0.5);
+  });
+
   it('routes a track key into a bus compressor and clears it when disconnected', () => {
     const sampleRate = 48000;
     const blockSize = 128;
