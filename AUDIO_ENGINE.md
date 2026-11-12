@@ -205,3 +205,14 @@ This is the standard 60 dB exponential-decay relation for a feedback comb. The d
 
 ### Delay signal path
 The stereo Delay preallocates independent 9-second left/right ring buffers, allowing a 3-second base time and three taps at 1x/2x/3x without invalid reads. Tempo sync maps note values to beat fractions and the BPM supplied by the project. Tap heads use fractional linear interpolation; time, feedback, width, wet mix and output are ramped over 20 ms. Ping-pong cross-feeds the delay feedback between channels; stereo mode keeps each side independent; slapback limits the selected time to 20–250 ms; multi-tap sums three time offsets with decreasing gains. Damping and feedback high-pass filters have independent channel state and their coefficients are updated only when target cutoff frequencies change. Feedback is clamped below unity (95% max). The processor's internal delay affects only the wet path, so dry programme remains aligned and reported processor latency remains zero. The 9-second ring consumes approximately 3.3 MiB at 48 kHz stereo float32 per active Delay processor, scaling linearly with sample rate.
+
+
+### Offline render memory and cancellation
+
+Offline rendering now allocates the final left/right PCM arrays at the requested timeline length and copies latency-corrected samples into them as blocks are rendered. It does not allocate a second full-song stereo pair and then slice-copy that pair after rendering. The latency crop is sample-aligned across block boundaries and covered by unit tests.
+
+The offline worker yields to its event loop after a short wall-clock work interval so it can receive a queued Cancel message during the render loop. Cancellation is cooperative at render-block/yield boundaries; the final loudness analysis remains a synchronous operation and cannot be interrupted midway. Stats-only renders still need a full temporary stereo programme for the current integrated loudness/LRA analyzer, but those PCM arrays are not returned to the main thread.
+
+MP3 encoding now reuses two 1,152-frame Int16 scratch buffers rather than allocating two Int16 arrays the length of the entire song. The encoder still accumulates compressed MP3 chunks for the final Blob.
+
+These changes reduce avoidable peak allocations; they do not make the export pipeline fully streaming. The worker still receives cloned source PCM assets, the final stereo Float32 programme remains resident for analysis/encoding, WAV and AIFF writers allocate a complete encoded-file buffer, and encoded-file verification decodes the completed Blob into PCM. Long-programme browser memory profiling and cancellation tests in a real browser remain necessary.
