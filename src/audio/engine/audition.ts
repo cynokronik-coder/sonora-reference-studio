@@ -54,6 +54,19 @@ export function copyAuditionBlock(
 
 export interface AuditionBlockRenderer {
   renderBlock(position: number, frames: number, outL: Float32Array, outR: Float32Array): void;
+  /**
+   * Optional optimized path for snapshots whose pre-master track/bus graph is
+   * identical. Returns false when the renderers cannot safely share it.
+   */
+  renderPairedBlock?(
+    other: AuditionBlockRenderer,
+    position: number,
+    frames: number,
+    beforeL: Float32Array,
+    beforeR: Float32Array,
+    afterL: Float32Array,
+    afterR: Float32Array,
+  ): boolean;
 }
 
 /**
@@ -76,7 +89,18 @@ export function renderAuditionBlock(
       scratch.afterL.length < frames || scratch.afterR.length < frames) {
     throw new RangeError('A/B audition scratch buffers must fit the output block.');
   }
-  beforeRenderer.renderBlock(position, frames, scratch.beforeL, scratch.beforeR);
-  afterRenderer.renderBlock(position, frames, scratch.afterL, scratch.afterR);
+  const shared = beforeRenderer.renderPairedBlock?.(
+    afterRenderer,
+    position,
+    frames,
+    scratch.beforeL,
+    scratch.beforeR,
+    scratch.afterL,
+    scratch.afterR,
+  ) ?? false;
+  if (!shared) {
+    beforeRenderer.renderBlock(position, frames, scratch.beforeL, scratch.beforeR);
+    afterRenderer.renderBlock(position, frames, scratch.afterL, scratch.afterR);
+  }
   return copyAuditionBlock(scratch, mode, 0, outL, outR, transition);
 }

@@ -74,3 +74,74 @@ describe('ProjectRenderer external sidechain routing', () => {
     expect(internalReduction).toBeLessThan(1);
   });
 });
+
+
+describe('ProjectRenderer paired master audition', () => {
+  it('renders a common track/bus graph once and applies the two master stages independently', () => {
+    const sampleRate = 48000;
+    const asset = sineAsset('paired-audition', 0.3, sampleRate, 8192);
+    const projectA = createProject('Paired audition', sampleRate);
+    const track = createTrack('audio', 'Source', 0);
+    track.clips.push(createClip(asset.id, asset.length / sampleRate));
+    projectA.tracks = [track];
+    const projectB = JSON.parse(JSON.stringify(projectA)) as typeof projectA;
+    projectB.master.volumeDb = -6;
+
+    const pairedA = new ProjectRenderer();
+    const pairedB = new ProjectRenderer();
+    pairedA.configure(projectA, [asset], sampleRate, 128);
+    pairedB.configureMasterOnly(projectB, [asset], sampleRate, 128);
+    expect(pairedA.canSharePreMasterWith(pairedB)).toBe(true);
+
+    const baselineA = new ProjectRenderer();
+    const baselineB = new ProjectRenderer();
+    baselineA.configure(projectA, [asset], sampleRate, 128);
+    baselineB.configure(projectB, [asset], sampleRate, 128);
+
+    for (let block = 0; block < 8; block++) {
+      const position = block * 128;
+      const aL = new Float32Array(128);
+      const aR = new Float32Array(128);
+      const bL = new Float32Array(128);
+      const bR = new Float32Array(128);
+      const expectedAL = new Float32Array(128);
+      const expectedAR = new Float32Array(128);
+      const expectedBL = new Float32Array(128);
+      const expectedBR = new Float32Array(128);
+
+      expect(pairedA.renderPairedBlock(pairedB, position, 128, aL, aR, bL, bR)).toBe(true);
+      baselineA.renderBlock(position, 128, expectedAL, expectedAR);
+      baselineB.renderBlock(position, 128, expectedBL, expectedBR);
+
+      for (let i = 0; i < 128; i++) {
+        expect(aL[i]).toBeCloseTo(expectedAL[i], 6);
+        expect(aR[i]).toBeCloseTo(expectedAR[i], 6);
+        expect(bL[i]).toBeCloseTo(expectedBL[i], 6);
+        expect(bR[i]).toBeCloseTo(expectedBR[i], 6);
+      }
+    }
+  });
+
+  it('refuses to share when any track or bus state differs', () => {
+    const sampleRate = 48000;
+    const asset = sineAsset('paired-guard', 0.2, sampleRate, 4096);
+    const projectA = createProject('Paired guard', sampleRate);
+    const trackA = createTrack('audio', 'Source', 0);
+    trackA.clips.push(createClip(asset.id, asset.length / sampleRate));
+    projectA.tracks = [trackA];
+    const projectB = JSON.parse(JSON.stringify(projectA)) as typeof projectA;
+    projectB.tracks[0].volumeDb = -3;
+
+    const rendererA = new ProjectRenderer();
+    const rendererB = new ProjectRenderer();
+    rendererA.configure(projectA, [asset], sampleRate, 128);
+    rendererB.configure(projectB, [asset], sampleRate, 128);
+
+    expect(rendererA.canSharePreMasterWith(rendererB)).toBe(false);
+    const output = new Float32Array(128);
+    expect(rendererA.renderPairedBlock(
+      rendererB, 0, 128,
+      output, new Float32Array(128), new Float32Array(128), new Float32Array(128),
+    )).toBe(false);
+  });
+});

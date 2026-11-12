@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { copyAuditionBlock, renderAuditionBlock, type StereoAuditionBuffers } from './audition';
+import { copyAuditionBlock, renderAuditionBlock, type AuditionBlockRenderer, type StereoAuditionBuffers } from './audition';
 
 function buffers(): StereoAuditionBuffers {
   return {
@@ -127,6 +127,49 @@ describe('renderAuditionBlock', () => {
 
     expect([...left]).toEqual([60, 61]);
     expect([...right]).toEqual([-60, -61]);
+  });
+
+
+  it('uses a shared pre-master render when the before renderer supports it', () => {
+    let pairedCalls = 0;
+    const before = {
+      renderBlock() { throw new Error('The optimized path should not render the graph twice.'); },
+      renderPairedBlock(
+        _other: AuditionBlockRenderer,
+        position: number,
+        frames: number,
+        beforeL: Float32Array,
+        beforeR: Float32Array,
+        afterL: Float32Array,
+        afterR: Float32Array,
+      ) {
+        pairedCalls++;
+        for (let i = 0; i < frames; i++) {
+          beforeL[i] = (position + i) / 10;
+          beforeR[i] = -(position + i) / 10;
+          afterL[i] = (position + i) / 5;
+          afterR[i] = -(position + i) / 5;
+        }
+        return true;
+      },
+    };
+    const after = {
+      renderBlock() { throw new Error('The optimized path should not render the graph twice.'); },
+    };
+    const scratch: StereoAuditionBuffers = {
+      beforeL: new Float32Array(4), beforeR: new Float32Array(4),
+      afterL: new Float32Array(4), afterR: new Float32Array(4),
+    };
+    const left = new Float32Array(2);
+    const right = new Float32Array(2);
+
+    renderAuditionBlock(before, after, 20, 'after', scratch, left, right);
+
+    expect(pairedCalls).toBe(1);
+    expect(left[0]).toBeCloseTo(4, 6);
+    expect(left[1]).toBeCloseTo(4.2, 6);
+    expect(right[0]).toBeCloseTo(-4, 6);
+    expect(right[1]).toBeCloseTo(-4.2, 6);
   });
 
   it('crossfades rendered blocks and rejects undersized scratch buffers', () => {

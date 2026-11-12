@@ -2,11 +2,19 @@ import workletUrl from './engine.worklet.ts?worker&url';
 import type { EngineAsset } from './renderer';
 import type { ProjectState } from '../model/types';
 
+export interface AuditionPerformance {
+  averageMs: number;
+  maxMs: number;
+  blockBudgetMs: number;
+  utilizationPercent: number;
+}
+
 export interface RealtimeMeters {
   peakL: number;
   peakR: number;
   gr: Record<string, Record<string, { reduction?: number }>>;
   peaks: Record<string, { L: number; R: number }>;
+  auditionPerformance: AuditionPerformance | null;
 }
 
 type PositionListener = (seconds: number, playing: boolean) => void;
@@ -35,7 +43,7 @@ export class RealtimeHost {
   private pendingAssets: EngineAsset[] = [];
   lastError: string | null = null;
   lastMeters: Record<string, Record<string, { reduction?: number }>> = {};
-  lastPayload: RealtimeMeters = { peakL: -120, peakR: -120, gr: {}, peaks: {} };
+  lastPayload: RealtimeMeters = { peakL: -120, peakR: -120, gr: {}, peaks: {}, auditionPerformance: null };
   playing = false;
   position = 0;
 
@@ -94,6 +102,7 @@ export class RealtimeHost {
         peakR: message.peakR as number,
         gr: (message.gr as RealtimeMeters['gr']) ?? {},
         peaks: (message.peaks as RealtimeMeters['peaks']) ?? {},
+        auditionPerformance: (message.auditionPerformance as AuditionPerformance | null) ?? null,
       };
       this.lastMeters = payload.gr;
       this.lastPayload = payload;
