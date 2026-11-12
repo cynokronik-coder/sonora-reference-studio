@@ -45,3 +45,16 @@ These sources are design references used to explain the engineering decisions in
 ### Engineering consequence for Sonora
 
 The Limiter's 4x IIR true-peak mode is a safety estimate only. It must not be presented as a standards-certified dBTP meter. Keep the final output trim at 0 dB when relying on the internal limiter ceiling and verify critical delivery masters with an independent BS.1770-compliant true-peak meter. The long-term roadmap should implement or integrate an Annex 2-compatible FIR/polyphase meter for final offline export analysis.
+
+
+## Algorithmic reverberation
+
+- CMU Intro to Computer Music, *13.4 All-pass filters*: https://www.cs.cmu.edu/~15322/book/ch13/04.html
+  - Explains the Schroeder topology: feedback comb filters in parallel followed by all-pass filters in series to increase echo density.
+  - Includes the RT60 feedback relation (g = 10^{-3D/(f_s T_{60})}).
+- Csound manual, *freeverb*: https://csound.com/docs/manual/freeverb.html
+  - Documents Jezar's Freeverb topology: eight parallel comb filters per channel followed by four serial allpass units, with right-channel delay offsets for stereo diffusion.
+- Luca Spanedda, *Digital Reverberation in Faust*: https://github.com/LucaSpanedda/Digital_Reverberation_in_Faust
+  - A public GitHub reference for implementing and comparing classic artificial reverb structures in Faust. Used as a design-reading reference only; no code is copied into Sonora.
+- Sonora's Reverb is a Freeverb-derived algorithmic effect. It is not convolution and its Room/Hall/Plate/Spring names denote parameterised tonal/diffusion starting characters, not physical models or captured spaces.
+- Unit tests measure dry-path transparency, impulse-tail energy, relative RT60 behaviour, maximum pre-delay support, stereo decorrelation, dynamic parameter stability and preset parameter validity.
