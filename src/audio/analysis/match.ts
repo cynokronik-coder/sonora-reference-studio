@@ -167,6 +167,14 @@ function metricsFrom(report: AnalysisReport, section: 'full' | 'chorus' | 'verse
   };
 }
 
+/** Estimate the peak after a broadband gain change, before any dynamics processing. */
+export function estimatePreLimiterTruePeak(sourceTruePeakDb: number, gainChangeDb: number): number {
+  if (!Number.isFinite(sourceTruePeakDb) || !Number.isFinite(gainChangeDb)) {
+    throw new RangeError('True-peak and gain estimates must be finite numbers.');
+  }
+  return sourceTruePeakDb + gainChangeDb;
+}
+
 function fmtDb(v: number, digits = 1): string {
   return Number.isFinite(v) ? `${v > 0 ? '+' : ''}${v.toFixed(digits)} dB` : '—';
 }
@@ -657,7 +665,11 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
 
   // ---------- Peak protection / limiter ----------
   const ceiling = clamp(options.targetTruePeakDb ?? -1, -3, -0.1);
-  const needsLimiter = predictedLoudness > ceiling - 1 || tgt.truePeakDb > ceiling;
+  // A gain-stage estimate is useful for deciding whether peak protection is
+  // needed, but it is not a prediction of the limiter's final output. EQ,
+  // compression, saturation and inter-sample reconstruction can all change it.
+  const estimatedPreLimiterTruePeakDb = estimatePreLimiterTruePeak(tgt.truePeakDb, predictedLoudness - tgt.lufs);
+  const needsLimiter = estimatedPreLimiterTruePeakDb > ceiling;
   if (needsLimiter) {
     proposals.push({
       id: uid('prop'),
@@ -674,14 +686,14 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
         output: 0,
       },
       reason: `A ${ceiling.toFixed(1)} dBTP ceiling is required after the loudness change. The limiter uses 4 ms lookahead and true-peak detection.`,
-      expected: 'Output stays under the delivery ceiling with minimal pumping.',
+      expected: 'The limiter is configured to protect the selected ceiling. Render and measure the master to verify the delivered true peak.',
       confidence: 0.85,
       before: [
         {
-          label: 'True peak',
-          target: `${tgt.truePeakDb.toFixed(1)} dBTP`,
+          label: 'Estimated pre-limiter true peak',
+          target: `${estimatedPreLimiterTruePeakDb.toFixed(1)} dBTP`,
           reference: `${refFor('loudness').metrics.truePeakDb.toFixed(1)} dBTP`,
-          delta: fmtDb(tgt.truePeakDb - ceiling),
+          delta: fmtDb(estimatedPreLimiterTruePeakDb - ceiling),
           severity: 'medium',
         },
       ],
@@ -694,11 +706,17 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
     });
   }
 
-  if (predictedLoudness > ceiling) {
+  if (estimatedPreLimiterTruePeakDb > ceiling) {
     warnings.push({
       kind: 'warning',
       message:
-        'The target loudness exceeds the true-peak ceiling. The renderer prioritises clean peaks over loudness, so the measured level may land below the prediction.',
+        'The estimated pre-limiter true peak exceeds the selected ceiling. The limiter is only a protective stage: its actual output and loudness must be confirmed with Render & measure master.',
+    });
+  } else {
+    warnings.push({
+      kind: 'info',
+      message:
+        'The simple gain-based pre-limiter peak estimate is below the selected ceiling. Processing can still change peaks, so verify the rendered master before delivery.',
     });
   }
   if (!references.some((r) => r.report.loudness.integratedLufs > -30)) {
@@ -720,7 +738,9 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
     warnings,
     predicted: {
       integratedLufs: predictedLoudness,
-      truePeakDb: Math.min(ceiling, tgt.truePeakDb + (predictedLoudness - tgt.lufs)),
+      // This is explicitly the estimated pre-limiter peak, not a guaranteed
+      // post-limiter result. The final value comes from the offline render.
+      truePeakDb: estimatedPreLimiterTruePeakDb,
       crestDb: predictedCrest,
       widthDb: predictedWidth,
       toneDeltaDb: eqProposal ? (eqProposal.predicted.bands as number[]) : new Array(BAND_CENTERS.length).fill(0),

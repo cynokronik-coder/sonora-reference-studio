@@ -437,7 +437,7 @@ export default function ReferenceMatch() {
               <Button onClick={() => void verifyMaster()}>Render & measure master</Button>
               <Button variant="ghost" onClick={() => useApp.getState().setScreen('mastering')}>Open mastering</Button>
               <span className="ml-auto text-2xs text-ink-500">
-                Predicted {matchPlan.predicted.integratedLufs.toFixed(1)} LUFS · {matchPlan.predicted.truePeakDb.toFixed(1)} dBTP
+                Predicted pre-limiter: {matchPlan.predicted.integratedLufs.toFixed(1)} LUFS · {matchPlan.predicted.truePeakDb.toFixed(1)} dBTP
               </span>
             </div>
           </div>
