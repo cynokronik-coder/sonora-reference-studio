@@ -120,3 +120,7 @@ The multiband compressor maintains a dedicated crossover for its external key in
 
 ### Parametric EQ transitions
 The minimum-phase EQ uses per-sample interpolation between stable normalized biquad coefficient sets over 20 ms when a parameter changes. The output trim is ramped over the same interval. Disabled/rerouted filters continue processing only while their transition back to passthrough is active. The optional linear-phase FIR uses 513 odd-length symmetric taps so its group delay is the exact integer 256 samples rather than the half-sample delay of an even-length kernel.
+
+
+### Dynamic EQ detector behaviour
+Dynamic EQ detector band-pass filters receive the signed left and right programme channels independently. Only after frequency-selective filtering are detector magnitudes compared and shaped by attack/release ballistics. This avoids the extra harmonics created by full-wave rectification before the detector filter. Stereo linking is defined per band: 0% uses independent channel envelopes; 100% derives one common envelope from the stronger detector and applies identical gain reduction to both channels. Dynamic bell filter changes use short coefficient ramps, and disabling a band ramps its response back to passthrough.
