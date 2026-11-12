@@ -36,6 +36,9 @@ export class Lr4Crossover {
   prepare(sampleRate: number, maxBlock: number): void {
     this.sr = sampleRate;
     this.maxBlock = maxBlock;
+    // Filter histories are sample-rate dependent. Clear them before reusing
+    // this crossover at a new engine rate or after a host re-prepare.
+    this.reset();
     this.configure(sampleRate, this.lowFreq, this.highFreq);
   }
 
@@ -50,7 +53,7 @@ export class Lr4Crossover {
     // previous 2:1 rule silently moved valid xHigh settings (for example,
     // 600/800 Hz became 600/1200 Hz), while an LR4 cascade reconstructs at any
     // ordered pair of split frequencies. Keep a small safety gap instead.
-    const minimumGap = Math.max(20, sampleRate * 0.001);
+    const minimumGap = 20;
     this.highFreq = Math.max(
       this.lowFreq + minimumGap,
       Math.min(requestedHigh, maxHigh),
