@@ -32,8 +32,11 @@ resonance report.
 - Soft-knee feed-forward design with dB-domain ballistics.
 - Styles (VCA/FET/Optical/Vari-mu/Bus) change attack/release scaling, knee, ratio scaling and RMS detection blend. These
   are **behaviour styles**, not emulations of specific hardware circuits.
-- Lookahead delays the audio so gain reduction arrives before the transient.
-- Sidechain high-pass filter, stereo linking, auto/manual makeup, dry/wet.
+- Left and right detectors and gain-reduction envelopes are independent at 0% Stereo Link; full link follows the
+  stronger detector for common stereo gain reduction. Link, makeup and dry/wet changes are smoothed over 10 ms.
+- Lookahead delays the audio so gain reduction arrives before the transient. The reported latency is the exact rounded
+  lookahead delay in samples and participates in renderer path compensation.
+- Sidechain high-pass filter, auto/manual makeup, dry/wet.
 - External sidechain key can be routed from another track on track or bus compressor instances. The key is tapped from the source track's raw clip signal before its own processing and fader; disconnecting it returns the detector to the compressed signal.
 
 ### Multiband Compressor
