@@ -17,7 +17,7 @@ import { TRANSIENT_PRESETS } from '../audio/dsp/processors/transient';
 import { GATE_PRESETS } from '../audio/dsp/processors/gate';
 import { SATURATION_PRESETS } from '../audio/dsp/processors/saturation';
 import { EXCITER_PRESETS } from '../audio/dsp/processors/exciter';
-import { CLIPPER_PRESETS } from '../audio/dsp/processors/limiter';
+import { CLIPPER_PRESETS, LIMITER_PRESETS } from '../audio/dsp/processors/limiter';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -46,7 +46,7 @@ export function Rack({
   processors: ProcessorNodeState[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  meters?: Record<string, { reduction?: number; bands?: number[] }>;
+  meters?: Record<string, { reduction?: number; peakL?: number; peakR?: number; bands?: number[] }>;
   emptyHint?: string;
   filterCategory?: ProcessorCategory | 'effects' | null;
 }) {
@@ -208,6 +208,28 @@ export function Rack({
                             </div>
                             <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
                               <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {node.type === 'limiter' && meter && (
+                    <div className="mb-3 grid grid-cols-2 gap-2">
+                      {([
+                        ['Left', meter.peakL ?? 0],
+                        ['Right', meter.peakR ?? 0],
+                      ] as const).map(([label, peak]) => {
+                        const peakDb = peak > 0 ? 20 * Math.log10(peak) : -120;
+                        return (
+                          <div key={label} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">{label} output peak</span>
+                              <span className="font-mono text-[10px] text-signal-amber">{peakDb.toFixed(1)} dBFS</span>
+                            </div>
+                            <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
+                              <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp(((peakDb + 60) / 60) * 100, 0, 100)}%` }} />
                             </div>
                           </div>
                         );
@@ -408,7 +430,8 @@ function ProcessorParams({
   const [saturationPreset, setSaturationPreset] = useState('');
   const [exciterPreset, setExciterPreset] = useState('');
   const [clipperPreset, setClipperPreset] = useState('');
-  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); setTransientPreset(''); setGatePreset(''); setSaturationPreset(''); setExciterPreset(''); setClipperPreset(''); }, [node.id]);
+  const [limiterPreset, setLimiterPreset] = useState('');
+  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); setTransientPreset(''); setGatePreset(''); setSaturationPreset(''); setExciterPreset(''); setClipperPreset(''); setLimiterPreset(''); }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -430,6 +453,7 @@ function ProcessorParams({
     if (node.type === 'saturation') setSaturationPreset('');
     if (node.type === 'exciter') setExciterPreset('');
     if (node.type === 'clipper') setClipperPreset('');
+    if (node.type === 'limiter') setLimiterPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
@@ -498,8 +522,29 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setClipperPreset(preset.id);
   };
+  const applyLimiterPreset = (presetId: string) => {
+    const preset = LIMITER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setLimiterPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
+      {node.type === 'limiter' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Limiter starting point"
+            value={limiterPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...LIMITER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyLimiterPreset}
+          />
+          {limiterPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {LIMITER_PRESETS.find((preset) => preset.id === limiterPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'clipper' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select

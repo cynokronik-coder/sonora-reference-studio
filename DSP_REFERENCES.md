@@ -30,3 +30,18 @@ These sources are design references used to explain the engineering decisions in
 - JUCE `juce::dsp::Oversampling` reference: https://docs.juce.com/develop/classjuce_1_1dsp_1_1Oversampling.html — staged oversampling around nonlinear processors, and the IIR versus FIR phase/latency trade-off.
 - Faust 101 aliasing workshop: https://faustdoc.grame.fr/workshops/2020-04-10-faust-101/ — harmonic folding above Nyquist and why nonlinear stages benefit from oversampling.
 - Clipper regression cases compare 1x and 4x energy at a folded third-harmonic frequency. This is a targeted synthetic measurement, not a guarantee that aliasing is eliminated for all audio material.
+
+
+## Loudness and true-peak measurement
+
+- ITU-R BS.1770-5 (November 2023): https://www.itu.int/rec/R-REC-BS.1770-5-202311-I/en
+  - Current in-force recommendation for programme loudness and true-peak measurement. Annex 2 describes a 4x oversampled FIR interpolation method for estimating continuous-time inter-sample peak level.
+  - Sonora's current realtime limiter uses a 4x IIR interpolation estimate with an added 0.5 dB safety guard. It is explicitly treated as a conservative protection stage, not a claim of fully compliant BS.1770-5 true-peak measurement.
+- EBU R 128, Version 5.0 (November 2023): https://tech.ebu.ch/publications/r128
+  - Broadcast loudness normalisation recommendation using Programme Loudness, Loudness Range and Maximum True Peak Level descriptors. The appropriate target depends on the delivery specification; do not apply a broadcast target automatically to music streaming masters.
+- AES Loudness Project resources: https://aes.org/resources/audio-topics/loudness-project/resources-and-references/
+  - Index of current loudness and true-peak standards, including ITU-R BS.1770-5 and AES77-2023.
+
+### Engineering consequence for Sonora
+
+The Limiter's 4x IIR true-peak mode is a safety estimate only. It must not be presented as a standards-certified dBTP meter. Keep the final output trim at 0 dB when relying on the internal limiter ceiling and verify critical delivery masters with an independent BS.1770-compliant true-peak meter. The long-term roadmap should implement or integrate an Annex 2-compatible FIR/polyphase meter for final offline export analysis.

@@ -2,7 +2,9 @@ import { TruePeakMeter, Oversampler } from '../oversample';
 import type { AudioProcessor, ParamValues, ProcessorDefinition, ProcessorMeter } from '../types';
 import { clamp, dbToGain, gainToDb } from '../util';
 
-/** Monotonic sliding maximum over a fixed window (O(1) amortised). */
+const TRUE_PEAK_SAFETY_GAIN = dbToGain(-0.5);
+
+/** Monotonic sliding maximum over a bounded, runtime-selectable window (O(1) amortised). */
 class SlidingMax {
   private values: Float32Array;
   private indices: Int32Array;
@@ -24,7 +26,7 @@ class SlidingMax {
     this.head = this.tail = this.count = this.position = 0;
   }
 
-  push(v: number): number {
+  push(v: number, windowSize = this.size): number {
     // Pop smaller values from the back.
     while (this.count > 0) {
       const back = (this.tail - 1 + this.capacity) % this.capacity;
@@ -38,7 +40,8 @@ class SlidingMax {
     this.tail = (this.tail + 1) % this.capacity;
     this.count++;
     // Expire old entries.
-    while (this.count > 0 && this.indices[this.head] <= this.position - this.size) {
+    const activeWindow = Math.max(1, Math.min(this.size, Math.floor(windowSize)));
+    while (this.count > 0 && this.indices[this.head] <= this.position - activeWindow) {
       this.head = (this.head + 1) % this.capacity;
       this.count--;
     }
@@ -48,18 +51,19 @@ class SlidingMax {
 }
 
 /**
- * Look-ahead brickwall limiter.
+ * Look-ahead stereo limiter with a sliding-maximum detector and optional
+ * 4x IIR true-peak estimation. Its reported latency equals the configured
+ * look-ahead delay so the renderer can align parallel tracks and buses.
  *
- * A sliding maximum looks ahead over the attack window and pre-computes the
- * required gain before the transient arrives, so no sample is clipped and no
- * distortion is introduced by the gain envelope. True-peak awareness is real:
- * each block is 4x oversampled and the effective ceiling is tightened by the
- * inter-sample peak ratio. This makes exported masters meet a dBTP ceiling
- * instead of only a sample-peak ceiling.
+ * True-peak mode tightens the detector ceiling using a block-based
+ * inter-sample/sample-peak estimate plus a conservative 0.5 dB guard. This is
+ * protective DSP, not a standards-certified true-peak measurement chain;
+ * delivery masters should still be verified with a compliant external meter.
+ * The output trim is post-limiter and can therefore exceed the internal
+ * ceiling; leave it at 0 dB when relying on this processor's ceiling.
  */
 export class Limiter implements AudioProcessor {
   readonly type = 'limiter';
-  readonly latency = 0;
   private sr = 48000;
   private values: ParamValues = {};
   private delayL = new Float32Array(0);
@@ -70,7 +74,24 @@ export class Limiter implements AudioProcessor {
   private env = 1;
   private tp: TruePeakMeter | null = null;
   private reduction = 0;
-  private outPeak = 0;
+  private outPeakL = 0;
+  private outPeakR = 0;
+  private inputGain = 1;
+  private inputGainTarget = 1;
+  private inputGainStep = 0;
+  private inputGainRemaining = 0;
+  private outputGain = 1;
+  private outputGainTarget = 1;
+  private outputGainStep = 0;
+  private outputGainRemaining = 0;
+  private ceiling = dbToGain(-1);
+  private ceilingTarget = dbToGain(-1);
+  private ceilingStep = 0;
+  private ceilingRemaining = 0;
+
+  get latency(): number {
+    return Math.round((clamp(this.values.lookahead ?? 4, 0, 10) / 1000) * this.sr);
+  }
 
   prepare(sampleRate: number, maxBlock: number): void {
     this.sr = sampleRate;
@@ -80,68 +101,110 @@ export class Limiter implements AudioProcessor {
     this.delayIndex = 0;
     this.sliding = new SlidingMax(Math.ceil(sampleRate * 0.012) + 1);
     this.tp = new TruePeakMeter(sampleRate, 2, maxBlock);
+    this.reset();
   }
 
   setValues(values: ParamValues): void {
     this.values = values;
+    const rampSamples = Math.max(1, Math.round(this.sr * 0.02));
+    const nextInput = dbToGain(clamp(values.input ?? 0, -12, 24));
+    if (nextInput !== this.inputGainTarget) {
+      this.inputGainTarget = nextInput;
+      this.inputGainRemaining = rampSamples;
+      this.inputGainStep = (nextInput - this.inputGain) / rampSamples;
+    }
+    const nextOutput = dbToGain(clamp(values.output ?? 0, -12, 12));
+    if (nextOutput !== this.outputGainTarget) {
+      this.outputGainTarget = nextOutput;
+      this.outputGainRemaining = rampSamples;
+      this.outputGainStep = (nextOutput - this.outputGain) / rampSamples;
+    }
+    const nextCeiling = dbToGain(clamp(values.ceiling ?? -1, -12, 0));
+    if (nextCeiling !== this.ceilingTarget) {
+      this.ceilingTarget = nextCeiling;
+      this.ceilingRemaining = rampSamples;
+      this.ceilingStep = (nextCeiling - this.ceiling) / rampSamples;
+    }
   }
 
   process(L: Float32Array, R: Float32Array, n: number): void {
     if (this.delayL.length === 0) this.prepare(this.sr, n);
-    const ceilingDb = clamp(this.values.ceiling ?? -1, -12, 0);
-    const ceiling = dbToGain(ceilingDb);
-    const inputGain = dbToGain(this.values.input ?? 0);
-    const outputGain = dbToGain(this.values.output ?? 0);
     const lookahead = clamp(this.values.lookahead ?? 4, 0, 10);
     const lookSamples = Math.round((lookahead / 1000) * this.sr);
+    const detectorWindow = lookSamples + 1;
     const releaseMs = clamp(this.values.release ?? 80, 10, 1000);
     const releaseCoeff = 1 - Math.exp(-1 / ((releaseMs / 1000) * this.sr));
     const truePeak = (this.values.truePeak ?? 1) > 0.5;
 
     // True-peak adjustment per block: tighten the ceiling when the block's
     // inter-sample peak exceeds its sample peak.
-    let blockCeiling = ceiling;
-    if (truePeak && this.tp) {
-      const tpPeak = this.tp.process(L, R, n);
-      let sp = 0;
-      for (let i = 0; i < n; i++) {
-        const a = Math.max(Math.abs(L[i]), Math.abs(R[i]));
-        if (a > sp) sp = a;
-      }
-      const ratio = sp > 1e-6 ? tpPeak / sp : 1;
-      if (ratio > 1.001) blockCeiling = ceiling / ratio;
+    // Advance the streaming true-peak meter on every block so disabling then
+    // re-enabling true-peak mode never reuses stale interpolation history.
+    const tpPeak = this.tp?.process(L, R, n) ?? 0;
+    let samplePeak = 0;
+    for (let i = 0; i < n; i++) {
+      const sample = Math.max(Math.abs(L[i]), Math.abs(R[i]));
+      if (sample > samplePeak) samplePeak = sample;
     }
+    const truePeakRatio = truePeak && samplePeak > 1e-6
+      ? Math.max(1, tpPeak / samplePeak)
+      : 1;
 
     let maxGr = 0;
-    let peak = 0;
-    const windowLen = Math.max(1, lookSamples);
+    let peakL = 0;
+    let peakR = 0;
+    const windowLen = lookSamples;
 
     for (let i = 0; i < n; i++) {
-      const inL = L[i] * inputGain;
-      const inR = R[i] * inputGain;
+      if (this.inputGainRemaining > 0) {
+        this.inputGain += this.inputGainStep;
+        this.inputGainRemaining--;
+        if (this.inputGainRemaining === 0) this.inputGain = this.inputGainTarget;
+      }
+      if (this.outputGainRemaining > 0) {
+        this.outputGain += this.outputGainStep;
+        this.outputGainRemaining--;
+        if (this.outputGainRemaining === 0) this.outputGain = this.outputGainTarget;
+      }
+      if (this.ceilingRemaining > 0) {
+        this.ceiling += this.ceilingStep;
+        this.ceilingRemaining--;
+        if (this.ceilingRemaining === 0) this.ceiling = this.ceilingTarget;
+      }
+
+      const inL = L[i] * this.inputGain;
+      const inR = R[i] * this.inputGain;
       this.delayL[this.delayIndex] = inL;
       this.delayR[this.delayIndex] = inR;
 
       const abs = Math.max(Math.abs(inL), Math.abs(inR));
-      const windowMax = this.sliding.push(abs);
-      const target = windowMax > blockCeiling ? blockCeiling / windowMax : 1;
+      const windowMax = this.sliding.push(abs, detectorWindow);
+      // Add a conservative half-dB safety margin when true-peak mode is
+      // active. The IIR interpolator is block based while programme audio is
+      // delayed by look-ahead; this guard absorbs small block-boundary and
+      // reconstruction discrepancies rather than claiming sample-perfect
+      // reconstruction from the estimate.
+      const truePeakGuard = truePeak ? TRUE_PEAK_SAFETY_GAIN : 1;
+      const effectiveCeiling = this.ceiling * truePeakGuard / truePeakRatio;
+      const target = windowMax > effectiveCeiling ? effectiveCeiling / windowMax : 1;
       if (target < this.env) this.env = target;
       else this.env += (target - this.env) * releaseCoeff;
 
       let readIdx = this.delayIndex - windowLen;
       if (readIdx < 0) readIdx += this.maxDelay;
-      const outL = this.delayL[readIdx] * this.env * outputGain;
-      const outR = this.delayR[readIdx] * this.env * outputGain;
+      const outL = this.delayL[readIdx] * this.env * this.outputGain;
+      const outR = this.delayR[readIdx] * this.env * this.outputGain;
       L[i] = outL;
       R[i] = outR;
       const gr = -gainToDb(this.env);
       if (gr > maxGr) maxGr = gr;
-      const p = Math.max(Math.abs(outL), Math.abs(outR));
-      if (p > peak) peak = p;
+      peakL = Math.max(peakL, Math.abs(outL));
+      peakR = Math.max(peakR, Math.abs(outR));
       this.delayIndex = (this.delayIndex + 1) % this.maxDelay;
     }
     this.reduction = maxGr;
-    this.outPeak = peak;
+    this.outPeakL = peakL;
+    this.outPeakR = peakR;
   }
 
   reset(): void {
@@ -151,11 +214,19 @@ export class Limiter implements AudioProcessor {
     this.sliding.reset();
     this.env = 1;
     this.tp?.reset();
+    this.inputGain = this.inputGainTarget;
+    this.inputGainRemaining = 0;
+    this.outputGain = this.outputGainTarget;
+    this.outputGainRemaining = 0;
+    this.ceiling = this.ceilingTarget;
+    this.ceilingRemaining = 0;
     this.reduction = 0;
+    this.outPeakL = 0;
+    this.outPeakR = 0;
   }
 
   meter(): ProcessorMeter {
-    return { reduction: this.reduction, peakL: this.outPeak, peakR: this.outPeak };
+    return { reduction: this.reduction, peakL: this.outPeakL, peakR: this.outPeakR };
   }
 }
 
@@ -164,8 +235,8 @@ export const limiterDefinition: ProcessorDefinition = {
   name: 'Limiter',
   shortName: 'LIMIT',
   category: 'mastering',
-  description: 'Look-ahead brickwall limiter with true-peak ceiling control and programme-dependent release.',
-  purpose: 'Raises the final level safely. The loudest stage in the mastering chain and the last line of defence against clipping.',
+  description: 'Stereo-linked look-ahead limiter with 4x IIR true-peak estimation, a conservative safety guard and programme-dependent release.',
+  purpose: 'Controls the final peak level with look-ahead gain reduction. Keep post-limiter output trim at 0 dB when relying on its ceiling; verify critical delivery masters with an independent true-peak meter.',
   params: [
     { key: 'input', label: 'Input gain', kind: 'float', min: -12, max: 24, step: 0.1, default: 0, unit: 'dB' },
     { key: 'ceiling', label: 'Ceiling', kind: 'float', min: -12, max: 0, step: 0.1, default: -0.3, unit: 'dBTP' },
@@ -176,6 +247,38 @@ export const limiterDefinition: ProcessorDefinition = {
   ],
   create: () => new Limiter(),
 };
+
+export interface LimiterPreset {
+  id: string;
+  name: string;
+  description: string;
+  values: ParamValues;
+}
+
+function limiterPreset(id: string, name: string, description: string, overrides: ParamValues): LimiterPreset {
+  const values: ParamValues = {};
+  for (const param of limiterDefinition.params) values[param.key] = param.default;
+  return { id, name, description, values: { ...values, ...overrides } };
+}
+
+/** Conservative editable starting points; output trim remains post-ceiling. */
+export const LIMITER_PRESETS: LimiterPreset[] = [
+  limiterPreset('transparent-true-peak', 'Transparent true-peak', 'A restrained final safety limiter with moderate look-ahead and a conservative ceiling.', {
+    input: 0, ceiling: -1, release: 140, lookahead: 5, truePeak: 1, output: 0,
+  }),
+  limiterPreset('punch-preservation', 'Punch preservation', 'A quicker release and shorter look-ahead for transient-rich material; monitor pumping and distortion.', {
+    input: 1.5, ceiling: -1, release: 55, lookahead: 3, truePeak: 1, output: 0,
+  }),
+  limiterPreset('loudness-push', 'Loudness push', 'A louder starting point with more input drive; judge it at matched loudness and watch gain reduction.', {
+    input: 4, ceiling: -1, release: 80, lookahead: 5, truePeak: 1, output: 0,
+  }),
+  limiterPreset('safe-delivery', 'Safe delivery', 'A lower ceiling and longer look-ahead for conservative peak management before export.', {
+    input: 0, ceiling: -2, release: 180, lookahead: 10, truePeak: 1, output: 0,
+  }),
+  limiterPreset('low-latency-sample-peak', 'Low-latency sample peak', 'Disables true-peak estimation and look-ahead for a zero-look-ahead sample-peak limiter.', {
+    input: 0, ceiling: -1, release: 80, lookahead: 0, truePeak: 0, output: 0,
+  }),
+];
 
 export const CLIPPER_MODES = ['Soft', 'Hard', 'Tanh'] as const;
 
