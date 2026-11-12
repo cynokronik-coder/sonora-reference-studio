@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { copyAuditionBlock, type StereoAuditionBuffers } from './audition';
+import { copyAuditionBlock, renderAuditionBlock, type StereoAuditionBuffers } from './audition';
 
 function buffers(): StereoAuditionBuffers {
   return {
@@ -61,5 +61,101 @@ describe('copyAuditionBlock', () => {
     expect(right[0]).toBeCloseTo(-0.8, 6);
     expect(right[1]).toBe(0);
     expect(right[2]).toBe(0);
+  });
+});
+
+
+describe('renderAuditionBlock', () => {
+  it('renders both versions once at the same absolute sample position', () => {
+    const calls: Array<{ name: string; position: number; frames: number }> = [];
+    const before = {
+      renderBlock(position: number, frames: number, left: Float32Array, right: Float32Array) {
+        calls.push({ name: 'before', position, frames });
+        for (let i = 0; i < frames; i++) {
+          left[i] = (position + i) / 100;
+          right[i] = -(position + i) / 100;
+        }
+      },
+    };
+    const after = {
+      renderBlock(position: number, frames: number, left: Float32Array, right: Float32Array) {
+        calls.push({ name: 'after', position, frames });
+        for (let i = 0; i < frames; i++) {
+          left[i] = (position + i) / 50;
+          right[i] = -(position + i) / 50;
+        }
+      },
+    };
+    const scratch: StereoAuditionBuffers = {
+      beforeL: new Float32Array(4),
+      beforeR: new Float32Array(4),
+      afterL: new Float32Array(4),
+      afterR: new Float32Array(4),
+    };
+    const left = new Float32Array(3);
+    const right = new Float32Array(3);
+
+    renderAuditionBlock(before, after, 1200, 'after', scratch, left, right);
+
+    expect(calls).toEqual([
+      { name: 'before', position: 1200, frames: 3 },
+      { name: 'after', position: 1200, frames: 3 },
+    ]);
+    expect(left[0]).toBeCloseTo(24, 6);
+    expect(left[2]).toBeCloseTo(24.04, 5);
+    expect(right[0]).toBeCloseTo(-24, 6);
+    expect(right[2]).toBeCloseTo(-24.04, 5);
+  });
+
+  it('uses the same-position before block as the source when selecting A', () => {
+    const makeRenderer = (offset: number) => ({
+      renderBlock(position: number, frames: number, left: Float32Array, right: Float32Array) {
+        for (let i = 0; i < frames; i++) {
+          left[i] = position + i + offset;
+          right[i] = -(position + i + offset);
+        }
+      },
+    });
+    const scratch: StereoAuditionBuffers = {
+      beforeL: new Float32Array(2), beforeR: new Float32Array(2),
+      afterL: new Float32Array(2), afterR: new Float32Array(2),
+    };
+    const left = new Float32Array(2);
+    const right = new Float32Array(2);
+
+    renderAuditionBlock(makeRenderer(10), makeRenderer(20), 50, 'before', scratch, left, right);
+
+    expect([...left]).toEqual([60, 61]);
+    expect([...right]).toEqual([-60, -61]);
+  });
+
+  it('crossfades rendered blocks and rejects undersized scratch buffers', () => {
+    const makeRenderer = (value: number) => ({
+      renderBlock(_position: number, frames: number, left: Float32Array, right: Float32Array) {
+        left.fill(value, 0, frames);
+        right.fill(-value, 0, frames);
+      },
+    });
+    const scratch: StereoAuditionBuffers = {
+      beforeL: new Float32Array(2), beforeR: new Float32Array(2),
+      afterL: new Float32Array(2), afterR: new Float32Array(2),
+    };
+    const left = new Float32Array(2);
+    const right = new Float32Array(2);
+
+    renderAuditionBlock(
+      makeRenderer(0.2), makeRenderer(0.6), 900, 'after', scratch, left, right,
+      { from: 'before', totalFrames: 2, elapsedFrames: 0 },
+    );
+    expect(left[0]).toBeCloseTo(0.4, 6);
+    expect(left[1]).toBeCloseTo(0.6, 6);
+    expect(right[0]).toBeCloseTo(-0.4, 6);
+    expect(right[1]).toBeCloseTo(-0.6, 6);
+
+    expect(() => renderAuditionBlock(
+      makeRenderer(0), makeRenderer(1), 0, 'after',
+      { ...scratch, afterR: new Float32Array(1) },
+      left, right,
+    )).toThrow(RangeError);
   });
 });
