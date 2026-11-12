@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import type { ProcessorNodeState } from '../audio/model/types';
 import { PROCESSOR_DEFINITIONS, getDefinition, formatParam } from '../audio/dsp/registry';
-import type { ParamSpec, ProcessorCategory } from '../audio/dsp/types';
+import type { ParamSpec, ProcessorCategory, ProcessorMeter } from '../audio/dsp/types';
 import { useApp } from '../state/store';
 import type { ChainScope } from '../audio/model/project';
 import { Badge, Button, HelpTip, IconButton, Modal, ParamSlider, Select, Toggle } from './Primitives';
 import { EQCurve, GainReductionMeter } from './viz';
 import { clamp } from '../audio/dsp/util';
+import { DYNAMIC_EQ_PRESETS } from '../audio/dsp/processors/dynamicEq';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -35,7 +36,7 @@ export function Rack({
   processors: ProcessorNodeState[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  meters?: Record<string, { reduction?: number }>;
+  meters?: Record<string, ProcessorMeter>;
   emptyHint?: string;
   filterCategory?: ProcessorCategory | 'effects' | null;
 }) {
@@ -186,7 +187,7 @@ export function Rack({
 
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
-                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'deesser' || node.type === 'limiter') && (
+                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'deesser' || node.type === 'limiter') && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-2xs text-ink-500">Gain reduction</span>
                       <GainReductionMeter reductionDb={reduction} height={8} />
@@ -194,7 +195,24 @@ export function Rack({
                     </div>
                   )}
 
-                  {(node.type === 'compressor' || node.type === 'multibandComp') && (
+                  {node.type === 'dynamicEq' && (
+                    <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {[0, 1, 2, 3].map((bandIndex) => {
+                        const amount = Math.abs(meters?.[node.id]?.bands?.[bandIndex] ?? 0);
+                        return (
+                          <div key={bandIndex} className="min-w-0 rounded-lg border border-white/[.06] bg-black/15 p-2">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">Band {bandIndex + 1}</span>
+                              <span className="font-mono text-[9px] text-ink-400">{amount > 0.05 ? `-${amount.toFixed(1)}` : '0.0'} dB</span>
+                            </div>
+                            <GainReductionMeter reductionDb={amount} height={6} />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq') && (
                     <SidechainSelect scope={scope} trackId={trackId} node={node} />
                   )}
                 </div>
@@ -274,7 +292,9 @@ function SidechainSelect({ scope, trackId, node }: { scope: ChainScope; trackId:
         onChange={(value) => useApp.getState().setProcessorSidechain(scope, trackId, node.id, value || null)}
       />
       <p className="mt-1 text-2xs text-ink-500">
-        The key signal changes what the detector hears, not the audio that is processed.
+        {node.type === 'dynamicEq'
+          ? 'Each active EQ band filters the external key at its own centre frequency before detection.'
+          : 'The key signal changes what the detector hears, not the audio that is processed.'}
       </p>
     </div>
   );
@@ -291,6 +311,7 @@ function ProcessorParams({
   node: ProcessorNodeState;
   advanced: boolean;
 }) {
+  const [dynamicEqPreset, setDynamicEqPreset] = useState('');
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -301,10 +322,32 @@ function ProcessorParams({
     groups.get(group)!.push(spec);
   }
   const update = (key: string, value: number) => {
+    if (node.type === 'dynamicEq') setDynamicEqPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
+  };
+  const applyDynamicEqPreset = (presetId: string) => {
+    const preset = DYNAMIC_EQ_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setDynamicEqPreset(preset.id);
   };
   return (
     <div className="space-y-2">
+      {node.type === 'dynamicEq' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Dynamic EQ starting point"
+            value={dynamicEqPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...DYNAMIC_EQ_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyDynamicEqPreset}
+          />
+          {dynamicEqPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {DYNAMIC_EQ_PRESETS.find((preset) => preset.id === dynamicEqPreset)?.description} Detector and band controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {[...groups.entries()].map(([group, specs], index) => (
         <details key={group} open={index === 0} className="group rounded border border-ink-700/70 bg-ink-900/40">
           <summary className="cursor-pointer list-none px-2 py-1.5 text-2xs uppercase tracking-wider text-ink-400 hover:text-ink-200">

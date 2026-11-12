@@ -13,6 +13,7 @@ The suite uses synthetic signals only — no fixtures with unknown provenance.
 | FFT | forward/inverse round-trip error < 1e-8 |
 | Biquad | +6 dB bell has ~6 dB gain at centre and near unity an octave away |
 | Parametric EQ | a 1 kHz sine is amplified by ~6 dB through a +6 dB bell; DC is removed by a 100 Hz high-pass |
+| Dynamic EQ | Peak/RMS detection, stereo linking, frequency-matched external keys, parameter automation, reset, and smoothed gain changes |
 | Compressor | a signal over threshold is reduced and reports real gain reduction |
 | Limiter | output stays under a -1 dBTP ceiling with lookahead, and GR is reported |
 | Saturation | output remains finite and differs from input (harmonics added) |

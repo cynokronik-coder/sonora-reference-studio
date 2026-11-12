@@ -26,6 +26,7 @@ export function designBiquad(
   gainDb: number,
   q: number,
   sampleRate: number,
+  output?: BiquadCoeffs,
 ): BiquadCoeffs {
   const nyquist = sampleRate * 0.5;
   const f = Math.min(Math.max(freq, 10), nyquist * 0.99);
@@ -113,13 +114,13 @@ export function designBiquad(
       break;
   }
 
-  return {
-    b0: b0 / a0,
-    b1: b1 / a0,
-    b2: b2 / a0,
-    a1: a1 / a0,
-    a2: a2 / a0,
-  };
+  const coeffs = output ?? { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
+  coeffs.b0 = b0 / a0;
+  coeffs.b1 = b1 / a0;
+  coeffs.b2 = b2 / a0;
+  coeffs.a1 = a1 / a0;
+  coeffs.a2 = a2 / a0;
+  return coeffs;
 }
 
 /** Direct-form-I biquad with double-precision state. */
@@ -133,6 +134,22 @@ export class Biquad {
   private x2 = 0;
   private y1 = 0;
   private y2 = 0;
+  private readonly coeffScratch: BiquadCoeffs = { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
+  private smoothingRemaining = 0;
+  private targetB0 = 1;
+  private targetB1 = 0;
+  private targetB2 = 0;
+  private targetA1 = 0;
+  private targetA2 = 0;
+  private stepB0 = 0;
+  private stepB1 = 0;
+  private stepB2 = 0;
+  private stepA1 = 0;
+  private stepA2 = 0;
+
+  get isSmoothing(): boolean {
+    return this.smoothingRemaining > 0;
+  }
 
   constructor(coeffs?: BiquadCoeffs) {
     if (coeffs) this.set(coeffs);
@@ -144,17 +161,71 @@ export class Biquad {
     this.b2 = c.b2;
     this.a1 = c.a1;
     this.a2 = c.a2;
+    this.smoothingRemaining = 0;
+  }
+
+  setSmoothed(c: BiquadCoeffs, sampleCount: number): void {
+    const count = Math.max(0, Math.floor(sampleCount));
+    if (count === 0) {
+      this.set(c);
+      return;
+    }
+    if (c.b0 === this.b0 && c.b1 === this.b1 && c.b2 === this.b2 && c.a1 === this.a1 && c.a2 === this.a2) {
+      this.smoothingRemaining = 0;
+      return;
+    }
+    this.targetB0 = c.b0;
+    this.targetB1 = c.b1;
+    this.targetB2 = c.b2;
+    this.targetA1 = c.a1;
+    this.targetA2 = c.a2;
+    this.smoothingRemaining = count;
+    this.stepB0 = (this.targetB0 - this.b0) / count;
+    this.stepB1 = (this.targetB1 - this.b1) / count;
+    this.stepB2 = (this.targetB2 - this.b2) / count;
+    this.stepA1 = (this.targetA1 - this.a1) / count;
+    this.stepA2 = (this.targetA2 - this.a2) / count;
+  }
+
+  private advanceCoefficients(): void {
+    if (this.smoothingRemaining <= 0) return;
+    this.b0 += this.stepB0;
+    this.b1 += this.stepB1;
+    this.b2 += this.stepB2;
+    this.a1 += this.stepA1;
+    this.a2 += this.stepA2;
+    this.smoothingRemaining -= 1;
+    if (this.smoothingRemaining === 0) {
+      this.b0 = this.targetB0;
+      this.b1 = this.targetB1;
+      this.b2 = this.targetB2;
+      this.a1 = this.targetA1;
+      this.a2 = this.targetA2;
+    }
   }
 
   configure(type: FilterType, freq: number, gainDb: number, q: number, sampleRate: number): void {
     this.set(designBiquad(type, freq, gainDb, q, sampleRate));
   }
 
+  configureSmoothed(
+    type: FilterType,
+    freq: number,
+    gainDb: number,
+    q: number,
+    sampleRate: number,
+    sampleCount: number,
+  ): void {
+    this.setSmoothed(designBiquad(type, freq, gainDb, q, sampleRate, this.coeffScratch), sampleCount);
+  }
+
   reset(): void {
     this.x1 = this.x2 = this.y1 = this.y2 = 0;
+    this.smoothingRemaining = 0;
   }
 
   process(x: number): number {
+    this.advanceCoefficients();
     const y = this.b0 * x + this.b1 * this.x1 + this.b2 * this.x2 - this.a1 * this.y1 - this.a2 * this.y2;
     this.x2 = this.x1;
     this.x1 = x;
@@ -164,11 +235,11 @@ export class Biquad {
   }
 
   processBlock(buf: Float32Array, n: number): void {
-    const { b0, b1, b2, a1, a2 } = this;
     let { x1, x2, y1, y2 } = this;
     for (let i = 0; i < n; i++) {
+      this.advanceCoefficients();
       const x = buf[i];
-      const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+      const y = this.b0 * x + this.b1 * x1 + this.b2 * x2 - this.a1 * y1 - this.a2 * y2;
       x2 = x1;
       x1 = x;
       y2 = y1;

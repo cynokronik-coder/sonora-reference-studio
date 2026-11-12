@@ -30,6 +30,9 @@ Clip fill (offset, gain, fades)
 Solo logic: if any track is soloed, only soloed tracks contribute. Muted buses are zeroed. Reference tracks behave like
 audio tracks and can be auditioned independently.
 
+External keys are copied from source tracks' raw clip buffers before track processing and faders. Track, bus and master
+processor chains receive the routed key; Dynamic EQ applies a separate center-frequency band-pass detector to each band.
+
 ## The chain
 
 `ProcessorChain` receives `{ id, type, enabled, params }[]`. It:
@@ -82,7 +85,8 @@ relative gates.
 
 Lanes are stored per track: `volume`, `pan`, or a processor parameter keyed by processor id. `valueAtTime` interpolates
 linearly or exponentially. Automation is evaluated at block start, applied immediately before the chain is processed, and
-only for parameters that actually have lanes. Structural parameter sync happens outside the render loop.
+only for parameters that actually have lanes. Dynamic EQ smooths automated frequency, gain and output changes rather
+than stepping filter coefficients abruptly. Structural parameter sync happens outside the render loop.
 
 ## Latency compensation
 

@@ -10,6 +10,7 @@ import { buildAssistantContext } from '../audio/ai/context';
 import { createValidatedAiProposal } from '../audio/ai/proposals';
 import { realtimeHost } from '../audio/engine/realtime';
 import type { EngineAsset } from '../audio/engine/renderer';
+import type { ProcessorMeter } from '../audio/dsp/types';
 import { createProcessorNode, createProject as newProject, createTrack, createClip, createBus, defaultMatchSettings, uid } from '../audio/model/defaults';
 import type {
   AudioAssetMeta,
@@ -1504,7 +1505,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 }));
 
-export let latestMeters: Record<string, Record<string, { reduction?: number }>> = {};
+export let latestMeters: Record<string, Record<string, ProcessorMeter>> = {};
 
 function timelineDuration(project: ProjectState): number {
   let end = 0;

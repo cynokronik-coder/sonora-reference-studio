@@ -19,8 +19,11 @@ response of the biquad cascade (frequency sampling + inverse FFT + windowing), a
 minimum-phase path is default.
 
 ### Dynamic EQ
-Four bell bands whose gain is driven by a bandpass detector. Threshold, maximum cut, attack and release per band. Gain
-reduction is reported for the rack meter and is genuinely level-dependent.
+Four bell bands with independent left/right band-pass detectors, selectable Peak or RMS mode, configurable stereo link,
+and optional frequency-aware external keys. Threshold, ratio, knee, maximum cut, attack, release and RMS window are
+available per band. Detector histories reset with the processor; frequency and dynamic-gain coefficient changes are
+smoothed. Added controls default to the prior fixed-ratio, hard-knee, Peak, fully linked behavior for older projects.
+Overall and per-band gain reduction are reported to the rack.
 
 ### Resonance Suppressor
 Three high-Q dynamic notches (Q 1–30) with sensitivity and maximum cut. Frequencies can be set from the analysis engine's
