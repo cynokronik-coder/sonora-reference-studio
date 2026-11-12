@@ -31,8 +31,12 @@ are reported to the processor rack. Factory starting points include Vocal harshn
 High-frequency smoothing and Gentle dynamic balance.
 
 ### Resonance Suppressor
-Three high-Q dynamic notches (Q 1–30) with sensitivity and maximum cut. Frequencies can be set from the analysis engine's
-resonance report.
+Three high-Q dynamic notches (Q 1–30) with per-channel signed-signal band-pass detection. The detector selects the
+frequency region before measuring its envelope, avoiding rectification-generated harmonic triggers. Stereo Link can
+operate dual-mono at 0% or use a shared maximum detector at 100%. Attack and release are adjustable; notch frequency/Q
+changes and attenuation transitions are smoothed. Dry/wet is a true parallel blend against a preserved dry copy, and
+output trim and mix changes ramp over 20 ms. Per-band and maximum gain reduction are reported to the rack.
+Factory starting points include Gentle resonance control, Vocal harshness, Snare ring and Mix harshness.
 
 ## Dynamics
 
