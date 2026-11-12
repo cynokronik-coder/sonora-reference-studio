@@ -23,8 +23,10 @@ Four bell bands whose gain is driven by a bandpass detector. Threshold, maximum 
 reduction is reported for the rack meter and is genuinely level-dependent.
 
 ### Resonance Suppressor
-Three high-Q dynamic notches (Q 1–30) with sensitivity and maximum cut. Frequencies can be set from the analysis engine's
-resonance report.
+Three high-Q dynamic notches (Q 1–30) with independent left/right detection, adjustable stereo linking, attack/release,
+sensitivity and maximum cut. Notch frequency, Q and attenuation changes are smoothed. Dry/wet is a true parallel blend,
+with output gain applied after the blend. The new detection controls default to the prior 2 ms attack, 60 ms release and
+fully linked behavior so older parameter maps retain their response.
 
 ## Dynamics
 
@@ -41,8 +43,11 @@ Three bands from LR4 crossovers at adjustable splits. Each band runs an independ
 ratio, attack, release, knee, makeup, character and mix. Bands sum after compression.
 
 ### De-esser
-LR4 split above a tunable frequency; the high band is detected and dynamically reduced. Wideband mode applies the same
-reduction to the whole signal. Per-block gain reduction is metered.
+Fourth-order Linkwitz–Riley split above a tunable frequency; the high band is detected per channel and dynamically
+reduced. Adjustable ratio and stereo linking support dual-mono through linked detection. Wideband mode applies the
+same reduction to the recombined signal. Frequency, mode, dry/wet and output changes are smoothed; mix is a true
+parallel blend. Added controls default to the previous 5:1 detector response and fully linked behavior for older
+parameter maps.
 
 ### Transient Shaper
 Fast vs slow envelope comparison: transient energy drives attack gain, sustained energy drives sustain gain. Sensitivity,

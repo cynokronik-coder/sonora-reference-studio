@@ -6,6 +6,7 @@ import { Compressor } from '../processors/compressor';
 import { Limiter } from '../processors/limiter';
 import { Saturator } from '../processors/saturation';
 import { MultibandCompressor } from '../processors/multiband';
+import { ProcessorChain } from '../chain';
 import { createDefaultParams, PROCESSOR_DEFINITIONS } from '../registry';
 import { Lr4Crossover } from '../crossover';
 import { analyzeLoudness } from '../../analysis/loudness';
@@ -105,6 +106,27 @@ describe('biquad and EQ', () => {
 });
 
 describe('dynamics', () => {
+  it('keeps resonance suppression and de-essing fully transparent when their chain nodes are bypassed', () => {
+    const chain = new ProcessorChain(SR, 256);
+    chain.update([
+      { id: 'resonance', type: 'resonance', enabled: false, params: { ...createDefaultParams('resonance'), output: 12, mix: 0 } },
+      { id: 'deesser', type: 'deesser', enabled: false, params: { ...createDefaultParams('deesser'), output: 12, mix: 0 } },
+    ]);
+    const left = new Float32Array(1024);
+    const right = new Float32Array(1024);
+    for (let i = 0; i < left.length; i++) {
+      left[i] = 0.6 * Math.sin((2 * Math.PI * 3200 * i) / SR);
+      right[i] = 0.3 * Math.sin((2 * Math.PI * 8500 * i) / SR);
+    }
+    const originalL = left.slice();
+    const originalR = right.slice();
+
+    chain.process(left, right, left.length);
+
+    expect(left).toEqual(originalL);
+    expect(right).toEqual(originalR);
+  });
+
   it('keeps the compressor sidechain filter independent between stereo channels', () => {
     const process = (left: Float32Array, right: Float32Array) => {
       const comp = new Compressor();

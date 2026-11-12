@@ -1,7 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ProcessorNodeState } from '../audio/model/types';
 import { PROCESSOR_DEFINITIONS, getDefinition, formatParam } from '../audio/dsp/registry';
 import type { ParamSpec, ProcessorCategory } from '../audio/dsp/types';
+import { DEESSER_PRESETS } from '../audio/dsp/processors/deesser';
+import { RESONANCE_PRESETS } from '../audio/dsp/processors/resonance';
 import { useApp } from '../state/store';
 import type { ChainScope } from '../audio/model/project';
 import { Badge, Button, HelpTip, IconButton, Modal, ParamSlider, Select, Toggle } from './Primitives';
@@ -35,7 +37,7 @@ export function Rack({
   processors: ProcessorNodeState[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  meters?: Record<string, { reduction?: number }>;
+  meters?: Record<string, { reduction?: number; bands?: number[] }>;
   emptyHint?: string;
   filterCategory?: ProcessorCategory | 'effects' | null;
 }) {
@@ -101,7 +103,8 @@ export function Rack({
         {visibleProcessors.map(({ node, index, definition: def }) => {
           if (!def) return null;
           const isSelected = node.id === selectedId;
-          const reduction = meters?.[node.id]?.reduction ?? 0;
+          const processorMeter = meters?.[node.id];
+          const reduction = processorMeter?.reduction ?? 0;
           return (
             <div
               key={node.id}
@@ -184,9 +187,33 @@ export function Rack({
                     </div>
                   )}
 
+                  {node.type === 'resonance' && processorMeter?.bands && (
+                    <div className="mb-3 grid grid-cols-3 gap-2">
+                      {processorMeter.bands.map((value, bandIndex) => {
+                        const reductionDb = Math.abs(value);
+                        return (
+                          <div key={bandIndex} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">Notch {bandIndex + 1}</span>
+                              <span className="font-mono text-[10px] text-signal-amber">
+                                {reductionDb > 0.05 ? `-${reductionDb.toFixed(1)}` : '0.0'} dB
+                              </span>
+                            </div>
+                            <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
+                              <div
+                                className="h-full rounded-full bg-[#A77AFF] transition-[width]"
+                                style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
-                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'deesser' || node.type === 'limiter') && (
+                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'resonance' || node.type === 'deesser' || node.type === 'limiter') && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-2xs text-ink-500">Gain reduction</span>
                       <GainReductionMeter reductionDb={reduction} height={8} />
@@ -291,6 +318,12 @@ function ProcessorParams({
   node: ProcessorNodeState;
   advanced: boolean;
 }) {
+  const [resonancePreset, setResonancePreset] = useState('');
+  const [deEsserPreset, setDeEsserPreset] = useState('');
+  useEffect(() => {
+    setResonancePreset('');
+    setDeEsserPreset('');
+  }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -301,10 +334,46 @@ function ProcessorParams({
     groups.get(group)!.push(spec);
   }
   const update = (key: string, value: number) => {
+    if (node.type === 'resonance') setResonancePreset('');
+    if (node.type === 'deesser') setDeEsserPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
+  };
+  const applyResonancePreset = (presetId: string) => {
+    const preset = RESONANCE_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setResonancePreset(preset.id);
+  };
+  const applyDeEsserPreset = (presetId: string) => {
+    const preset = DEESSER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setDeEsserPreset(preset.id);
   };
   return (
     <div className="space-y-2">
+      {node.type === 'resonance' && (
+        <Select
+          label="Resonance starting point"
+          value={resonancePreset}
+          options={[
+            { value: '', label: 'Choose a starting point…' },
+            ...RESONANCE_PRESETS.map((preset) => ({ value: preset.id, label: preset.name })),
+          ]}
+          onChange={applyResonancePreset}
+        />
+      )}
+      {node.type === 'deesser' && (
+        <Select
+          label="De-esser starting point"
+          value={deEsserPreset}
+          options={[
+            { value: '', label: 'Choose a starting point…' },
+            ...DEESSER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name })),
+          ]}
+          onChange={applyDeEsserPreset}
+        />
+      )}
       {[...groups.entries()].map(([group, specs], index) => (
         <details key={group} open={index === 0} className="group rounded border border-ink-700/70 bg-ink-900/40">
           <summary className="cursor-pointer list-none px-2 py-1.5 text-2xs uppercase tracking-wider text-ink-400 hover:text-ink-200">
