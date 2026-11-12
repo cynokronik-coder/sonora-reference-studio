@@ -154,7 +154,8 @@ export default function Analysis() {
               </table>
             </div>
             <div className="mt-2 space-y-1 text-2xs text-ink-500">
-              <p>Tempo estimate: {report.rhythm.tempoBpm || 'not detected'} BPM · confidence {Math.round(report.rhythm.beatConfidence * 100)}% · onset density {report.rhythm.onsetDensity.toFixed(2)}/s.</p>
+              <p>Tempo estimate: {report.rhythm.tempoBpm || 'not detected'} BPM · tempo confidence {Math.round(report.rhythm.beatConfidence * 100)}% · raw onset activity {report.rhythm.onsetDensity.toFixed(2)}/s.</p>
+              <p>Grouped transient events: {(report.rhythm.groupedOnsetDensity ?? report.rhythm.onsetDensity).toFixed(2)}/s · beat-grid fit {Math.round((report.rhythm.beatGridConfidence ?? 0) * 100)}% · off-grid activity {Math.round((report.rhythm.offBeatRatio ?? 0) * 100)}%.</p>
               {!!report.rhythm.tempoCandidatesBpm?.length && report.rhythm.tempoCandidatesBpm.length > 1 && (
                 <p>Possible half/double-time pulse: {report.rhythm.tempoCandidatesBpm.join(' / ')} BPM. Confirm the beat by listening.</p>
               )}

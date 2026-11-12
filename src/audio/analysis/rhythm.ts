@@ -13,6 +13,12 @@ export interface RhythmReport {
   tempoCandidatesBpm?: number[];
   /** Robust range of local tempo estimates when the track contains measurable tempo changes. */
   tempoRangeBpm?: { min: number; max: number } | null;
+  /** Fraction of grouped transient strength that aligns with the estimated beat grid. */
+  beatGridConfidence?: number;
+  /** Fraction of grouped transient strength away from the estimated beat grid. */
+  offBeatRatio?: number;
+  /** Transient events per second after collapsing closely spaced FFT peaks. */
+  groupedOnsetDensity?: number;
   onsetDensity: number;
   punchScore: number;
   attackSharpness: number;
@@ -55,6 +61,9 @@ export function analyzeRhythm(
       beatConfidence: 0,
       tempoCandidatesBpm: [],
       tempoRangeBpm: null,
+      beatGridConfidence: 0,
+      offBeatRatio: 0,
+      groupedOnsetDensity: 0,
       onsetDensity: 0,
       punchScore: 0,
       attackSharpness: 0,
@@ -128,21 +137,11 @@ export function analyzeRhythm(
   options.onProgress?.('Preparing onset envelope', 0.58);
 
   const frameRate = sampleRate / hop;
-  options.onProgress?.('Estimating tempo', 0.6);
-  const tempo = estimateTempo(
-    onset,
-    frameRate,
-    (fraction) => options.onProgress?.('Estimating tempo', 0.6 + fraction * 0.22),
-  );
-  const { tempoBpm, confidence } = tempo;
-  options.onProgress?.('Scoring attacks', 0.83);
-  // adaptiveOnsetEnvelope already removes local background and noise. A
-  // fixed normalized gate avoids loud sections raising the threshold for quiet
-  // percussion elsewhere in the same track.
+  // Keep a raw peak count for compatibility, but create a second event stream
+  // that collapses very close FFT peaks from one transient into one event.
   const onsetThreshold = 0.06;
   let onsetCount = 0;
   for (let i = 1; i < onset.length - 1; i++) {
-    // Strict left comparison resolves flat-topped peaks to one event.
     if (onset[i] > onsetThreshold && onset[i] > onset[i - 1] && onset[i] >= onset[i + 1]) onsetCount++;
   }
   const onsetDensity = onsetCount / Math.max(1, duration);
@@ -151,6 +150,21 @@ export function analyzeRhythm(
     0,
     1,
   );
+  options.onProgress?.('Grouping transients', 0.59);
+  const onsetEvents = groupOnsetEvents(onset, frameRate, onsetThreshold);
+  const groupedEnvelope = new Array<number>(onset.length).fill(0);
+  for (const event of onsetEvents) groupedEnvelope[event.frame] = event.strength;
+  const groupedOnsetDensity = onsetEvents.length / Math.max(1, duration);
+
+  options.onProgress?.('Estimating tempo', 0.6);
+  const tempo = estimateTempo(
+    groupedEnvelope,
+    frameRate,
+    (fraction) => options.onProgress?.('Estimating tempo', 0.6 + fraction * 0.22),
+  );
+  const { tempoBpm, confidence } = tempo;
+  const grid = scoreBeatGrid(onsetEvents, tempoBpm, frameRate);
+  options.onProgress?.('Scoring attacks', 0.83);
 
   const segments = options.includeSections === false
     ? []
@@ -167,6 +181,9 @@ export function analyzeRhythm(
     beatConfidence: confidence,
     tempoCandidatesBpm: tempo.candidatesBpm,
     tempoRangeBpm: tempo.rangeBpm,
+    beatGridConfidence: grid.confidence,
+    offBeatRatio: grid.offBeatRatio,
+    groupedOnsetDensity,
     onsetDensity,
     punchScore: clamp(attackSharpness * 0.7 + clamp(onsetDensity / 3, 0, 1) * 0.3, 0, 1),
     attackSharpness,
@@ -229,6 +246,99 @@ export function adaptiveOnsetEnvelope(
   }
   if (!flux.length) onProgress?.(1);
   return onset;
+}
+
+
+export interface OnsetEvent {
+  /** Frame index of the strongest peak in the grouped transient. */
+  frame: number;
+  /** Normalized peak strength used for energy-weighted beat-grid scoring. */
+  strength: number;
+}
+
+/**
+ * Collapse nearby local maxima into one transient event. The short refractory
+ * interval removes FFT-window ringing and double-counted attacks without
+ * merging ordinary sixteenth-note and syncopated hits at common tempos.
+ */
+export function groupOnsetEvents(
+  onset: number[],
+  frameRate: number,
+  threshold = 0.06,
+  refractoryMs = 45,
+): OnsetEvent[] {
+  const minimumGap = Math.max(1, Math.round((Math.max(1, frameRate) * refractoryMs) / 1000));
+  const events: OnsetEvent[] = [];
+  for (let i = 1; i < onset.length - 1; i++) {
+    const strength = onset[i];
+    if (!(strength > threshold && strength > onset[i - 1] && strength >= onset[i + 1])) continue;
+    const previous = events[events.length - 1];
+    if (previous && i - previous.frame <= minimumGap) {
+      if (strength > previous.strength) {
+        previous.frame = i;
+        previous.strength = strength;
+      }
+    } else {
+      events.push({ frame: i, strength });
+    }
+  }
+  return events;
+}
+
+export interface BeatGridScore {
+  confidence: number;
+  offBeatRatio: number;
+  phaseFrames: number | null;
+}
+
+/**
+ * Find the strongest phase for the measured BPM and calculate the weighted
+ * share of transient energy close to that beat grid. Off-grid energy is kept
+ * explicit because it may be syncopation, subdivisions, or ornamentation—not
+ * automatically classified as an error.
+ */
+export function scoreBeatGrid(
+  events: OnsetEvent[],
+  tempoBpm: number,
+  frameRate: number,
+): BeatGridScore {
+  if (events.length < 4 || !(tempoBpm > 0) || !(frameRate > 0)) {
+    return { confidence: 0, offBeatRatio: 0, phaseFrames: null };
+  }
+  const periodFrames = (60 * frameRate) / tempoBpm;
+  if (!Number.isFinite(periodFrames) || periodFrames < 2) {
+    return { confidence: 0, offBeatRatio: 0, phaseFrames: null };
+  }
+  const totalStrength = events.reduce((sum, event) => sum + Math.max(0, event.strength), 0);
+  if (!(totalStrength > 0)) {
+    return { confidence: 0, offBeatRatio: 0, phaseFrames: null };
+  }
+
+  const tolerance = Math.max(1, periodFrames * 0.18);
+  const phaseSteps = Math.max(12, Math.min(256, Math.ceil(periodFrames)));
+  let bestScore = -1;
+  let bestPhase = 0;
+  for (let step = 0; step < phaseSteps; step++) {
+    const phase = (step / phaseSteps) * periodFrames;
+    let score = 0;
+    for (const event of events) {
+      const relative = ((event.frame - phase) % periodFrames + periodFrames) % periodFrames;
+      const distance = Math.min(relative, periodFrames - relative);
+      const alignment = Math.max(0, 1 - distance / tolerance);
+      score += Math.max(0, event.strength) * alignment;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestPhase = phase;
+    }
+  }
+
+  const confidence = clamp(bestScore / totalStrength, 0, 1);
+  return {
+    confidence,
+    offBeatRatio: clamp(1 - confidence, 0, 1),
+    phaseFrames: bestPhase,
+  };
 }
 
 interface TempoWindowEstimate {
