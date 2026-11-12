@@ -90,6 +90,10 @@ The linear-phase EQ's 512-tap FIR has 256 samples of group delay. `ProjectRender
 latency and inserts integer delays on the other paths, including the intermediate bus stage. Offline export renders
 `totalLatency` extra frames and discards the head. All paths therefore remain sample-aligned.
 
+The multiband processor uses separate LR4 crossover state for programme and external-key paths. Crossover histories
+are reset when the engine is prepared at a new sample rate; frequency and band-mode changes are smoothed in the
+processor without allocating in its block-processing loop.
+
 ## Adding a processor
 
 1. Create `src/audio/dsp/processors/myProcessor.ts` implementing `AudioProcessor`.

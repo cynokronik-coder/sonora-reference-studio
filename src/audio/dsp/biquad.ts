@@ -26,6 +26,7 @@ export function designBiquad(
   gainDb: number,
   q: number,
   sampleRate: number,
+  output?: BiquadCoeffs,
 ): BiquadCoeffs {
   const nyquist = sampleRate * 0.5;
   const f = Math.min(Math.max(freq, 10), nyquist * 0.99);
@@ -113,13 +114,13 @@ export function designBiquad(
       break;
   }
 
-  return {
-    b0: b0 / a0,
-    b1: b1 / a0,
-    b2: b2 / a0,
-    a1: a1 / a0,
-    a2: a2 / a0,
-  };
+  const coeffs = output ?? { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
+  coeffs.b0 = b0 / a0;
+  coeffs.b1 = b1 / a0;
+  coeffs.b2 = b2 / a0;
+  coeffs.a1 = a1 / a0;
+  coeffs.a2 = a2 / a0;
+  return coeffs;
 }
 
 /** Direct-form-I biquad with double-precision state. */
@@ -133,6 +134,7 @@ export class Biquad {
   private x2 = 0;
   private y1 = 0;
   private y2 = 0;
+  private readonly coeffScratch: BiquadCoeffs = { b0: 1, b1: 0, b2: 0, a1: 0, a2: 0 };
 
   constructor(coeffs?: BiquadCoeffs) {
     if (coeffs) this.set(coeffs);
@@ -147,7 +149,7 @@ export class Biquad {
   }
 
   configure(type: FilterType, freq: number, gainDb: number, q: number, sampleRate: number): void {
-    this.set(designBiquad(type, freq, gainDb, q, sampleRate));
+    this.set(designBiquad(type, freq, gainDb, q, sampleRate, this.coeffScratch));
   }
 
   reset(): void {
