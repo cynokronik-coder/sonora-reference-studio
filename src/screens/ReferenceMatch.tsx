@@ -43,6 +43,9 @@ export default function ReferenceMatch() {
     setMatchAuditionMode,
     setMatchAuditionLoudnessMatch,
     clearMatchAudition,
+    setLoop,
+    seek,
+    transport,
     importFiles,
     analyzeProjectAssets,
     removeReference,
@@ -120,6 +123,14 @@ export default function ReferenceMatch() {
     lowSideRatioDb: targetComparisonSection?.lowSideRatioDb ?? targetReport.stereo.lowSideRatioDb,
   } : null;
   const targetLraFallback = Boolean(targetComparisonSection && !Number.isFinite(targetComparisonSection.lra));
+  const selectedSectionRange = targetComparisonSection && targetComparisonSection.label !== 'full' &&
+    Number.isFinite(targetComparisonSection.start) && Number.isFinite(targetComparisonSection.end) &&
+    targetComparisonSection.end > targetComparisonSection.start
+    ? { start: targetComparisonSection.start, end: targetComparisonSection.end }
+    : null;
+  const selectedSectionLoopActive = Boolean(selectedSectionRange && transport.loopEnabled &&
+    Math.abs(transport.loopStart - selectedSectionRange.start) < 0.01 &&
+    Math.abs(transport.loopEnd - selectedSectionRange.end) < 0.01);
   const referenceLraFallback = Boolean(dynamicsReference?.metricFallbacks.includes('LRA'));
   const comparison = targetReport && targetSectionMetrics && loudnessReference && dynamicsReference && stereoReference
     ? [
@@ -576,7 +587,7 @@ export default function ReferenceMatch() {
                     {matchAudition && <Badge tone="accent">Ready</Badge>}
                   </div>
                   <p className="mt-1 max-w-2xl text-2xs leading-relaxed text-ink-400">
-                    The chain is generated from your selected section measurements. A/B audition still plays the full project at the shared timeline position; it does not crop playback or change the export range.
+                    The A/B engines stay aligned on the same project timeline. Loop the selected target section to audition only that passage; this monitor loop never changes your export range.
                   </p>
                 </div>
                 <Button
@@ -589,6 +600,35 @@ export default function ReferenceMatch() {
                   {matchAudition ? 'Rebuild audition' : 'Prepare A/B audition'}
                 </Button>
               </div>
+
+              {matchAudition && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-white/[.07] bg-[#0D0D1B]/60 px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-ink-100">Section audition</p>
+                    <p className="mt-0.5 text-2xs text-ink-500">
+                      {selectedSectionRange
+                        ? `Selected passage · ${formatTime(selectedSectionRange.start)}–${formatTime(selectedSectionRange.end)}`
+                        : 'Choose a detected target occurrence to enable section looping.'}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={selectedSectionLoopActive ? 'primary' : 'secondary'}
+                    disabled={!selectedSectionRange}
+                    onClick={() => {
+                      if (selectedSectionLoopActive) {
+                        setLoop(false);
+                      } else if (selectedSectionRange) {
+                        setLoop(true, selectedSectionRange.start, selectedSectionRange.end);
+                        seek(selectedSectionRange.start);
+                      }
+                    }}
+                  >
+                    <Icon name={selectedSectionLoopActive ? 'repeat' : 'repeat'} size={13} />
+                    {selectedSectionLoopActive ? 'Stop section loop' : 'Loop selected section'}
+                  </Button>
+                </div>
+              )}
 
               {matchAudition && (
                 <div className="mt-4 space-y-3 border-t border-white/[.08] pt-3">
