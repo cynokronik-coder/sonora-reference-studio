@@ -188,6 +188,11 @@ export class Compressor implements AudioProcessor {
     this.peakR = 0;
   }
 
+  /** Current maximum channel gain reduction in dB, for parent multiband meters. */
+  get gainReductionDb(): number {
+    return this.grDb;
+  }
+
   meter(): ProcessorMeter {
     return { reduction: this.grDb, peakL: this.peakL, peakR: this.peakR };
   }

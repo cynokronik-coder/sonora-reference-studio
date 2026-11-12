@@ -304,7 +304,8 @@ function SidechainSelect({ scope, trackId, node }: { scope: ChainScope; trackId:
 
 function MultibandCrossoverView({ params }: { params: Record<string, number> }) {
   const low = clamp(params.xLow ?? 200, 40, 600);
-  const high = clamp(Math.max(params.xHigh ?? 4000, low * 2), low * 2, 12000);
+  const minimumHigh = Math.max(800, low + 20);
+  const high = clamp(Math.max(params.xHigh ?? 4000, minimumHigh), minimumHigh, 12000);
   const position = (frequency: number) => (Math.log(frequency / 20) / Math.log(20000 / 20)) * 100;
   const lowWidth = clamp(position(low), 1, 98);
   const midWidth = clamp(position(high) - position(low), 1, 98 - lowWidth);
@@ -357,15 +358,7 @@ function ProcessorParams({
   const update = (key: string, value: number) => {
     if (node.type === 'compressor') setCompressorPreset('');
     if (node.type === 'multibandComp') setMultibandPreset('');
-    const patch: Record<string, number> = { [key]: value };
-    // Keep the two crossover points in a valid 2:1 relationship and update
-    // the paired control together, so the UI never disagrees with the DSP.
-    if (node.type === 'multibandComp' && key === 'xLow') {
-      patch.xHigh = Math.max(node.params.xHigh ?? 4000, value * 2);
-    } else if (node.type === 'multibandComp' && key === 'xHigh') {
-      patch.xLow = Math.min(node.params.xLow ?? 200, value / 2);
-    }
-    useApp.getState().updateProcessorParams(scope, trackId, node.id, patch);
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
     const preset = COMPRESSOR_PRESETS.find((item) => item.id === presetId);

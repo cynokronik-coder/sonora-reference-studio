@@ -72,7 +72,7 @@ describe('Multiband compressor crossover reconstruction', () => {
     processor.setValues(neutralParameters());
     const left = sine(0.2, 73, sampleRate, sampleRate);
     const right = sine(0.17, 6130, sampleRate, sampleRate, 0.23);
-    const blockSizes = [128, 257, 512, 191];
+    const blockSizes = [128, 257, 512, 1024, 191];
     let offset = 0;
     let blockIndex = 0;
     while (offset < left.length) {
@@ -152,6 +152,40 @@ describe('Multiband external sidechain routing', () => {
     expect(processor.meter().reduction ?? 0).toBeGreaterThan(5);
   });
 
+  it('lets a low-frequency external key trigger the low band only', () => {
+    const sampleRate = 48000;
+    const length = sampleRate;
+    const left = sine(0.12, 100, sampleRate, length);
+    const right = sine(0.12, 100, sampleRate, length);
+    const key = sine(0.8, 100, sampleRate, length);
+    const params = neutralParameters();
+    params.xLow = 200;
+    params.xHigh = 2000;
+    params.b0_threshold = -30;
+    params.b0_ratio = 8;
+    params.b0_attack = 0.1;
+    params.b0_release = 100;
+    params.b0_knee = 0;
+    params.b1_on = 0;
+    params.b2_on = 0;
+
+    const processor = new MultibandCompressor();
+    processor.prepare(sampleRate, 512);
+    processor.setValues(params);
+    const keyBlock = new Float32Array(512);
+    for (let offset = 0; offset < length; offset += 512) {
+      const frames = Math.min(512, length - offset);
+      keyBlock.set(key.subarray(offset, offset + frames));
+      processor.setSidechain(keyBlock, keyBlock);
+      processor.process(left.subarray(offset, offset + frames), right.subarray(offset, offset + frames), frames);
+    }
+
+    const bands = processor.meter().bands ?? [];
+    expect(bands[0]).toBeLessThan(-5);
+    expect(Math.abs(bands[1] ?? 0)).toBeLessThan(0.5);
+    expect(Math.abs(bands[2] ?? 0)).toBeLessThan(0.5);
+  });
+
   it('returns to internal band detection when the external key is cleared', () => {
     const sampleRate = 48000;
     const length = sampleRate;
@@ -213,9 +247,4 @@ describe('Multiband factory presets', () => {
     }
   });
 
-  it('never places the upper crossover below twice the lower crossover', () => {
-    for (const preset of MULTIBAND_PRESETS) {
-      expect(preset.values.xHigh).toBeGreaterThanOrEqual((preset.values.xLow ?? 0) * 2);
-    }
-  });
 });
