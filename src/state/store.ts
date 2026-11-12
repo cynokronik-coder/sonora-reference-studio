@@ -8,7 +8,7 @@ import { interpretCommand, suggestionsFor, type AssistantProposal } from '../aud
 import { requestSonoraAi } from '../audio/ai/client';
 import { buildAssistantContext } from '../audio/ai/context';
 import { createValidatedAiProposal } from '../audio/ai/proposals';
-import { realtimeHost } from '../audio/engine/realtime';
+import { realtimeHost, shouldPauseTransport } from '../audio/engine/realtime';
 import type { AuditionMode } from '../audio/engine/audition';
 import type { EngineAsset } from '../audio/engine/renderer';
 import { createProcessorNode, createProject as newProject, createTrack, createClip, createBus, defaultMatchSettings, uid } from '../audio/model/defaults';
@@ -27,6 +27,7 @@ import { allAssetIds, chainFor, cloneProject, findTrack, type ChainScope } from 
 import { BUILT_IN_PRESETS, createPreset, type PresetCategory, type PresetDefinition } from '../audio/presets/library';
 import { computePeaks } from '../lib/peaks';
 import * as db from '../lib/db';
+import { ProjectSaveQueue } from '../lib/project-save-queue';
 import { computeMatchPreview } from '../audio/analysis/preview';
 import { loudnessMatchedMonitorGain } from '../audio/analysis/ab';
 
@@ -249,15 +250,46 @@ interface AppState {
   clearAllData: () => Promise<void>;
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
+const projectSaveQueue = new ProjectSaveQueue<ProjectState>((project) => db.saveProject(project), 700);
 let engineTimer: ReturnType<typeof setTimeout> | null = null;
+let persistenceLifecycleAttached = false;
+let realtimeListenersAttached = false;
+
+function reportProjectSaveError(error: unknown): void {
+  const detail = error instanceof Error ? error.message : String(error);
+  useApp.setState({
+    storageError: describeStorageError(error),
+    toast: `Project autosave failed: ${detail}`,
+  });
+}
+
+const projectSaveLifecycle = {
+  onSaved: (snapshot: ProjectState) => {
+    const active = useApp.getState().project;
+    if (active?.id === snapshot.id && active.updatedAt <= snapshot.updatedAt) {
+      useApp.setState({ lastSavedAt: Date.now() });
+    }
+  },
+  onError: (error: unknown) => reportProjectSaveError(error),
+};
 
 function schedulePersist(project: ProjectState): void {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    if (useApp.getState().project?.autosave === false) return;
-    void db.saveProject(project);
-  }, 700);
+  projectSaveQueue.schedule(project, projectSaveLifecycle);
+}
+
+function flushPendingProjectSaves(): void {
+  void projectSaveQueue.flushAll().catch(reportProjectSaveError);
+}
+
+function attachPersistenceLifecycle(): void {
+  if (persistenceLifecycleAttached || typeof window === 'undefined') return;
+  persistenceLifecycleAttached = true;
+  window.addEventListener('pagehide', flushPendingProjectSaves);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushPendingProjectSaves();
+    });
+  }
 }
 
 function engineAssets(project: ProjectState, buffers: Record<string, AssetBuffer>): EngineAsset[] {
@@ -357,6 +389,7 @@ export const useApp = create<AppState>((set, get) => ({
   verifying: false,
 
   init: async () => {
+    attachPersistenceLifecycle();
     let mode: Mode = 'advanced';
     try {
       mode = (localStorage.getItem('sonora:mode') as Mode) ?? 'advanced';
@@ -376,18 +409,29 @@ export const useApp = create<AppState>((set, get) => ({
     } catch (error) {
       set({ mode, storageError: describeStorageError(error) });
     }
-    realtimeHost.onPosition((position, playing) => {
-      set((state) => ({ transport: { ...state.transport, position, playing } }));
-    });
-    realtimeHost.onEnded(() => {
-      set((state) => ({ transport: { ...state.transport, playing: false, position: 0 } }));
-    });
-    realtimeHost.onMeters(() => {
-      // Meters are pulled by the UI at animation rate through the host's last
-      // message; the canvas components read from the exposed global below.
-      const meters = realtimeHost.lastMeters;
-      if (meters) latestMeters = meters;
-    });
+    if (!realtimeListenersAttached) {
+      realtimeHost.onPosition((position, playing) => {
+        set((state) => ({ transport: { ...state.transport, position, playing } }));
+      });
+      realtimeHost.onEnded(() => {
+        set((state) => ({ transport: { ...state.transport, playing: false, position: 0 } }));
+      });
+      realtimeHost.onMeters(() => {
+        // Meters are pulled by the UI at animation rate through the host's last
+        // message; the canvas components read from the exposed global below.
+        const meters = realtimeHost.lastMeters;
+        if (meters) latestMeters = meters;
+      });
+      realtimeHost.onError((message) => {
+        set((state) => ({
+          engineError: message,
+          toast: 'Audio stopped unexpectedly. Your project remains saved; press Play to rebuild the engine.',
+          matchAudition: null,
+          transport: { ...state.transport, playing: false },
+        }));
+      });
+      realtimeListenersAttached = true;
+    }
   },
 
   setScreen: (screen) => {
@@ -458,6 +502,9 @@ export const useApp = create<AppState>((set, get) => ({
         set({ engineError: error instanceof Error ? error.message : String(error) });
       });
       const rate = realtimeHost.sampleRate;
+      // Finish a pending autosave before reading the stored copy. This prevents
+      // reopening a project from racing its own delayed, newer edits.
+      await projectSaveQueue.flushPending(id);
       const project = await db.getProject(id);
       if (!project) throw new Error('Project not found');
       const assets = await db.listAssets(id);
@@ -544,6 +591,8 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   deleteProjectById: async (id) => {
+    projectSaveQueue.cancel(id);
+    await projectSaveQueue.drain();
     await db.deleteProject(id);
     if (get().project?.id === id) get().closeProject();
     await get().init();
@@ -867,7 +916,7 @@ export const useApp = create<AppState>((set, get) => ({
       project.master.processors = structuredClone(state.workingMix.processors);
       project.master.volumeDb = state.workingMix.volumeDb;
     }
-    await db.saveProject(project);
+    await projectSaveQueue.flush(project, projectSaveLifecycle);
     set({ lastSavedAt: Date.now() });
   },
 
@@ -1045,21 +1094,30 @@ export const useApp = create<AppState>((set, get) => ({
     if (!project) return;
     try {
       await realtimeHost.initialise();
+      realtimeHost.loadAssets(engineAssets(project, assetBuffers));
+      realtimeHost.pushProject(project);
+      realtimeHost.setMonitorGain(get().monitorDb);
+      realtimeHost.setComparisonGain(get().matchAudition?.comparisonDb ?? get().comparisonDb);
+      realtimeHost.setLoop(transport.loopEnabled, transport.loopStart, transport.loopEnd);
+      if (shouldPauseTransport(transport.playing, realtimeHost.contextState)) {
+        realtimeHost.pause();
+        set((state) => ({ transport: { ...state.transport, playing: false } }));
+      } else {
+        // A suspended/interrupted/closed context must be resumed/rebuilt from
+        // the last UI playhead, not mistaken for a normal pause request.
+        await realtimeHost.play(transport.position);
+        set((state) => ({
+          engineError: null,
+          transport: { ...state.transport, playing: true },
+        }));
+      }
     } catch (error) {
-      set({ engineError: error instanceof Error ? error.message : String(error), toast: 'Audio engine could not start.' });
-      return;
-    }
-    realtimeHost.loadAssets(engineAssets(project, assetBuffers));
-    realtimeHost.pushProject(project);
-    realtimeHost.setMonitorGain(get().monitorDb);
-    realtimeHost.setComparisonGain(get().matchAudition?.comparisonDb ?? get().comparisonDb);
-    realtimeHost.setLoop(transport.loopEnabled, transport.loopStart, transport.loopEnd);
-    if (transport.playing) {
-      realtimeHost.pause();
-      set((state) => ({ transport: { ...state.transport, playing: false } }));
-    } else {
-      await realtimeHost.play(transport.position);
-      set((state) => ({ transport: { ...state.transport, playing: true } }));
+      const message = error instanceof Error ? error.message : String(error);
+      set((state) => ({
+        engineError: message,
+        toast: `Audio engine could not start: ${message}`,
+        transport: { ...state.transport, playing: false },
+      }));
     }
   },
 
@@ -1918,6 +1976,8 @@ export const useApp = create<AppState>((set, get) => ({
     realtimeHost.setComparisonGain(0);
     realtimeHost.setMatchAudition(false);
     realtimeHost.clearMatchAuditionBuffers();
+    projectSaveQueue.cancelAll();
+    await projectSaveQueue.drain();
     await db.clearAllData();
     set({
       projects: [],

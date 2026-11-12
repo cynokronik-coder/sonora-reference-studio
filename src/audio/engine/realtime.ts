@@ -20,6 +20,12 @@ export interface RealtimeMeters {
 type PositionListener = (seconds: number, playing: boolean) => void;
 type MeterListener = (meters: RealtimeMeters) => void;
 type EndedListener = () => void;
+type ErrorListener = (message: string) => void;
+
+/** Whether a transport toggle should pause instead of attempting recovery. */
+export function shouldPauseTransport(playing: boolean, contextState: string): boolean {
+  return playing && contextState !== 'suspended' && contextState !== 'interrupted' && contextState !== 'closed';
+}
 
 /**
  * Browser-side controller for the AudioWorklet engine.
@@ -30,6 +36,7 @@ type EndedListener = () => void;
  */
 export class RealtimeHost {
   private ctx: AudioContext | null = null;
+  private workletLoadedFor: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
   private monitor: GainNode | null = null;
   private comparison: GainNode | null = null;
@@ -39,6 +46,7 @@ export class RealtimeHost {
   private positionListeners = new Set<PositionListener>();
   private meterListeners = new Set<MeterListener>();
   private endedListeners = new Set<EndedListener>();
+  private errorListeners = new Set<ErrorListener>();
   private pendingProject: ProjectState | null = null;
   private pendingAssets: EngineAsset[] = [];
   lastError: string | null = null;
@@ -60,14 +68,39 @@ export class RealtimeHost {
   }
 
   async initialise(): Promise<void> {
-    if (this.ready) return;
+    if (this.ready && this.node && this.ctx?.state !== 'closed') return;
     if (this.initialising) return this.initialising;
-    this.initialising = (async () => {
+
+    const initialization = (async () => {
       const AudioCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtor) throw new Error('Web Audio is not supported in this browser.');
+
+      if (this.ctx?.state === 'closed') {
+        this.ready = false;
+        this.node?.disconnect();
+        this.node = null;
+        this.comparison?.disconnect();
+        this.monitor?.disconnect();
+        this.comparison = null;
+        this.monitor = null;
+        this.ctx = null;
+        this.workletLoadedFor = null;
+        this.loadedAssets.clear();
+        this.playing = false;
+      }
       const ctx = this.ctx ?? new AudioCtor({ latencyHint: 'interactive' });
       this.ctx = ctx;
-      await ctx.audioWorklet.addModule(workletUrl);
+      if (this.workletLoadedFor !== ctx) {
+        await ctx.audioWorklet.addModule(workletUrl);
+        this.workletLoadedFor = ctx;
+      }
+
+      // A processorerror permanently silences that AudioWorkletNode. A fresh
+      // node can be created on the same live AudioContext and repopulated from
+      // the app's still-owned decoded asset buffers.
+      this.node?.disconnect();
+      this.comparison?.disconnect();
+      this.monitor?.disconnect();
       const node = new AudioWorkletNode(ctx, 'sonora-engine', {
         numberOfInputs: 0,
         numberOfOutputs: 1,
@@ -78,11 +111,14 @@ export class RealtimeHost {
       node.connect(comparison);
       comparison.connect(monitor);
       monitor.connect(ctx.destination);
+      node.port.onmessage = (event: MessageEvent) => this.handle(event.data);
+      node.onprocessorerror = () => this.handleProcessorError();
       this.node = node;
       this.comparison = comparison;
       this.monitor = monitor;
-      node.port.onmessage = (event: MessageEvent) => this.handle(event.data);
       this.ready = true;
+      this.lastError = null;
+
       if (this.pendingAssets.length) {
         this.pushAssets(this.pendingAssets);
         this.pendingAssets = [];
@@ -92,7 +128,29 @@ export class RealtimeHost {
         this.pendingProject = null;
       }
     })();
-    return this.initialising;
+
+    this.initialising = initialization;
+    try {
+      await initialization;
+    } finally {
+      if (this.initialising === initialization) this.initialising = null;
+    }
+  }
+
+  private handleProcessorError(): void {
+    const message = 'The audio processor stopped unexpectedly. Press Play to rebuild the audio engine and resume.';
+    this.lastError = message;
+    this.ready = false;
+    this.playing = false;
+    this.loadedAssets.clear();
+    this.node?.port.close();
+    this.node?.disconnect();
+    this.node = null;
+    this.comparison?.disconnect();
+    this.monitor?.disconnect();
+    this.comparison = null;
+    this.monitor = null;
+    for (const listener of this.errorListeners) listener(message);
   }
 
   private handle(message: Record<string, unknown>): void {
@@ -186,9 +244,14 @@ export class RealtimeHost {
 
   async play(position?: number): Promise<void> {
     await this.initialise();
-    await this.ctx?.resume();
-    this.node?.port.postMessage({ type: 'play', position: position ?? this.position });
+    if (!this.ctx || !this.node) throw new Error('Audio engine could not be rebuilt.');
+    await this.ctx.resume();
+    if (this.ctx.state !== 'running') {
+      throw new Error(`Audio context did not resume (state: ${this.ctx.state}). Click Play again after the browser interruption.`);
+    }
+    this.node.port.postMessage({ type: 'play', position: position ?? this.position });
     this.playing = true;
+    this.lastError = null;
   }
 
   pause(): void {
@@ -238,6 +301,11 @@ export class RealtimeHost {
     return () => this.endedListeners.delete(listener);
   }
 
+  onError(listener: ErrorListener): () => void {
+    this.errorListeners.add(listener);
+    return () => this.errorListeners.delete(listener);
+  }
+
   async close(): Promise<void> {
     this.ready = false;
     this.node?.disconnect();
@@ -248,6 +316,8 @@ export class RealtimeHost {
     this.comparison = null;
     await this.ctx?.close();
     this.ctx = null;
+    this.workletLoadedFor = null;
+    this.initialising = null;
     this.loadedAssets.clear();
   }
 }

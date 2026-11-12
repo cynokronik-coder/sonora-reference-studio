@@ -117,6 +117,14 @@ Loudness-matched listening uses the quietest non-stale measured slot as the comm
 
 Track or bus edits invalidate stored A/B measurements because the captured slot stores the master chain, not a duplicate of the full multitrack session. A new capture measures the complete current mix and restores a valid comparison reference.
 
+## Session persistence and recovery
+
+Project autosaves are debounced independently by project id. Each queued snapshot is cloned when scheduled, and all IndexedDB project writes are serialized so a delayed older snapshot cannot overtake an explicit Save Now operation. Save Now replaces the pending snapshot for that project; opening a project flushes its pending save before reading the stored copy. Deleting a project cancels its pending autosave and waits for submitted writes before deletion. Clearing local data cancels pending timers and waits for in-flight writes before clearing stores.
+
+When the document becomes hidden or receives `pagehide`, Sonora immediately submits all pending project snapshots to the same write queue. These lifecycle flushes are best effort: browsers may terminate a page before asynchronous IndexedDB work completes, so the debounced autosave and explicit Save Now remain the primary durability mechanisms. Asset blobs are persisted separately during import.
+
+Audio playback can recover from a closed or suspended AudioContext through the normal Play action. If an AudioWorklet processor throws and the browser emits `processorerror`, Sonora disconnects the failed node, reports the interruption, and allows Play to build a fresh node. The store still owns decoded source buffers; the next Play action re-transfers assets, restores the latest project graph and resumes from the most recently reported playhead. A/B audition state is cleared after a processor failure and can be prepared again.
+
 ## Automation
 
 Lanes are stored per track: `volume`, `pan`, or a processor parameter keyed by processor id. `valueAtTime` interpolates
