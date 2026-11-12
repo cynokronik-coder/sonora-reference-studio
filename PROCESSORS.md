@@ -161,8 +161,14 @@ Large hall, Spring amp and Ambient wash. This is an algorithmic synthesis reverb
 measured room impulse response.
 
 ### Delay
-Stereo, ping-pong, slapback and multi-tap modes. Tempo-synced note values or free milliseconds, feedback, damping,
-high-pass, width, wet mix and output. Buffers support up to 2.9 s.
+Four modes: Stereo, Ping-pong, Slapback and Multi-tap. Tempo sync uses 1/32 through 1/2 note values against the
+project BPM; free time supports up to 3 seconds. The three-tap mode reads 1x/2x/3x the base time, with a preallocated
+9-second ring buffer so the longest third tap never wraps into an invalid read. Tap heads use fractional linear
+interpolation, and time changes ramp over 20 ms. Feedback is bounded to 95% and ramps rather than stepping. Independent
+left/right damping low-pass and feedback high-pass filters update only when their cutoff changes and use smoothed
+coefficients. Width, mix and output also ramp over 20 ms. Ping-pong crosses the feedback path; slapback clamps its free
+delay to 20–250 ms; multi-tap produces three diminishing repeats. Factory starting points include Eighth-note
+ping-pong, Quarter-note echo, Slapback vocal, Multi-tap groove, Dark analog echo and Wide ambient delay.
 
 ## Parameters and automation
 

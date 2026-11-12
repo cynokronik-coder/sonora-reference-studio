@@ -58,3 +58,12 @@ The Limiter's 4x IIR true-peak mode is a safety estimate only. It must not be pr
   - A public GitHub reference for implementing and comparing classic artificial reverb structures in Faust. Used as a design-reading reference only; no code is copied into Sonora.
 - Sonora's Reverb is a Freeverb-derived algorithmic effect. It is not convolution and its Room/Hall/Plate/Spring names denote parameterised tonal/diffusion starting characters, not physical models or captured spaces.
 - Unit tests measure dry-path transparency, impulse-tail energy, relative RT60 behaviour, maximum pre-delay support, stereo decorrelation, dynamic parameter stability and preset parameter validity.
+
+
+## Tempo delay and feedback
+
+- Cycling 'The History of the Delay Line': https://www.cycling74.com/tutorials/the-history-of-the-delay-line
+  - Background on digital delay-line design and applications.
+- Julius O. Smith, *Physical Audio Signal Processing*, Feedback Delay Networks: https://ccrma.stanford.edu/~jos/pasp/Feedback_Delay_Networks.html
+  - Reference for delay-line feedback, stability and decay behaviour.
+- Sonora Delay uses one feedback delay line per channel, cross-feedback in ping-pong mode, and three read heads in multi-tap mode. This is an artistic tempo delay, not a physically modelled echo or room.
