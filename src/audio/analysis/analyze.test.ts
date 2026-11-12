@@ -18,15 +18,24 @@ function stereoTone(durationSeconds: number, rightGain = 0.8) {
 describe('complete section analysis', () => {
   it('stores measured loudness, stereo, spectral and rhythm metrics for detected sections', () => {
     const audio = stereoTone(20);
+    const progress: { stage: string; fraction: number }[] = [];
     const report = analyzeAudio({
       assetId: 'section-analysis-test',
       L: audio.left,
       R: audio.right,
       sampleRate: SAMPLE_RATE,
+    }, {
+      onProgress: (stage, fraction) => progress.push({ stage, fraction }),
     });
 
     expect(report.sectionMetricsVersion).toBe(2);
     expect(report.sections.length).toBeGreaterThan(0);
+    expect(progress.some((item) => item.stage === 'Measuring section loudness')).toBe(true);
+    expect(progress.some((item) => item.stage === 'Calculating section metrics')).toBe(true);
+    expect(progress[progress.length - 1].fraction).toBe(1);
+    for (let i = 1; i < progress.length; i++) {
+      expect(progress[i].fraction).toBeGreaterThanOrEqual(progress[i - 1].fraction);
+    }
 
     for (const section of report.sections) {
       expect(Number.isFinite(section.lufs)).toBe(true);

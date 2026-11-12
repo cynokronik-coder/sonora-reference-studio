@@ -113,7 +113,7 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
 
   progress('Detecting tempo and sections', 0.8);
   const rhythm = analyzeRhythm(L, R, sampleRate, {
-    onProgress: (stage, fraction) => progress(stage, 0.8 + fraction * 0.05),
+    onProgress: (stage, fraction) => progress(stage, Math.min(0.85, 0.8 + fraction * 0.05)),
   });
 
   progress('Measuring sections', 0.85);
@@ -123,36 +123,55 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
     const boundaries = rhythm.sections.length ? rhythm.sections : [{ start: 0, end: duration }];
     // Measure segment loudness once. The same measured values drive automatic
     // labels and the full section report, avoiding duplicate DSP passes.
-    const measuredBoundaries = boundaries.map((boundary) => {
+    const measuredBoundaries = boundaries.map((boundary, index) => {
+      const sectionBase = index / Math.max(1, boundaries.length);
+      const sectionEnd = (index + 1) / Math.max(1, boundaries.length);
       const startSample = Math.max(0, Math.floor(boundary.start * sampleRate));
       const endSample = Math.min(n, Math.ceil(boundary.end * sampleRate));
-      if (endSample - startSample < sampleRate * 0.5) return null;
+      if (endSample - startSample < sampleRate * 0.5) {
+        progress('Measuring section loudness', 0.85 + sectionEnd * 0.06);
+        return null;
+      }
       const sectionL = L.subarray(startSample, endSample);
       const sectionR = R.subarray(startSample, endSample);
-      return {
-        boundary,
+      const sectionLoudness = analyzeLoudness(
         sectionL,
         sectionR,
-        sectionLoudness: analyzeLoudness(sectionL, sectionR, sampleRate),
-      };
+        sampleRate,
+        (fraction) => progress('Measuring section loudness', 0.85 + (sectionBase + fraction / boundaries.length) * 0.06),
+      );
+      progress('Measuring section loudness', 0.85 + sectionEnd * 0.06);
+      return { boundary, sectionL, sectionR, sectionLoudness };
     });
+    progress('Calculating section metrics', 0.91);
     const labels = labelSections(boundaries.map((boundary, index) => ({
       ...boundary,
       lufs: measuredBoundaries[index]?.sectionLoudness.integratedLufs ?? -Infinity,
     })));
     measuredBoundaries.forEach((measured, index) => {
-      if (!measured) return;
+      const sectionStart = index / Math.max(1, boundaries.length);
+      const sectionEnd = (index + 1) / Math.max(1, boundaries.length);
+      const sectionProgress = (fraction: number) =>
+        progress('Calculating section metrics', 0.91 + (sectionStart + fraction / boundaries.length) * 0.09);
+      if (!measured) {
+        progress('Calculating section metrics', 0.91 + sectionEnd * 0.09);
+        return;
+      }
       const { boundary, sectionL, sectionR, sectionLoudness } = measured;
       const sectionDuration = sectionL.length / sampleRate;
       const { spectrum: sectionSpectrum, stereo: sectionStereo } = analyzeSpectrumAndStereo(
         sectionL,
         sectionR,
         sampleRate,
+        (fraction) => sectionProgress(fraction * 0.65),
       );
       // Structural section detection is already complete. Reuse the rhythm
       // feature engine without running another self-similarity segmentation.
       const sectionRhythm = sectionDuration >= 2
-        ? analyzeRhythm(sectionL, sectionR, sampleRate, { includeSections: false })
+        ? analyzeRhythm(sectionL, sectionR, sampleRate, {
+            includeSections: false,
+            onProgress: (_stage, fraction) => sectionProgress(0.65 + fraction * 0.35),
+          })
         : null;
       const sectionTempo = sectionDuration >= 8 && sectionRhythm?.tempoBpm
         ? sectionRhythm.tempoBpm
@@ -197,7 +216,7 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
         attackSharpness: sectionRhythm?.attackSharpness ?? null,
         punchScore: sectionRhythm?.punchScore ?? null,
       });
-      progress('Measuring sections', 0.85 + ((index + 1) / boundaries.length) * 0.15);
+      sectionProgress(1);
     });
   }
   if (!sections.length) {
