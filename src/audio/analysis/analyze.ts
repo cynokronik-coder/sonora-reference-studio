@@ -6,7 +6,7 @@ import {
 } from './spectrum';
 import { type StereoReport } from './stereo';
 import { analyzeSpectrumAndStereo } from './spectral-analysis';
-import { analyzeRhythm, labelSections, type RhythmReport } from './rhythm';
+import { absoluteBeatPhaseSeconds, analyzeRhythm, labelSections, type RhythmReport } from './rhythm';
 import type { SectionBoundary } from './rhythm';
 
 export interface SectionReport {
@@ -51,12 +51,17 @@ export interface SectionReport {
   attackDensity: number | null;
   attackSharpness: number | null;
   punchScore: number | null;
+  /** Section-local rhythm metrics, mapped back to the full song timeline. */
+  groupedAttackDensity: number | null;
+  beatGridConfidence: number | null;
+  offBeatRatio: number | null;
+  beatPhaseSeconds: number | null;
 }
 
 export interface AnalysisReport {
   version: 1;
   /** Version of the expanded per-section measurement payload. Older stored reports require re-analysis. */
-  sectionMetricsVersion?: 2;
+  sectionMetricsVersion?: 3;
   createdAt: number;
   sampleRate: number;
   channels: number;
@@ -176,6 +181,20 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
       const sectionTempo = sectionDuration >= 8 && sectionRhythm?.tempoBpm
         ? sectionRhythm.tempoBpm
         : null;
+      // A phase/grid score is only meaningful when this section contains
+      // enough grouped events to support a stable periodic estimate.
+      const hasSectionBeatEvidence = Boolean(
+        sectionTempo &&
+        sectionRhythm &&
+        (sectionRhythm.groupedOnsetDensity ?? 0) * sectionDuration >= 4,
+      );
+      const sectionBeatPhase = hasSectionBeatEvidence && sectionRhythm
+        ? absoluteBeatPhaseSeconds(
+            boundary.start,
+            sectionRhythm.beatPhaseSeconds ?? null,
+            sectionTempo!,
+          )
+        : null;
       sections.push({
         index,
         label: labels[index] ?? 'section',
@@ -215,6 +234,10 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
         attackDensity: sectionRhythm?.onsetDensity ?? null,
         attackSharpness: sectionRhythm?.attackSharpness ?? null,
         punchScore: sectionRhythm?.punchScore ?? null,
+        groupedAttackDensity: sectionRhythm?.groupedOnsetDensity ?? null,
+        beatGridConfidence: hasSectionBeatEvidence ? sectionRhythm?.beatGridConfidence ?? null : null,
+        offBeatRatio: hasSectionBeatEvidence ? sectionRhythm?.offBeatRatio ?? null : null,
+        beatPhaseSeconds: sectionBeatPhase,
       });
       sectionProgress(1);
     });
@@ -257,6 +280,14 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
       attackDensity: duration >= 2 ? rhythm.onsetDensity : null,
       attackSharpness: duration >= 2 ? rhythm.attackSharpness : null,
       punchScore: duration >= 2 ? rhythm.punchScore : null,
+      groupedAttackDensity: duration >= 2 ? rhythm.groupedOnsetDensity ?? null : null,
+      beatGridConfidence: duration >= 8 && (rhythm.groupedOnsetDensity ?? 0) * duration >= 4
+        ? rhythm.beatGridConfidence ?? null
+        : null,
+      offBeatRatio: duration >= 8 && (rhythm.groupedOnsetDensity ?? 0) * duration >= 4
+        ? rhythm.offBeatRatio ?? null
+        : null,
+      beatPhaseSeconds: duration >= 8 ? rhythm.beatPhaseSeconds ?? null : null,
     });
   }
 
@@ -269,7 +300,7 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
   progress('Done', 1);
   return {
     version: 1,
-    sectionMetricsVersion: 2,
+    sectionMetricsVersion: 3,
     createdAt: Date.now(),
     sampleRate,
     channels: 2,
