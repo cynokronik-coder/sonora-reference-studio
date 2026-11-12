@@ -1,9 +1,9 @@
 import { FFT, hannWindow } from '../dsp/fft';
 import {
-  BAND_CENTERS,
   SPECTRUM_FFT_SIZE,
   createSpectrumAccum,
   finalizeSpectrum,
+  getSpectrumBandBinMap,
   type SpectrumReport,
 } from './spectrum';
 import {
@@ -15,24 +15,6 @@ import {
 export interface SpectrumStereoAnalysis {
   spectrum: SpectrumReport;
   stereo: StereoReport;
-}
-
-function buildBinBandMap(sampleRate: number, fftSize: number): Int16Array {
-  const map = new Int16Array(fftSize / 2 + 1);
-  map.fill(-1);
-  const binHz = sampleRate / fftSize;
-  const sixthOctave = Math.pow(2, 1 / 6);
-  for (let k = 1; k <= fftSize / 2; k++) {
-    const frequency = k * binHz;
-    for (let i = 0; i < BAND_CENTERS.length; i++) {
-      const center = BAND_CENTERS[i];
-      if (frequency >= center / sixthOctave && frequency < center * sixthOctave) {
-        map[k] = i;
-        break;
-      }
-    }
-  }
-  return map;
 }
 
 /**
@@ -64,7 +46,7 @@ export function analyzeSpectrumAndStereo(
   const imL = new Float64Array(fftSize);
   const reR = new Float64Array(fftSize);
   const imR = new Float64Array(fftSize);
-  const binBand = buildBinBandMap(sampleRate, fftSize);
+  const { binBand } = getSpectrumBandBinMap(sampleRate, fftSize);
   const totalFrames = Math.max(0, Math.floor((n - fftSize) / hop) + 1);
   let frames = 0;
 

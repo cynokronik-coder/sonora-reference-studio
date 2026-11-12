@@ -6,6 +6,62 @@ export const BAND_CENTERS = [
   1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000,
 ];
 
+export interface SpectrumBandBinMap {
+  /** First matching 1/3-octave band for each FFT bin, or -1 when unassigned. */
+  binBand: Int16Array;
+  /** Every FFT bin in each band's half-open frequency interval, in ascending order. */
+  bandBins: readonly Uint32Array[];
+}
+
+const SPECTRUM_BAND_MAP_CACHE_LIMIT = 8;
+const spectrumBandMapCache = new Map<string, SpectrumBandBinMap>();
+
+/**
+ * Caches frequency-to-band lookup tables shared by spectrum finalization and
+ * the combined spectrum/stereo pass. Band ranges are computed once per rate
+ * and transform size; the cache is intentionally small and bounded.
+ */
+export function getSpectrumBandBinMap(sampleRate: number, fftSize: number): SpectrumBandBinMap {
+  const key = `${sampleRate}:${fftSize}`;
+  const cached = spectrumBandMapCache.get(key);
+  if (cached) {
+    spectrumBandMapCache.delete(key);
+    spectrumBandMapCache.set(key, cached);
+    return cached;
+  }
+
+  const half = Math.floor(fftSize / 2);
+  const binHz = sampleRate / fftSize;
+  const sixthOctave = Math.pow(2, 1 / 6);
+  const ranges = BAND_CENTERS.map((center) => ({
+    low: center / sixthOctave,
+    high: center * sixthOctave,
+  }));
+  const lists: number[][] = BAND_CENTERS.map(() => []);
+  const binBand = new Int16Array(half + 1);
+  binBand.fill(-1);
+
+  for (let k = 0; k <= half; k++) {
+    const frequency = k * binHz;
+    for (let band = 0; band < ranges.length; band++) {
+      const range = ranges[band];
+      if (frequency >= range.low && frequency < range.high) {
+        lists[band].push(k);
+        if (binBand[k] < 0) binBand[k] = band;
+      }
+    }
+  }
+
+  const bandBins = lists.map((indices) => Uint32Array.from(indices));
+  const result = { binBand, bandBins };
+  if (spectrumBandMapCache.size >= SPECTRUM_BAND_MAP_CACHE_LIMIT) {
+    const oldestKey = spectrumBandMapCache.keys().next().value;
+    if (oldestKey !== undefined) spectrumBandMapCache.delete(oldestKey);
+  }
+  spectrumBandMapCache.set(key, result);
+  return result;
+}
+
 export interface BandLevel {
   center: number;
   db: number;
@@ -96,19 +152,12 @@ export function finalizeSpectrum(accum: SpectrumAccum): SpectrumReport {
   const frames = Math.max(1, accum.frames);
   const power = accum.power.map((p) => p / frames);
 
-  const bands: BandLevel[] = BAND_CENTERS.map((center) => {
-    const low = center / Math.pow(2, 1 / 6);
-    const high = center * Math.pow(2, 1 / 6);
+  const { bandBins } = getSpectrumBandBinMap(sr, accum.fftSize);
+  const bands: BandLevel[] = BAND_CENTERS.map((center, index) => {
     let sum = 0;
-    let count = 0;
-    for (let k = 0; k <= accum.fftSize / 2; k++) {
-      const f = k * binHz;
-      if (f >= low && f < high) {
-        sum += power[k];
-        count++;
-      }
-    }
-    const db = 10 * Math.log10(Math.max(sum / Math.max(1, count), 1e-12));
+    const bins = bandBins[index];
+    for (let i = 0; i < bins.length; i++) sum += power[bins[i]];
+    const db = 10 * Math.log10(Math.max(sum / Math.max(1, bins.length), 1e-12));
     return { center, db, relativeDb: 0 };
   });
   const averageDb = bands.reduce((a, b) => a + b.db, 0) / bands.length;
