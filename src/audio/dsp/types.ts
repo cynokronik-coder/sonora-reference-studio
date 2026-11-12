@@ -32,6 +32,9 @@ export type ParamValues = Record<string, number>;
 export interface ProcessorMeter {
   /** Gain reduction in dB (positive number). */
   reduction?: number;
+  /** Per-channel gain reduction in dB (positive numbers). */
+  reductionL?: number;
+  reductionR?: number;
   /** Instantaneous output peak per channel. */
   peakL?: number;
   peakR?: number;
@@ -40,6 +43,11 @@ export interface ProcessorMeter {
   /** Gain added by the processor, for level meters. */
   gain?: number;
 }
+
+export type ProcessorMeterSnapshot = Record<
+  string,
+  Record<string, Pick<ProcessorMeter, 'reduction' | 'reductionL' | 'reductionR'>>
+>;
 
 export interface AudioProcessor {
   readonly type: string;
