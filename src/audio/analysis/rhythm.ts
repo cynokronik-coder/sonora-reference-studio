@@ -35,10 +35,10 @@ interface FeatureFrame {
 /**
  * Tempo, onset density and section estimation.
  *
- * Tempo comes from autocorrelation of a spectral-flux onset envelope, folded
- * into a musically plausible range. Sections come from a self-similarity
- * novelty curve over 0.5 s feature frames (band energy + loudness) and are
- * deliberately labelled as estimates in the UI.
+ * Tempo comes from autocorrelation of a band-balanced, adaptively thresholded
+ * spectral-flux onset envelope. Sections come from a self-similarity novelty
+ * curve over 0.5 s feature frames (band energy + loudness) and are deliberately
+ * labelled as estimates in the UI.
  */
 export function analyzeRhythm(
   L: Float32Array,
@@ -69,6 +69,22 @@ export function analyzeRhythm(
   const re = new Float64Array(fftSize);
   const im = new Float64Array(fftSize);
   const prevMag = new Float64Array(fftSize / 2 + 1);
+  const frequencyBands = [
+    { low: 30, high: 150 },
+    { low: 150, high: 500 },
+    { low: 500, high: 1_800 },
+    { low: 1_800, high: 6_000 },
+    { low: 6_000, high: Number.POSITIVE_INFINITY },
+  ];
+  const bandForBin = new Int8Array(fftSize / 2 + 1);
+  bandForBin.fill(-1);
+  for (let k = 1; k <= fftSize / 2; k++) {
+    const frequency = (k * sampleRate) / fftSize;
+    const band = frequencyBands.findIndex((range) => frequency >= range.low && frequency < range.high);
+    if (band >= 0) bandForBin[k] = band;
+  }
+  const bandFlux = new Float64Array(frequencyBands.length);
+  const bandMagnitude = new Float64Array(frequencyBands.length);
   const flux: number[] = [];
   let meanEnergy = 0;
   let frames = 0;
@@ -80,13 +96,21 @@ export function analyzeRhythm(
       im[i] = 0;
     }
     fft.forward(re, im);
-    let f = 0;
+    bandFlux.fill(0);
+    bandMagnitude.fill(0);
+    let totalMagnitude = 0;
     for (let k = 1; k <= fftSize / 2; k++) {
       const mag = Math.hypot(re[k], im[k]);
       const diff = mag - prevMag[k];
-      if (diff > 0) f += diff;
+      const band = bandForBin[k];
+      if (band >= 0) {
+        bandMagnitude[band] += mag;
+        if (diff > 0) bandFlux[band] += diff;
+      }
+      totalMagnitude += mag;
       prevMag[k] = mag;
     }
+    const f = combineBandFlux(bandFlux, bandMagnitude, totalMagnitude);
     flux.push(f);
     meanEnergy += f;
     frames++;
@@ -94,18 +118,14 @@ export function analyzeRhythm(
       options.onProgress?.('Detecting onsets', 0.55 * (frames / Math.max(1, totalFrames)));
     }
   }
-  options.onProgress?.('Preparing onset envelope', 0.58);
   const fluxMean = meanEnergy / Math.max(1, frames);
   const fluxNorm = flux.map((v) => v / Math.max(1e-9, fluxMean));
-  // Onset strength above the local average.
-  const onset = fluxNorm.map((v, i) => {
-    const from = Math.max(0, i - 8);
-    const to = Math.min(fluxNorm.length, i + 8);
-    let local = 0;
-    for (let j = from; j < to; j++) local += fluxNorm[j];
-    local /= to - from;
-    return Math.max(0, v - local * 0.92);
-  });
+  const onset = adaptiveOnsetEnvelope(
+    fluxNorm,
+    Math.max(4, Math.round((sampleRate / hop) * 0.13)),
+    (fraction) => options.onProgress?.('Detecting onsets', Math.min(0.58, 0.55 + fraction * 0.03)),
+  );
+  options.onProgress?.('Preparing onset envelope', 0.58);
 
   const frameRate = sampleRate / hop;
   options.onProgress?.('Estimating tempo', 0.6);
@@ -116,10 +136,14 @@ export function analyzeRhythm(
   );
   const { tempoBpm, confidence } = tempo;
   options.onProgress?.('Scoring attacks', 0.83);
-  const onsetThreshold = Math.max(0.35, median(onset.filter((v) => v > 0.05)) * 1.6);
+  // adaptiveOnsetEnvelope already removes local background and noise. A
+  // fixed normalized gate avoids loud sections raising the threshold for quiet
+  // percussion elsewhere in the same track.
+  const onsetThreshold = 0.06;
   let onsetCount = 0;
   for (let i = 1; i < onset.length - 1; i++) {
-    if (onset[i] > onsetThreshold && onset[i] >= onset[i - 1] && onset[i] >= onset[i + 1]) onsetCount++;
+    // Strict left comparison resolves flat-topped peaks to one event.
+    if (onset[i] > onsetThreshold && onset[i] > onset[i - 1] && onset[i] >= onset[i + 1]) onsetCount++;
   }
   const onsetDensity = onsetCount / Math.max(1, duration);
   const attackSharpness = clamp(
@@ -148,6 +172,63 @@ export function analyzeRhythm(
     attackSharpness,
     sections: segments,
   };
+}
+
+
+/**
+ * Combine positive spectral changes after normalising each frequency band by
+ * its own energy. This prevents a loud bass or midrange element from masking
+ * quieter attacks in another band, while excluding effectively silent bands.
+ */
+export function combineBandFlux(
+  bandFlux: ArrayLike<number>,
+  bandMagnitude: ArrayLike<number>,
+  totalMagnitude: number,
+): number {
+  if (!Number.isFinite(totalMagnitude) || totalMagnitude <= 1e-12) return 0;
+  const activeFloor = Math.max(1e-12, totalMagnitude * 0.00025);
+  const scaleFloor = Math.max(1e-12, totalMagnitude * 0.001);
+  let score = 0;
+  let activeBands = 0;
+  const count = Math.min(bandFlux.length, bandMagnitude.length);
+  for (let i = 0; i < count; i++) {
+    const energy = bandMagnitude[i];
+    if (!Number.isFinite(energy) || energy <= activeFloor) continue;
+    const relativeFlux = Math.max(0, bandFlux[i]) / Math.max(energy, scaleFloor);
+    score += clamp(relativeFlux, 0, 2);
+    activeBands++;
+  }
+  return activeBands ? score / activeBands : 0;
+}
+
+/**
+ * Subtract a local median background and a robust MAD-derived noise margin.
+ * The ~260 ms default-scale window follows slow level changes but does not
+ * require attacks to fall on a beat grid; isolated syncopated transients remain
+ * prominent even when their absolute level is lower than neighbouring hits.
+ */
+export function adaptiveOnsetEnvelope(
+  flux: number[],
+  radiusFrames = 12,
+  onProgress?: (fraction: number) => void,
+): number[] {
+  const radius = Math.max(1, Math.round(radiusFrames));
+  const onset = new Array<number>(flux.length).fill(0);
+  for (let i = 0; i < flux.length; i++) {
+    const from = Math.max(0, i - radius);
+    const to = Math.min(flux.length, i + radius + 1);
+    const local = flux.slice(from, to);
+    const baseline = median(local);
+    const deviations = local.map((value) => Math.abs(value - baseline));
+    const mad = median(deviations) * 1.4826;
+    const margin = Math.max(0.025, mad * 1.5);
+    onset[i] = Math.max(0, flux[i] - baseline - margin);
+    if (onProgress && ((i & 0x1ff) === 0 || i === flux.length - 1)) {
+      onProgress((i + 1) / Math.max(1, flux.length));
+    }
+  }
+  if (!flux.length) onProgress?.(1);
+  return onset;
 }
 
 interface TempoWindowEstimate {
