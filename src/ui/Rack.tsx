@@ -13,6 +13,7 @@ import { EQ_PRESETS } from '../audio/dsp/processors/eq';
 import { DYNAMIC_EQ_PRESETS } from '../audio/dsp/processors/dynamicEq';
 import { RESONANCE_PRESETS } from '../audio/dsp/processors/resonance';
 import { DEESSER_PRESETS } from '../audio/dsp/processors/deesser';
+import { TRANSIENT_PRESETS } from '../audio/dsp/processors/transient';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -361,7 +362,8 @@ function ProcessorParams({
   const [dynamicEqPreset, setDynamicEqPreset] = useState('');
   const [resonancePreset, setResonancePreset] = useState('');
   const [deEsserPreset, setDeEsserPreset] = useState('');
-  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); }, [node.id]);
+  const [transientPreset, setTransientPreset] = useState('');
+  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); setTransientPreset(''); }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -378,6 +380,7 @@ function ProcessorParams({
     if (node.type === 'dynamicEq') setDynamicEqPreset('');
     if (node.type === 'resonance') setResonancePreset('');
     if (node.type === 'deesser') setDeEsserPreset('');
+    if (node.type === 'transient') setTransientPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
@@ -416,8 +419,29 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setDeEsserPreset(preset.id);
   };
+  const applyTransientPreset = (presetId: string) => {
+    const preset = TRANSIENT_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setTransientPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
+      {node.type === 'transient' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Transient starting point"
+            value={transientPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...TRANSIENT_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyTransientPreset}
+          />
+          {transientPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {TRANSIENT_PRESETS.find((preset) => preset.id === transientPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'deesser' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
