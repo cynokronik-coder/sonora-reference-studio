@@ -451,7 +451,7 @@ export function AssistantPanel({ onClose, onExpand, draggable = false }: { onClo
             <Icon name="sparkles" size={15} className="shrink-0 text-[#A77AFF]" />
             <span className="truncate">Sonora AI</span>
           </div>
-          <div className="mt-1 break-words text-[11px] leading-4 text-ink-400 sm:text-xs">Mixing copilot · changes are always previewed first</div>
+          
           {track && (
             <div className="mt-2 inline-flex items-center gap-1 rounded-lg border border-white/[.08] bg-black/20 p-0.5">
               <button type="button" aria-pressed={assistantScope === 'master'} onClick={() => setAssistantScope('master')} className={`rounded-md px-2 py-1 text-[9px] font-medium transition-colors ${assistantScope === 'master' ? 'bg-[#8957FF]/20 text-[#C4A2FF]' : 'text-ink-500 hover:text-ink-200'}`}>Full mix</button>
