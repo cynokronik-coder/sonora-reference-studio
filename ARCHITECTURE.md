@@ -9,6 +9,11 @@
 
 ## Layers
 
+### Production workspaces
+- The Mixing Studio owns arrangement, track/bus mixing and channel processing.
+- Mastering is a separate top-level screen sharing the application's global navigation; it edits the project master chain without an embedded duplicate inside Studio.
+
+
 ```
 React screens / components
         │  reads / dispatches
@@ -44,7 +49,7 @@ clip audio → track chain → latency compensation → pre-fader sends → fade
 - **ProcessorChain** reconciles declarative processor configs against live instances by id. Parameters update in place;
   removed processors are disposed; order changes do not reset filter state.
 - **Solo/mute/polarity/mono** are applied in the graph, not in the UI.
-- **Sends** support pre- and post-fader routing. **External sidechain** keys come from another track's pre-chain audio.
+- **Sends** support pre- and post-fader routing. **External sidechain** keys come from another track's pre-chain audio and can feed dynamics processors on tracks or buses. The renderer refreshes or clears each assignment every block to prevent stale key signals.
 - **Buses** receive direct outputs and sends, process their own chain, and sum into master. One level of bus nesting is
   not supported.
 - **Master chain** processes the summed mix, then master gain.

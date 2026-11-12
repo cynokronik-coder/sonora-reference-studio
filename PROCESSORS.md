@@ -34,7 +34,7 @@ resonance report.
   are **behaviour styles**, not emulations of specific hardware circuits.
 - Lookahead delays the audio so gain reduction arrives before the transient.
 - Sidechain high-pass filter, stereo linking, auto/manual makeup, dry/wet.
-- External sidechain key can be routed from another track.
+- External sidechain key can be routed from another track on track or bus compressor instances. The key is tapped from the source track's raw clip signal before its own processing and fader; disconnecting it returns the detector to the compressed signal.
 
 ### Multiband Compressor
 Three bands from LR4 crossovers at adjustable splits. Each band runs an independent compressor with its own threshold,
