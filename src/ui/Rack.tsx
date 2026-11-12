@@ -18,6 +18,7 @@ import { GATE_PRESETS } from '../audio/dsp/processors/gate';
 import { SATURATION_PRESETS } from '../audio/dsp/processors/saturation';
 import { EXCITER_PRESETS } from '../audio/dsp/processors/exciter';
 import { CLIPPER_PRESETS, LIMITER_PRESETS } from '../audio/dsp/processors/limiter';
+import { STEREO_PRESETS } from '../audio/dsp/processors/stereo';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -431,7 +432,8 @@ function ProcessorParams({
   const [exciterPreset, setExciterPreset] = useState('');
   const [clipperPreset, setClipperPreset] = useState('');
   const [limiterPreset, setLimiterPreset] = useState('');
-  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); setTransientPreset(''); setGatePreset(''); setSaturationPreset(''); setExciterPreset(''); setClipperPreset(''); setLimiterPreset(''); }, [node.id]);
+  const [stereoPreset, setStereoPreset] = useState('');
+  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); setTransientPreset(''); setGatePreset(''); setSaturationPreset(''); setExciterPreset(''); setClipperPreset(''); setLimiterPreset(''); setStereoPreset(''); }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -454,6 +456,7 @@ function ProcessorParams({
     if (node.type === 'exciter') setExciterPreset('');
     if (node.type === 'clipper') setClipperPreset('');
     if (node.type === 'limiter') setLimiterPreset('');
+    if (node.type === 'stereo') setStereoPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
@@ -528,8 +531,29 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setLimiterPreset(preset.id);
   };
+  const applyStereoPreset = (presetId: string) => {
+    const preset = STEREO_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setStereoPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
+      {node.type === 'stereo' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Stereo imaging starting point"
+            value={stereoPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...STEREO_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyStereoPreset}
+          />
+          {stereoPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {STEREO_PRESETS.find((preset) => preset.id === stereoPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'limiter' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
