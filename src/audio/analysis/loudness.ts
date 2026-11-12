@@ -247,6 +247,71 @@ export function normalizeToTruePeak(L: Float32Array, R: Float32Array, targetDbTp
   return gain;
 }
 
+
+export interface AsyncNormalizationOptions {
+  signal?: AbortSignal;
+  onProgress?: (fraction: number) => void;
+}
+
+/**
+ * Cooperative counterpart to normalizeToTruePeak for long export programmes.
+ * The Annex 2 meter keeps its FIR history across bounded 512-frame blocks;
+ * gain is then applied in-place in 16,384-frame blocks. No programme-sized
+ * temporary PCM arrays are allocated.
+ */
+export async function normalizeToTruePeakAsync(
+  L: Float32Array,
+  R: Float32Array,
+  targetDbTp: number,
+  options: AsyncNormalizationOptions = {},
+): Promise<number> {
+  const n = Math.min(L.length, R.length);
+  const checkAbort = () => {
+    if (!options.signal?.aborted) return;
+    const error = new Error('True-peak normalization cancelled.');
+    error.name = 'AbortError';
+    throw error;
+  };
+  const yieldToEventLoop = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+  if (n === 0 || !Number.isFinite(targetDbTp)) return 1;
+
+  const meter = new Annex2TruePeakMeter();
+  let peak = 0;
+  const meterBlock = 512;
+  const yieldEveryFrames = 16_384;
+  for (let start = 0; start < n; start += meterBlock) {
+    checkAbort();
+    const end = Math.min(n, start + meterBlock);
+    peak = Math.max(peak, meter.process(L.subarray(start, end), R.subarray(start, end), end - start));
+    if (end % yieldEveryFrames === 0 || end === n) {
+      options.onProgress?.(0.5 * (end / n));
+      if (end < n) await yieldToEventLoop();
+    }
+  }
+  peak = Math.max(peak, meter.flush());
+  checkAbort();
+  if (!(peak > 0) || !Number.isFinite(peak)) {
+    options.onProgress?.(1);
+    return 1;
+  }
+
+  const gain = Math.pow(10, (targetDbTp - safeDb(peak)) / 20);
+  const applyBlock = 16_384;
+  for (let start = 0; start < n; start += applyBlock) {
+    checkAbort();
+    const end = Math.min(n, start + applyBlock);
+    for (let i = start; i < end; i++) {
+      L[i] *= gain;
+      R[i] *= gain;
+    }
+    options.onProgress?.(0.5 + 0.5 * (end / n));
+    if (end < n) await yieldToEventLoop();
+  }
+  checkAbort();
+  options.onProgress?.(1);
+  return gain;
+}
+
 function downsampleSeries(points: LoudnessPoint[], maxPoints: number): LoudnessPoint[] {
   if (points.length <= maxPoints) return points;
   const step = Math.ceil(points.length / maxPoints);
