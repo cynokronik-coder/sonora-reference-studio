@@ -76,8 +76,7 @@ export class StreamingLoudnessAnalyzer {
   private readonly momentaryRing: Float64Array;
   private readonly shortTermRing: Float64Array;
   private readonly blockPowers: number[] = [];
-  private readonly blockTimes: number[] = [];
-  private readonly shortTerm: LoudnessPoint[] = [];
+  private readonly shortTermValues: number[] = [];
   private readonly truePeakMeter = new Annex2TruePeakMeter();
   private count = 0;
   private momentarySum = 0;
@@ -128,17 +127,13 @@ export class StreamingLoudnessAnalyzer {
         const windowStart = nextCount - this.momentarySize;
         if (windowStart % this.momentaryHop === 0) {
           this.blockPowers.push(Math.max(0, this.momentarySum) / this.momentarySize);
-          this.blockTimes.push(windowStart / this.sampleRate + MOMENTARY_SECONDS * 0.5);
         }
       }
 
       if (nextCount >= this.shortTermSize) {
         const windowStart = nextCount - this.shortTermSize;
         if (windowStart % this.shortTermHop === 0) {
-          this.shortTerm.push({
-            time: windowStart / this.sampleRate + SHORT_TERM_SECONDS * 0.5,
-            lufs: loudnessOfPower(Math.max(0, this.shortTermSum) / this.shortTermSize),
-          });
+          this.shortTermValues.push(loudnessOfPower(Math.max(0, this.shortTermSum) / this.shortTermSize));
         }
       }
 
@@ -158,7 +153,7 @@ export class StreamingLoudnessAnalyzer {
     }
   }
 
-  finish(): LoudnessReport {
+  finish(includeTimeSeries = true): LoudnessReport {
     const n = this.count;
     if (n === 0) return emptyReport();
 
@@ -174,10 +169,7 @@ export class StreamingLoudnessAnalyzer {
         for (let i = start; i < n; i++) tailPower += this.shortTermRing[i % this.shortTermSize];
 
         while (start < n && start + this.shortTermSize <= n + this.flushSamples) {
-          this.shortTerm.push({
-            time: start / this.sampleRate + SHORT_TERM_SECONDS * 0.5,
-            lufs: loudnessOfPower(Math.max(0, tailPower) / this.shortTermSize),
-          });
+          this.shortTermValues.push(loudnessOfPower(Math.max(0, tailPower) / this.shortTermSize));
           const nextStart = start + this.shortTermHop;
           for (let i = start; i < Math.min(nextStart, n); i++) {
             tailPower -= this.shortTermRing[i % this.shortTermSize];
@@ -205,18 +197,13 @@ export class StreamingLoudnessAnalyzer {
       }
     }
 
-    const momentary: LoudnessPoint[] = this.blockTimes.map((time, i) => ({
-      time,
-      lufs: loudnessBlocks[i],
-    }));
     let momentaryMaxLufs = -Infinity;
-    for (const point of momentary) momentaryMaxLufs = Math.max(momentaryMaxLufs, point.lufs);
+    for (const value of loudnessBlocks) momentaryMaxLufs = Math.max(momentaryMaxLufs, value);
 
     let shortTermMaxLufs = -Infinity;
-    for (const point of this.shortTerm) shortTermMaxLufs = Math.max(shortTermMaxLufs, point.lufs);
+    for (const value of this.shortTermValues) shortTermMaxLufs = Math.max(shortTermMaxLufs, value);
 
-    const absoluteGatedShortTerm = this.shortTerm
-      .map((point) => point.lufs)
+    const absoluteGatedShortTerm = this.shortTermValues
       .filter((value) => Number.isFinite(value) && value >= ABSOLUTE_GATE_LUFS);
     let lra = 0;
     if (absoluteGatedShortTerm.length > 0) {
@@ -234,6 +221,19 @@ export class StreamingLoudnessAnalyzer {
     const dynamicRangeDb = absoluteGatedShortTerm.length > 1
       ? ebuPercentile(absoluteGatedShortTerm, 0.95) - ebuPercentile(absoluteGatedShortTerm, 0.05)
       : 0;
+    const shortTerm: LoudnessPoint[] = includeTimeSeries
+      ? downsampleSeries(this.shortTermValues.map((lufs, index) => ({
+          time: (index * this.shortTermHop) / this.sampleRate + SHORT_TERM_SECONDS * 0.5,
+          lufs,
+        })), 400)
+      : [];
+    const momentary: LoudnessPoint[] = includeTimeSeries
+      ? downsampleSeries(loudnessBlocks.map((lufs, index) => ({
+          time: (index * this.momentaryHop) / this.sampleRate + MOMENTARY_SECONDS * 0.5,
+          lufs,
+        })), 400)
+      : [];
+
     const rms = Math.sqrt(this.sumSquares / (n * 2));
     const samplePeakDb = safeDb(this.samplePeak);
     const truePeakDb = safeDb(this.truePeak);
@@ -250,8 +250,8 @@ export class StreamingLoudnessAnalyzer {
       crestDb: finiteDifference(samplePeakDb, rmsDb),
       plrDb: finiteDifference(truePeakDb, integratedLufs),
       dynamicRangeDb,
-      shortTerm: downsampleSeries(this.shortTerm, 400),
-      momentary: downsampleSeries(momentary, 400),
+      shortTerm,
+      momentary,
     };
   }
 }
@@ -259,6 +259,8 @@ export class StreamingLoudnessAnalyzer {
 export interface StreamingLoudnessOptions {
   onProgress?: (fraction: number) => void;
   blockFrames?: number;
+  /** Skip allocating display-only momentary/short-term point objects for scalar summaries. */
+  includeTimeSeries?: boolean;
 }
 
 export interface AsyncStreamingLoudnessOptions extends StreamingLoudnessOptions {
@@ -283,7 +285,7 @@ export function analyzeLoudnessStreaming(
     analyzer.process(L, R, start, end);
     options.onProgress?.(end / n);
   }
-  return analyzer.finish();
+  return analyzer.finish(options.includeTimeSeries ?? true);
 }
 
 export async function analyzeLoudnessStreamingAsync(
@@ -314,7 +316,7 @@ export async function analyzeLoudnessStreamingAsync(
     if (end < n) await yieldToEventLoop();
   }
   checkAbort();
-  const report = analyzer.finish();
+  const report = analyzer.finish(options.includeTimeSeries ?? true);
   options.onProgress?.(1);
   return report;
 }

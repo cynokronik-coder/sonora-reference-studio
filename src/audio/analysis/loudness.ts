@@ -38,6 +38,49 @@ export function analyzeLoudness(
   return analyzeLoudnessStreaming(L, R, sampleRate, { onProgress });
 }
 
+export type LoudnessSummary = Pick<
+  LoudnessReport,
+  | 'integratedLufs'
+  | 'momentaryMaxLufs'
+  | 'shortTermMaxLufs'
+  | 'lra'
+  | 'truePeakDb'
+  | 'samplePeakDb'
+  | 'rmsDb'
+  | 'crestDb'
+  | 'plrDb'
+  | 'dynamicRangeDb'
+>;
+
+/**
+ * Scalar-only loudness measurement for section summaries and callers that
+ * don't display time-series curves. Avoids allocating momentary/short-term
+ * point objects while preserving the same BS.1770/EBU measurement values.
+ */
+export function analyzeLoudnessSummary(
+  L: Float32Array,
+  R: Float32Array,
+  sampleRate: number,
+  onProgress?: (fraction: number) => void,
+): LoudnessSummary {
+  const report = analyzeLoudnessStreaming(L, R, sampleRate, {
+    onProgress,
+    includeTimeSeries: false,
+  });
+  return {
+    integratedLufs: report.integratedLufs,
+    momentaryMaxLufs: report.momentaryMaxLufs,
+    shortTermMaxLufs: report.shortTermMaxLufs,
+    lra: report.lra,
+    truePeakDb: report.truePeakDb,
+    samplePeakDb: report.samplePeakDb,
+    rmsDb: report.rmsDb,
+    crestDb: report.crestDb,
+    plrDb: report.plrDb,
+    dynamicRangeDb: report.dynamicRangeDb,
+  };
+}
+
 export interface LoudnessAnalysisOptions extends AsyncStreamingLoudnessOptions {}
 
 /** Cooperative, cancellable loudness analysis for long export and verification jobs. */

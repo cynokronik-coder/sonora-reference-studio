@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeLoudness, analyzeLoudnessAsync, loudnessOfRange, normalizeToTruePeak, normalizeToTruePeakAsync } from './loudness';
+import { analyzeLoudness, analyzeLoudnessAsync, analyzeLoudnessSummary, loudnessOfRange, normalizeToTruePeak, normalizeToTruePeakAsync } from './loudness';
 
 const SAMPLE_RATE = 48_000;
 
@@ -234,5 +234,30 @@ describe('cooperative rolling-window loudness analysis', () => {
     const report = analyzeLoudness(source.left, source.right, SAMPLE_RATE);
     expect(report.shortTerm[report.shortTerm.length - 1].time).toBeCloseTo(8, 5);
     expect(report.shortTerm[report.shortTerm.length - 1].lufs).toBeLessThan(report.shortTermMaxLufs);
+  });
+});
+
+
+describe('scalar-only loudness summaries', () => {
+  it('matches every displayed loudness metric without retaining time-series arrays', () => {
+    const source = stereoTone(997, -17, 24);
+    const full = analyzeLoudness(source.left, source.right, SAMPLE_RATE);
+    const summary = analyzeLoudnessSummary(source.left, source.right, SAMPLE_RATE);
+    const { shortTerm: _shortTerm, momentary: _momentary, ...expected } = full;
+
+    expect(summary).toEqual(expected);
+    expect(Object.keys(summary)).not.toContain('shortTerm');
+    expect(Object.keys(summary)).not.toContain('momentary');
+  });
+
+  it('preserves silent and too-short programme sentinel values', () => {
+    const silent = new Float32Array(Math.round(SAMPLE_RATE * 0.3));
+    const full = analyzeLoudness(silent, silent, SAMPLE_RATE);
+    const summary = analyzeLoudnessSummary(silent, silent, SAMPLE_RATE);
+    const { shortTerm: _shortTerm, momentary: _momentary, ...expected } = full;
+
+    expect(summary).toEqual(expected);
+    expect(summary.integratedLufs).toBe(-Infinity);
+    expect(summary.truePeakDb).toBe(-Infinity);
   });
 });

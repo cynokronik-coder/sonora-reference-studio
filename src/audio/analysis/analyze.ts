@@ -1,4 +1,4 @@
-import { analyzeLoudness, type LoudnessReport } from './loudness';
+import { analyzeLoudness, analyzeLoudnessSummary, type LoudnessReport } from './loudness';
 import {
   type BandLevel,
   type Resonance,
@@ -134,7 +134,7 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
       }
       const sectionL = L.subarray(startSample, endSample);
       const sectionR = R.subarray(startSample, endSample);
-      const sectionLoudness = analyzeLoudness(
+      const sectionLoudness = analyzeLoudnessSummary(
         sectionL,
         sectionR,
         sampleRate,
