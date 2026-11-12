@@ -9,6 +9,11 @@
 
 ## Layers
 
+### Production workspaces
+- The Mixing Studio owns arrangement, track/bus mixing and channel processing.
+- Mastering is a separate top-level screen sharing the application's global navigation; it edits the project master chain without an embedded duplicate inside Studio.
+
+
 ```
 React screens / components
         │  reads / dispatches

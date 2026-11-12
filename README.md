@@ -31,6 +31,8 @@ The offline assistant and audio engine work without external services. The optio
 6. Edit the chain in **Mastering** or the **Mixing Studio**. Every value is a real DSP parameter.
 7. **Render & measure** to verify the actual result, then **Export Center** to download.
 
+The **Mixing Studio** is dedicated to arrangement, track and bus mixing, and channel processing. **Mastering** is a separate top-level workspace using the same application navigation, with its own master chain, mastering styles, measurement and verification.
+
 ---
 
 ## What is actually implemented
