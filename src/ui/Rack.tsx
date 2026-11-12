@@ -16,6 +16,7 @@ import { DEESSER_PRESETS } from '../audio/dsp/processors/deesser';
 import { TRANSIENT_PRESETS } from '../audio/dsp/processors/transient';
 import { GATE_PRESETS } from '../audio/dsp/processors/gate';
 import { SATURATION_PRESETS } from '../audio/dsp/processors/saturation';
+import { EXCITER_PRESETS } from '../audio/dsp/processors/exciter';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -386,7 +387,8 @@ function ProcessorParams({
   const [transientPreset, setTransientPreset] = useState('');
   const [gatePreset, setGatePreset] = useState('');
   const [saturationPreset, setSaturationPreset] = useState('');
-  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); setTransientPreset(''); setGatePreset(''); setSaturationPreset(''); }, [node.id]);
+  const [exciterPreset, setExciterPreset] = useState('');
+  useEffect(() => { setCompressorPreset(''); setMultibandPreset(''); setEqPreset(''); setDynamicEqPreset(''); setResonancePreset(''); setDeEsserPreset(''); setTransientPreset(''); setGatePreset(''); setSaturationPreset(''); setExciterPreset(''); }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -406,6 +408,7 @@ function ProcessorParams({
     if (node.type === 'transient') setTransientPreset('');
     if (node.type === 'gate') setGatePreset('');
     if (node.type === 'saturation') setSaturationPreset('');
+    if (node.type === 'exciter') setExciterPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
   };
   const applyCompressorPreset = (presetId: string) => {
@@ -462,8 +465,29 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setSaturationPreset(preset.id);
   };
+  const applyExciterPreset = (presetId: string) => {
+    const preset = EXCITER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setExciterPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
+      {node.type === 'exciter' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Exciter starting point"
+            value={exciterPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...EXCITER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyExciterPreset}
+          />
+          {exciterPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {EXCITER_PRESETS.find((preset) => preset.id === exciterPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {node.type === 'saturation' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
