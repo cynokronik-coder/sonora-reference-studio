@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeLoudness, loudnessOfRange } from './loudness';
+import { analyzeLoudness, loudnessOfRange, normalizeToTruePeak } from './loudness';
 
 const SAMPLE_RATE = 48_000;
 
@@ -127,6 +127,32 @@ describe('BS.1770-5 integrated and EBU time-window loudness', () => {
     expect(report.samplePeakDb).toBeLessThan(-3);
     expect(report.truePeakDb).toBeGreaterThan(-1.1);
     expect(report.truePeakDb).toBeLessThan(-0.7);
+  });
+
+  it('normalizes PCM to a requested Annex 2 true-peak ceiling', () => {
+    const frames = SAMPLE_RATE * 2;
+    const left = new Float32Array(frames);
+    const right = new Float32Array(frames);
+    const amplitude = Math.pow(10, -9 / 20);
+    for (let i = 0; i < frames; i++) {
+      left[i] = amplitude * Math.sin((2 * Math.PI * 12_000 * i) / SAMPLE_RATE + Math.PI / 4);
+      right[i] = amplitude * 0.5 * Math.sin((2 * Math.PI * 12_000 * i) / SAMPLE_RATE + Math.PI / 4);
+    }
+    const appliedGain = normalizeToTruePeak(left, right, -1);
+    const measured = analyzeLoudness(left, right, SAMPLE_RATE);
+    expect(appliedGain).toBeGreaterThan(1);
+    expect(measured.truePeakDb).toBeGreaterThanOrEqual(-1.05);
+    expect(measured.truePeakDb).toBeLessThanOrEqual(-0.95);
+    expect(measured.samplePeakDb).toBeLessThan(measured.truePeakDb);
+    expect(left[100]).toBeCloseTo(right[100] * 2, 6);
+  });
+
+  it('leaves digital silence unchanged during true-peak normalization', () => {
+    const left = new Float32Array(4_096);
+    const right = new Float32Array(4_096);
+    expect(normalizeToTruePeak(left, right, -1)).toBe(1);
+    expect(left.every((sample) => sample === 0)).toBe(true);
+    expect(right.every((sample) => sample === 0)).toBe(true);
   });
 
   it('reports silent or too-short subranges without fabricating LUFS', () => {

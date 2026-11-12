@@ -37,6 +37,18 @@ export default function Export() {
       const blob = await db.getExportBlob(id);
       if (!blob) throw new Error('Export file not found.');
       const result = await verifyEncodedBlob(blob);
+      const record = exports.find((item) => item.id === id);
+      if (record) {
+        // Replace the earlier PCM estimate with measurements from the decoded
+        // file bytes so export history reflects the actual delivered encoding.
+        await db.saveExport({
+          ...record,
+          duration: result.duration,
+          lufs: result.lufs,
+          truePeak: result.truePeakDb,
+        }, blob);
+        await refreshExports();
+      }
       useApp.getState().setToast(`Verified decoded file: ${result.lufs.toFixed(1)} LUFS · ${result.truePeakDb.toFixed(1)} dBTP.`);
     } catch (error) {
       useApp.getState().setToast(`Verification failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -144,12 +156,12 @@ export default function Export() {
               label="Advanced options"
               icon="sliders"
               title="Advanced export options"
-              description="Dithering, final peak handling and file metadata."
+              description="Dithering, final true-peak normalisation and file metadata."
               placement="bottom-end"
               width="lg"
             >
               <Toggle checked={settings.dither} onChange={(value) => setSettings((current) => ({ ...current, dither: value }))} label="TPDF dither when reducing bit depth" description="Only applied for 16/24-bit PCM. It is never applied to 32-bit float." />
-              <Toggle checked={settings.normalize} onChange={(value) => setSettings((current) => ({ ...current, normalize: value }))} label={`Normalise peak to ${targetTp.toFixed(1)} dB`} description="A final gain safety net. It does not replace the limiter and does not loudness-normalise." />
+              <Toggle checked={settings.normalize} onChange={(value) => setSettings((current) => ({ ...current, normalize: value }))} label={`Normalise true peak to ${targetTp.toFixed(1)} dBTP`} description="Applies a common gain to the final PCM after sample-rate conversion using Annex 2 FIR true-peak measurement. The encoded file is measured again after decoding; lossy encoding can change the result." />
               <div className="space-y-2 border-t border-white/[.07] pt-3">
                 <p className="text-[9px] font-semibold uppercase tracking-[.12em] text-ink-500">Metadata</p>
                 <label className="block">

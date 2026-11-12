@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { AnalysisReport } from '../audio/analysis/analyze';
 import { decodeAudioFile, resampleToRate } from '../audio/io/decode';
 import { encodeAiff, encodeWav, type WavBitDepth } from '../audio/io/wav';
-import { analyzeLoudness } from '../audio/analysis/loudness';
+import { analyzeLoudness, normalizeToTruePeak } from '../audio/analysis/loudness';
 import { generateMatchPlan, planToNodes, type MatchPlan } from '../audio/analysis/match';
 import { interpretCommand, suggestionsFor, type AssistantProposal } from '../audio/ai/assistant';
 import { requestSonoraAi } from '../audio/ai/client';
@@ -1363,26 +1363,38 @@ export const useApp = create<AppState>((set, get) => ({
       let L = result.L;
       let R = result.R;
       let sampleRate = result.sampleRate;
-      if (settings.normalize) {
-        let peak = 0;
-        for (let i = 0; i < L.length; i++) peak = Math.max(peak, Math.abs(L[i]), Math.abs(R[i]));
-        const targetPeak = Math.pow(10, project.targetTruePeak / 20);
-        if (peak > 0) {
-          const gain = targetPeak / peak;
-          for (let i = 0; i < L.length; i++) {
-            L[i] *= gain;
-            R[i] *= gain;
-          }
-        }
-      }
+
+      // Convert to the requested delivery rate first. True-peak normalization
+      // must operate on the final PCM rate, because SRC can change the
+      // reconstructed inter-sample maximum.
       if (settings.sampleRate !== sampleRate) {
-        set({ busy: { kind: 'render', label: `Resampling to ${settings.sampleRate} Hz`, progress: 0.92 } });
+        set({ busy: { kind: 'render', label: `Resampling to ${settings.sampleRate} Hz`, progress: 0.9 } });
         const resampled = await resampleToRate(L, R, sampleRate, settings.sampleRate);
         L = resampled.L;
         R = resampled.R;
         sampleRate = settings.sampleRate;
       }
+
+      if (settings.normalize) {
+        set({ busy: { kind: 'render', label: 'Normalising to the true-peak target', progress: 0.93 } });
+        normalizeToTruePeak(L, R, project.targetTruePeak ?? -1);
+      }
+
+      // Measure the final PCM after resampling and optional true-peak gain.
+      const pcmReport = analyzeLoudness(L, R, sampleRate);
+      let finalStats: RenderStats = {
+        ...result.stats,
+        lufs: pcmReport.integratedLufs,
+        truePeakDb: pcmReport.truePeakDb,
+        samplePeakDb: pcmReport.samplePeakDb,
+        lra: pcmReport.lra,
+        crestDb: pcmReport.crestDb,
+        duration: L.length / sampleRate,
+      };
+
       const filename = sanitizeFilename(settings.filename || project.name);
+      const extension = settings.format === 'mp3' ? 'mp3' : settings.format;
+      const exportName = `${filename}.${extension}`;
       let blob: Blob;
       if (settings.format === 'wav') {
         blob = encodeWav(L, R, {
@@ -1402,36 +1414,64 @@ export const useApp = create<AppState>((set, get) => ({
       } else {
         blob = await encodeMp3(L, R, sampleRate);
       }
-      const extension = settings.format === 'mp3' ? 'mp3' : settings.format;
-      downloadBlob(blob, `${filename}.${extension}`);
+
+      // Download remains available even if the browser decoder cannot verify a
+      // particular encoded stream. In that case, history keeps the final PCM
+      // measurement and clearly reports that decoded-file verification failed.
+      downloadBlob(blob, exportName);
+      let encodedVerification: EncodedFileMeasurements | null = null;
+      let verificationWarning: string | null = null;
+      try {
+        set({ busy: { kind: 'render', label: 'Verifying encoded delivery file', progress: 0.98 } });
+        encodedVerification = await verifyEncodedBlob(blob);
+      } catch (error) {
+        verificationWarning = error instanceof Error ? error.message : String(error);
+      }
+
+      if (encodedVerification) {
+        finalStats = {
+          ...finalStats,
+          lufs: encodedVerification.lufs,
+          truePeakDb: encodedVerification.truePeakDb,
+          samplePeakDb: encodedVerification.samplePeakDb,
+          lra: encodedVerification.lra,
+          crestDb: encodedVerification.crestDb,
+          duration: encodedVerification.duration,
+        };
+      }
+
       const record: ExportRecord = {
         id: uid('export'),
         projectId: project.id,
-        name: `${filename}.${extension}`,
+        name: exportName,
         createdAt: Date.now(),
         format: settings.format.toUpperCase(),
         sampleRate,
         bitDepth: settings.format === 'mp3' ? 16 : settings.bitDepth,
-        duration: L.length / sampleRate,
-        lufs: result.stats.lufs,
-        truePeak: result.stats.truePeakDb,
+        duration: finalStats.duration,
+        lufs: finalStats.lufs,
+        truePeak: finalStats.truePeakDb,
         sizeBytes: blob.size,
         settings: { ...settings },
       };
       await db.saveExport(record, blob);
+      const measuredText = `${finalStats.lufs.toFixed(1)} LUFS · ${finalStats.truePeakDb.toFixed(1)} dBTP`;
+      const toast = verificationWarning
+        ? `Exported ${record.name} · pre-encode measurement ${measuredText}. Encoded-file verification unavailable: ${verificationWarning}`
+        : `Exported and verified ${record.name} · ${measuredText}`;
       set((state) => ({
         exports: [record, ...state.exports],
-        lastRenderStats: result.stats,
+        lastRenderStats: finalStats,
         busy: null,
-        toast: `Exported ${record.name} · ${result.stats.lufs.toFixed(1)} LUFS · ${result.stats.truePeakDb.toFixed(1)} dBTP.`,
+        toast,
       }));
       if (settings.mode === 'master') {
         const masterVersion = {
           id: uid('master'),
           name: filename,
           createdAt: Date.now(),
-          lufs: result.stats.lufs,
-          truePeak: result.stats.truePeakDb,
+          lufs: finalStats.lufs,
+          truePeak: finalStats.truePeakDb,
           processors: structuredClone(project.master.processors),
         };
         get().mutate((p) => {
@@ -1610,12 +1650,28 @@ async function encodeMp3(L: Float32Array, R: Float32Array, sampleRate: number): 
   return new Blob(chunks, { type: 'audio/mpeg' });
 }
 
-/** Re-measure an encoded file from its bytes — used by QA and the export panel. */
-export async function verifyEncodedBlob(blob: Blob): Promise<{ lufs: number; truePeakDb: number }> {
+export interface EncodedFileMeasurements {
+  lufs: number;
+  truePeakDb: number;
+  samplePeakDb: number;
+  lra: number;
+  crestDb: number;
+  duration: number;
+}
+
+/** Decode and re-measure the actual encoded file bytes, not the pre-encode PCM. */
+export async function verifyEncodedBlob(blob: Blob): Promise<EncodedFileMeasurements> {
   const file = new File([blob], 'verification.wav', { type: blob.type });
   const decoded = await decodeAudioFile(file);
   const report = analyzeLoudness(decoded.L, decoded.R, decoded.sampleRate);
-  return { lufs: report.integratedLufs, truePeakDb: report.truePeakDb };
+  return {
+    lufs: report.integratedLufs,
+    truePeakDb: report.truePeakDb,
+    samplePeakDb: report.samplePeakDb,
+    lra: report.lra,
+    crestDb: report.crestDb,
+    duration: decoded.duration,
+  };
 }
 
 export function assistantSuggestions(): string[] {
