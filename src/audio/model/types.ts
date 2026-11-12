@@ -108,6 +108,8 @@ export interface MatchSettings {
   targetSection: 'full' | 'chorus' | 'verse';
   referenceSection: 'full' | 'chorus' | 'verse';
   categorySource: Record<string, number>;
+  /** Relative reference influence for weighted consensus; 0 excludes a file. */
+  referenceWeights?: Record<string, number>;
   matchTonal: boolean;
   matchLoudness: boolean;
   matchDynamics: boolean;

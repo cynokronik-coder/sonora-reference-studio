@@ -954,7 +954,7 @@ export const useApp = create<AppState>((set, get) => ({
     }
     const references = project.referenceAssetIds
       .filter((id) => analyses[id])
-      .map((id) => ({ assetId: id, report: analyses[id] }));
+      .map((id) => ({ assetId: id, report: analyses[id], weight: project.match.referenceWeights?.[id] ?? 100 }));
     if (!references.length) {
       set({ toast: 'Analyse at least one reference track first.' });
       return;
