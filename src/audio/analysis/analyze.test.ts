@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { analyzeAudio } from './analyze';
-import { absoluteBeatPhaseSeconds } from './rhythm';
+import { absoluteBarPhaseSeconds, absoluteBeatPhaseSeconds } from './rhythm';
 
 const SAMPLE_RATE = 48_000;
 
@@ -29,7 +29,7 @@ describe('complete section analysis', () => {
       onProgress: (stage, fraction) => progress.push({ stage, fraction }),
     });
 
-    expect(report.sectionMetricsVersion).toBe(4);
+    expect(report.sectionMetricsVersion).toBe(5);
     expect(report.sections.length).toBeGreaterThan(0);
     expect(progress.some((item) => item.stage === 'Measuring section loudness')).toBe(true);
     expect(progress.some((item) => item.stage === 'Calculating section metrics')).toBe(true);
@@ -67,6 +67,14 @@ describe('complete section analysis', () => {
         expect(section.beatContinuity).toBeGreaterThanOrEqual(0);
         expect(section.beatContinuity).toBeLessThanOrEqual(1);
       }
+      if (section.meterConfidence !== null) {
+        expect(section.meterConfidence).toBeGreaterThanOrEqual(0);
+        expect(section.meterConfidence).toBeLessThanOrEqual(1);
+      }
+      if (section.downbeatConfidence !== null) {
+        expect(section.downbeatConfidence).toBeGreaterThanOrEqual(0);
+        expect(section.downbeatConfidence).toBeLessThanOrEqual(1);
+      }
       expect(section.bands.length).toBeGreaterThan(0);
     }
 
@@ -96,6 +104,11 @@ describe('complete section analysis', () => {
     expect(section.tempoChangeBpm).toBeNull();
     expect(section.beatPhaseShiftMs).toBeNull();
     expect(section.beatContinuity).toBeNull();
+    expect(section.beatsPerBar).toBeNull();
+    expect(section.downbeatOffsetBeats).toBeNull();
+    expect(section.barPhaseSeconds).toBeNull();
+    expect(section.meterConfidence).toBeNull();
+    expect(section.downbeatConfidence).toBeNull();
     expect(section.groupedAttackDensity).not.toBeNull();
     expect(section.attackDensity).not.toBeNull();
     expect(section.punchScore).not.toBeNull();
@@ -113,5 +126,13 @@ describe('section-relative beat phase', () => {
     expect(absoluteBeatPhaseSeconds(16.4, 0.12, 120)).toBeCloseTo(0.02, 6);
     expect(absoluteBeatPhaseSeconds(8, null, 120)).toBeNull();
     expect(absoluteBeatPhaseSeconds(8, 0.1, 0)).toBeNull();
+  });
+});
+
+
+describe('section bar-phase mapping', () => {
+  it('keeps bar phase inside the section meter interval', () => {
+    expect(absoluteBarPhaseSeconds(20.25, 0.2, 120, 4)).toBeCloseTo(0.45, 6);
+    expect(absoluteBarPhaseSeconds(20.9, 0.2, 120, 4)).toBeCloseTo(1.1, 6);
   });
 });

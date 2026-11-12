@@ -140,6 +140,9 @@ export default function Analysis() {
                     <th className="py-1 pr-3">Tempo Δ</th>
                     <th className="py-1 pr-3">Phase shift</th>
                     <th className="py-1 pr-3">Continuity</th>
+                    <th className="py-1 pr-3">Meter</th>
+                    <th className="py-1 pr-3">Downbeat</th>
+                    <th className="py-1 pr-3">Bar phase</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -162,6 +165,9 @@ export default function Analysis() {
                       <td className="py-1 pr-3 font-mono text-ink-300">{section.tempoChangeBpm !== null ? `${section.tempoChangeBpm > 0 ? '+' : ''}${section.tempoChangeBpm.toFixed(1)}` : '—'}</td>
                       <td className="py-1 pr-3 font-mono text-ink-300">{section.beatPhaseShiftMs !== null ? `${section.beatPhaseShiftMs > 0 ? '+' : ''}${section.beatPhaseShiftMs.toFixed(0)} ms` : '—'}</td>
                       <td className="py-1 pr-3 font-mono text-ink-300">{section.beatContinuity !== null ? `${Math.round(section.beatContinuity * 100)}%` : '—'}</td>
+                      <td className="py-1 pr-3 font-mono text-ink-300">{section.beatsPerBar !== null ? `${section.beatsPerBar}/bar` : '—'}</td>
+                      <td className="py-1 pr-3 font-mono text-ink-300">{section.downbeatOffsetBeats !== null ? `+${section.downbeatOffsetBeats}` : '—'}</td>
+                      <td className="py-1 pr-3 font-mono text-ink-300">{section.barPhaseSeconds !== null ? `${section.barPhaseSeconds.toFixed(2)}s` : '—'}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -170,6 +176,7 @@ export default function Analysis() {
             <div className="mt-2 space-y-1 text-2xs text-ink-500">
               <p>Tempo estimate: {report.rhythm.tempoBpm || 'not detected'} BPM · tempo confidence {Math.round(report.rhythm.beatConfidence * 100)}% · raw onset activity {report.rhythm.onsetDensity.toFixed(2)}/s.</p>
               <p>Grouped transient events: {(report.rhythm.groupedOnsetDensity ?? report.rhythm.onsetDensity).toFixed(2)}/s · beat-grid fit {Math.round((report.rhythm.beatGridConfidence ?? 0) * 100)}% · off-grid activity {Math.round((report.rhythm.offBeatRatio ?? 0) * 100)}%.</p>
+              <p>Meter: {report.rhythm.beatsPerBar ? `${report.rhythm.beatsPerBar} beats/bar` : 'undetermined'} · downbeat offset: {report.rhythm.downbeatOffsetBeats !== null && report.rhythm.downbeatOffsetBeats !== undefined ? `+${report.rhythm.downbeatOffsetBeats} beats` : 'undetermined'} · metrical confidence {Math.round((report.rhythm.meterConfidence ?? 0) * 100)}%.</p>
               {!!report.rhythm.tempoCandidatesBpm?.length && report.rhythm.tempoCandidatesBpm.length > 1 && (
                 <p>Possible half/double-time pulse: {report.rhythm.tempoCandidatesBpm.join(' / ')} BPM. Confirm the beat by listening.</p>
               )}
