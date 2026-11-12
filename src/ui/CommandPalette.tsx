@@ -205,7 +205,7 @@ export function CommandPalette({ open, hasProject, onClose, onNavigate }: Comman
                           disabled={disabled}
                           onMouseEnter={() => setActiveIndex(index)}
                           onClick={() => choose(command)}
-                          className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left disabled:cursor-not-allowed disabled:opacity-40 ${
+                          className={`flex w-full items-center gap-3 rounded-xl border px-3.5 py-3 text-left transition-all duration-150 disabled:cursor-not-allowed disabled:opacity-40 ${
                             selected
                               ? 'border-[#A77AFF]/25 bg-[#8957FF]/[.13] shadow-[0_0_0_1px_rgba(137,87,255,.06)]'
                               : 'border-transparent hover:border-white/[.06] hover:bg-white/[.035]'
