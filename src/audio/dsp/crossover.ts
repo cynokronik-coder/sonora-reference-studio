@@ -36,14 +36,20 @@ export class Lr4Crossover {
   prepare(sampleRate: number, maxBlock: number): void {
     this.sr = sampleRate;
     this.maxBlock = maxBlock;
+    this.reset();
     this.configure(sampleRate, this.lowFreq, this.highFreq);
   }
 
   configure(sampleRate: number, lowFreq: number, highFreq: number): void {
     this.sr = sampleRate;
-    this.lowFreq = Math.max(30, Math.min(lowFreq, sampleRate * 0.4));
-    this.highFreq = Math.max(this.lowFreq * 2, Math.min(highFreq, sampleRate * 0.45));
-    for (const stage of this.channels) {
+    const maxLow = sampleRate * 0.4;
+    const maxHigh = sampleRate * 0.45;
+    const requestedLow = Number.isFinite(lowFreq) ? lowFreq : 200;
+    const requestedHigh = Number.isFinite(highFreq) ? highFreq : 4000;
+    this.lowFreq = Math.max(30, Math.min(requestedLow, maxLow));
+    this.highFreq = Math.max(this.lowFreq + 20, Math.min(requestedHigh, maxHigh));
+    for (let channel = 0; channel < this.channels.length; channel++) {
+      const stage = this.channels[channel];
       stage.lp1[0].configure('lowpass', this.lowFreq, 0, 0.7071, sampleRate);
       stage.lp1[1].configure('lowpass', this.lowFreq, 0, 0.7071, sampleRate);
       stage.hp1[0].configure('highpass', this.lowFreq, 0, 0.7071, sampleRate);

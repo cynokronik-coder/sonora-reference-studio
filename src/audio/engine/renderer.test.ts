@@ -3,11 +3,11 @@ import { ProjectRenderer } from './renderer';
 import { createBus, createClip, createProcessorNode, createProject, createTrack } from '../model/defaults';
 import type { EngineAsset } from './renderer';
 
-function sineAsset(id: string, amplitude: number, sampleRate: number, length: number): EngineAsset {
+function sineAsset(id: string, amplitude: number, sampleRate: number, length: number, frequency = 1000): EngineAsset {
   const L = new Float32Array(length);
   const R = new Float32Array(length);
   for (let i = 0; i < length; i++) {
-    const sample = amplitude * Math.sin((2 * Math.PI * 1000 * i) / sampleRate);
+    const sample = amplitude * Math.sin((2 * Math.PI * frequency * i) / sampleRate);
     L[i] = sample;
     R[i] = sample;
   }
@@ -15,6 +15,57 @@ function sineAsset(id: string, amplitude: number, sampleRate: number, length: nu
 }
 
 describe('ProjectRenderer external sidechain routing', () => {
+  it('splits a routed external key into the matching multiband detector', () => {
+    const sampleRate = 48000;
+    const blockSize = 128;
+    const assetLength = 32768;
+    const targetAsset = sineAsset('target', 0.05, sampleRate, assetLength, 100);
+    const keyAsset = sineAsset('key', 0.8, sampleRate, assetLength, 6000);
+    const project = createProject('Multiband sidechain routing test', sampleRate);
+    const target = createTrack('audio', 'Target', 0);
+    const key = createTrack('audio', 'Key', 1);
+    const bus = createBus('Multiband Bus', 0);
+
+    target.output = bus.id;
+    target.clips.push(createClip(targetAsset.id, assetLength / sampleRate));
+    key.volumeDb = -120;
+    key.clips.push(createClip(keyAsset.id, assetLength / sampleRate));
+
+    const multiband = createProcessorNode('multibandComp', {
+      xLow: 200,
+      xHigh: 2000,
+      output: 0,
+      ...Object.fromEntries([0, 1, 2].flatMap((band) => [
+        [`b${band}_threshold`, -12],
+        [`b${band}_ratio`, 10],
+        [`b${band}_attack`, 0.1],
+        [`b${band}_release`, 10],
+        [`b${band}_knee`, 0],
+        [`b${band}_style`, 0],
+        [`b${band}_link`, 100],
+        [`b${band}_mix`, 100],
+      ])),
+    });
+    multiband.sidechainFrom = key.id;
+    bus.processors.push(multiband);
+    project.tracks = [target, key];
+    project.buses = [bus];
+
+    const renderer = new ProjectRenderer();
+    renderer.configure(project, [targetAsset, keyAsset], sampleRate, blockSize);
+    const outL = new Float32Array(blockSize);
+    const outR = new Float32Array(blockSize);
+    for (let block = 0; block < 32; block++) {
+      renderer.renderBlock(block * blockSize, blockSize, outL, outR);
+    }
+
+    const meter = renderer.meterSnapshot()[bus.id]?.[multiband.id];
+    const bands = meter?.bands ?? [];
+    expect(Math.abs(bands[0] ?? 0)).toBeLessThan(1);
+    expect(Math.abs(bands[1] ?? 0)).toBeLessThan(1);
+    expect(Math.abs(bands[2] ?? 0)).toBeGreaterThan(3);
+  });
+
   it('routes a track key into a bus compressor and clears it when disconnected', () => {
     const sampleRate = 48000;
     const blockSize = 128;
