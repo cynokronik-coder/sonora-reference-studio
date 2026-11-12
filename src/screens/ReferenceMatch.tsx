@@ -4,11 +4,32 @@ import { AUDIO_ACCEPT, Badge, Button, EmptyState, HelpTip, InfoRow, Panel, Param
 import { Icon } from '../ui/Icon';
 import { FlyoutMenu } from '../ui/FlyoutMenu';
 import { BandChart, BandBars, Waveform } from '../ui/viz';
-import { MATCH_CATEGORIES, resolveReferenceMetrics, type CategorySource } from '../audio/analysis/match';
+import { MATCH_CATEGORIES, resolveReferenceMetrics, selectAnalysisSection, type CategorySource } from '../audio/analysis/match';
+import type { AnalysisReport } from '../audio/analysis/analyze';
 import type { MatchSettings } from '../audio/model/types';
 import { computeMatchPreview } from '../audio/analysis/preview';
 import { formatTime } from '../audio/dsp/util';
 import { TransportBar } from '../ui/Mixer';
+
+function sectionOptions(report: AnalysisReport | undefined, automaticLabel: string): { value: number; label: string }[] {
+  const occurrences: Record<string, number> = {};
+  const detected = (report?.sections ?? []).filter((section) => section.label !== 'full');
+  return [
+    { value: -1, label: `Automatic · ${automaticLabel}` },
+    ...detected.map((section) => {
+      occurrences[section.label] = (occurrences[section.label] ?? 0) + 1;
+      const label = section.label.charAt(0).toUpperCase() + section.label.slice(1);
+      return {
+        value: section.index,
+        label: `${label} · #${occurrences[section.label]} · ${formatTime(section.start)}–${formatTime(section.end)}`,
+      };
+    }),
+  ];
+}
+
+function automaticSectionLabel(section: MatchSettings['targetSection']): string {
+  return section === 'full' ? 'full track' : `longest detected ${section}`;
+}
 
 export default function ReferenceMatch() {
   const {
@@ -71,20 +92,30 @@ export default function ReferenceMatch() {
     assetId: entry.id,
     report: entry.report!,
     weight: project.match.referenceWeights?.[entry.id] ?? 100,
+    sectionIndex: project.match.referenceSectionIndices?.[entry.id],
   }));
   const resolveForComparison = (category: keyof CategorySource) =>
     resolveReferenceMetrics(project.match.categorySource?.[category] ?? -1, referenceInputs, project.match.referenceSection).metrics;
   const loudnessReference = referenceInputs.length ? resolveForComparison('loudness') : null;
   const dynamicsReference = referenceInputs.length ? resolveForComparison('dynamics') : null;
   const stereoReference = referenceInputs.length ? resolveForComparison('stereoWidth') : null;
-  const comparison = targetReport && loudnessReference && dynamicsReference && stereoReference
+  const targetComparisonSection = targetReport
+    ? selectAnalysisSection(targetReport, project.match.targetSection, project.match.targetSectionIndex)
+    : null;
+  const targetSectionMetrics = targetReport ? {
+    lufs: targetComparisonSection?.lufs ?? targetReport.loudness.integratedLufs,
+    crestDb: targetComparisonSection?.crestDb ?? targetReport.loudness.crestDb,
+    widthDb: targetComparisonSection?.widthDb ?? targetReport.stereo.widthDb,
+    correlation: targetComparisonSection?.correlation ?? targetReport.stereo.correlation,
+  } : null;
+  const comparison = targetReport && targetSectionMetrics && loudnessReference && dynamicsReference && stereoReference
     ? [
-        { label: 'Integrated loudness', target: `${targetReport.loudness.integratedLufs.toFixed(1)} LUFS`, ref: `${loudnessReference.lufs.toFixed(1)} LUFS`, delta: loudnessReference.lufs - targetReport.loudness.integratedLufs, unit: 'LU' },
-        { label: 'True peak', target: `${targetReport.loudness.truePeakDb.toFixed(1)} dBTP`, ref: `${loudnessReference.truePeakDb.toFixed(1)} dBTP`, delta: loudnessReference.truePeakDb - targetReport.loudness.truePeakDb, unit: 'dB' },
-        { label: 'Loudness range', target: `${targetReport.loudness.lra.toFixed(1)} LU`, ref: `${dynamicsReference.lra.toFixed(1)} LU`, delta: dynamicsReference.lra - targetReport.loudness.lra, unit: 'LU' },
-        { label: 'Crest factor', target: `${targetReport.loudness.crestDb.toFixed(1)} dB`, ref: `${dynamicsReference.crestDb.toFixed(1)} dB`, delta: dynamicsReference.crestDb - targetReport.loudness.crestDb, unit: 'dB' },
-        { label: 'Stereo width', target: `${targetReport.stereo.widthDb.toFixed(1)} dB`, ref: `${stereoReference.widthDb.toFixed(1)} dB`, delta: stereoReference.widthDb - targetReport.stereo.widthDb, unit: 'dB' },
-        { label: 'Correlation', target: targetReport.stereo.correlation.toFixed(2), ref: stereoReference.correlation.toFixed(2), delta: stereoReference.correlation - targetReport.stereo.correlation, unit: '' },
+        { label: 'Integrated loudness', target: `${targetSectionMetrics.lufs.toFixed(1)} LUFS`, ref: `${loudnessReference.lufs.toFixed(1)} LUFS`, delta: loudnessReference.lufs - targetSectionMetrics.lufs, unit: 'LU' },
+        { label: 'True peak · full track', target: `${targetReport.loudness.truePeakDb.toFixed(1)} dBTP`, ref: `${loudnessReference.truePeakDb.toFixed(1)} dBTP`, delta: loudnessReference.truePeakDb - targetReport.loudness.truePeakDb, unit: 'dB' },
+        { label: 'Loudness range · full track', target: `${targetReport.loudness.lra.toFixed(1)} LU`, ref: `${dynamicsReference.lra.toFixed(1)} LU`, delta: dynamicsReference.lra - targetReport.loudness.lra, unit: 'LU' },
+        { label: 'Crest factor', target: `${targetSectionMetrics.crestDb.toFixed(1)} dB`, ref: `${dynamicsReference.crestDb.toFixed(1)} dB`, delta: dynamicsReference.crestDb - targetSectionMetrics.crestDb, unit: 'dB' },
+        { label: 'Stereo width', target: `${targetSectionMetrics.widthDb.toFixed(1)} dB`, ref: `${stereoReference.widthDb.toFixed(1)} dB`, delta: stereoReference.widthDb - targetSectionMetrics.widthDb, unit: 'dB' },
+        { label: 'Correlation', target: targetSectionMetrics.correlation.toFixed(2), ref: stereoReference.correlation.toFixed(2), delta: stereoReference.correlation - targetSectionMetrics.correlation, unit: '' },
       ]
     : [];
 
@@ -133,7 +164,7 @@ export default function ReferenceMatch() {
               </div>
               {targetReport ? (
                 <div className="grid grid-cols-3 gap-2">
-                  <Stat label="LUFS" value={targetReport.loudness.integratedLufs.toFixed(1)} />
+                  <Stat label="Full LUFS" value={targetReport.loudness.integratedLufs.toFixed(1)} />
                   <Stat label="True peak" value={targetReport.loudness.truePeakDb.toFixed(1)} />
                   <Stat label="Crest" value={`${targetReport.loudness.crestDb.toFixed(1)} dB`} />
                 </div>
@@ -190,7 +221,7 @@ export default function ReferenceMatch() {
               </div>
               {primaryReference.report ? (
                 <div className="grid grid-cols-3 gap-2">
-                  <Stat label="LUFS" value={primaryReference.report.loudness.integratedLufs.toFixed(1)} />
+                  <Stat label="Full LUFS" value={primaryReference.report.loudness.integratedLufs.toFixed(1)} />
                   <Stat label="True peak" value={primaryReference.report.loudness.truePeakDb.toFixed(1)} />
                   <Stat label="Crest" value={`${primaryReference.report.loudness.crestDb.toFixed(1)} dB`} />
                 </div>
@@ -229,7 +260,7 @@ export default function ReferenceMatch() {
       </section>
 
       {comparison.length > 0 && (
-        <Panel title="Measured differences" subtitle="Selected reference set minus target. Positive means the selected reference is higher." right={<HelpTip title="How to read these measurements">The values are measured from your uploaded audio. A positive difference means the reference has a higher measured value than your target. A difference is not automatically a problem: use your ears and the arrangement as context.</HelpTip>}>
+        <Panel title="Measured differences" subtitle="Selected reference set minus target. Segment values are used where available; true peak and LRA remain full-track." right={<HelpTip title="How to read these measurements">The values are measured from your uploaded audio. A positive difference means the reference has a higher measured value than your target. A difference is not automatically a problem: use your ears and the arrangement as context.</HelpTip>}>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {comparison.map((row) => (
               <div key={row.label} className="rounded-xl border border-white/[.07] bg-[#0D0D1B]/70 p-3">
@@ -307,17 +338,45 @@ export default function ReferenceMatch() {
             >
               <div className="grid gap-3 sm:grid-cols-2">
                 <Select
-                  label="Target section"
+                  label="Target section class"
                   value={project.match.targetSection}
                   options={[{ value: 'full', label: 'Full track' }, { value: 'chorus', label: 'Chorus only' }, { value: 'verse', label: 'Verse only' }]}
-                  onChange={(value) => setMatch({ targetSection: value as MatchSettings['targetSection'] })}
+                  onChange={(value) => setMatch({ targetSection: value as MatchSettings['targetSection'], targetSectionIndex: undefined })}
                 />
                 <Select
-                  label="Reference section"
+                  label="Reference section class"
                   value={project.match.referenceSection}
                   options={[{ value: 'full', label: 'Full track' }, { value: 'chorus', label: 'Chorus only' }, { value: 'verse', label: 'Verse only' }]}
-                  onChange={(value) => setMatch({ referenceSection: value as MatchSettings['referenceSection'] })}
+                  onChange={(value) => setMatch({ referenceSection: value as MatchSettings['referenceSection'], referenceSectionIndices: undefined })}
                 />
+                <div className="sm:col-span-2 rounded-xl border border-white/[.07] bg-[#0D0D1B]/60 p-3">
+                  <p className="mb-3 text-2xs leading-relaxed text-ink-400">
+                    Select a specific detected occurrence when the automatic section choice is too broad. Exact selections override the section class. If a segment is unavailable, the matcher falls back to full-track measurements and reports the limitation.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Select
+                      label="Exact target occurrence"
+                      value={project.match.targetSectionIndex ?? -1}
+                      options={sectionOptions(targetReport, automaticSectionLabel(project.match.targetSection))}
+                      disabled={!targetReport}
+                      onChange={(value) => setMatch({ targetSectionIndex: value < 0 ? undefined : value })}
+                    />
+                    {analysedRefs.map((ref, index) => (
+                      <Select
+                        key={ref.id}
+                        label={`Exact occurrence · ${ref.meta?.name ?? `Reference ${index + 1}`}`}
+                        value={project.match.referenceSectionIndices?.[ref.id] ?? -1}
+                        options={sectionOptions(ref.report, automaticSectionLabel(project.match.referenceSection))}
+                        onChange={(value) => {
+                          const next = { ...(project.match.referenceSectionIndices ?? {}) };
+                          if (value < 0) delete next[ref.id];
+                          else next[ref.id] = value;
+                          setMatch({ referenceSectionIndices: next });
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
                 <ParamSlider label="Max EQ boost" value={project.match.maxEqBoost} min={0} max={18} step={0.5} unit="dB" onChange={(value) => setMatch({ maxEqBoost: value })} />
                 <ParamSlider label="Max EQ cut" value={project.match.maxEqCut} min={0} max={18} step={0.5} unit="dB" onChange={(value) => setMatch({ maxEqCut: value })} />
                 <ParamSlider label="Max loudness change" value={project.match.maxLoudnessChange} min={0} max={15} step={0.5} unit="dB" onChange={(value) => setMatch({ maxLoudnessChange: value })} />
@@ -377,7 +436,7 @@ export default function ReferenceMatch() {
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <div>
                   <div className="section-label mb-1">Target buildup</div>
-                  <BandBars bands={targetReport!.spectrum.bands} height={70} />
+                  <BandBars bands={preview.targetBands} height={70} />
                 </div>
                 <div>
                   <div className="section-label mb-1">Reference buildup</div>
@@ -393,7 +452,7 @@ export default function ReferenceMatch() {
                 )}
                 <p className="text-2xs leading-relaxed text-ink-500">
                   Estimated tempo: {targetReport!.rhythm.tempoBpm || '—'} BPM (confidence{' '}
-                  {Math.round(targetReport!.rhythm.beatConfidence * 100)}%). Sections: {targetReport!.sections.map((s) => s.label).join(', ')}.
+                  {Math.round(targetReport!.rhythm.beatConfidence * 100)}%). Detected segments: {targetReport!.sections.map((s) => `${s.label} ${formatTime(s.start)}–${formatTime(s.end)}`).join(' · ')}.
                 </p>
               </div>
             </>
@@ -485,7 +544,7 @@ export default function ReferenceMatch() {
                     {matchAudition && <Badge tone="accent">Ready</Badge>}
                   </div>
                   <p className="mt-1 max-w-2xl text-2xs leading-relaxed text-ink-400">
-                    Render the original and proposed chain, then switch A/B during playback at the same timeline position. The preview is temporary and does not modify your master.
+                    The chain is generated from your selected section measurements. A/B audition still plays the full project at the shared timeline position; it does not crop playback or change the export range.
                   </p>
                 </div>
                 <Button

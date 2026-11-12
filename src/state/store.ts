@@ -695,10 +695,37 @@ export const useApp = create<AppState>((set, get) => ({
       worker.terminate();
       const analyses = { ...get().analyses, [assetId]: report };
       await db.saveAnalysis(assetId, report);
+      const current = get();
+      const latestProject = current.project;
+      let updatedProject: ProjectState | null = null;
+      if (latestProject) {
+        const targetSelectionStale =
+          latestProject.targetAssetIds[0] === assetId && latestProject.match.targetSectionIndex !== undefined;
+        const referenceSelectionStale =
+          latestProject.referenceAssetIds.includes(assetId) &&
+          latestProject.match.referenceSectionIndices?.[assetId] !== undefined;
+        if (targetSelectionStale || referenceSelectionStale) {
+          updatedProject = cloneProject(latestProject);
+          if (targetSelectionStale) updatedProject.match.targetSectionIndex = undefined;
+          if (referenceSelectionStale) {
+            const selectedSections = { ...(updatedProject.match.referenceSectionIndices ?? {}) };
+            delete selectedSections[assetId];
+            updatedProject.match.referenceSectionIndices = selectedSections;
+          }
+          updatedProject.updatedAt = Date.now();
+        }
+      }
+      if (updatedProject && current.matchAudition) get().clearMatchAudition();
       const assets = get().assets.map((a) =>
         a.id === assetId ? { ...a, lufs: report.loudness.integratedLufs, peakDb: report.loudness.samplePeakDb } : a,
       );
-      set({ assets, analyses, busy: null });
+      set({
+        assets,
+        analyses,
+        busy: null,
+        ...(updatedProject ? { project: updatedProject, matchPlan: null, matchPreview: null } : {}),
+      });
+      if (updatedProject) schedulePersist(updatedProject);
       return report;
     } catch (error) {
       set({ busy: null, toast: error instanceof Error ? `Analysis failed: ${error.message}` : 'Analysis failed' });
@@ -1068,7 +1095,12 @@ export const useApp = create<AppState>((set, get) => ({
     }
     const references = project.referenceAssetIds
       .filter((id) => analyses[id])
-      .map((id) => ({ assetId: id, report: analyses[id], weight: project.match.referenceWeights?.[id] ?? 100 }));
+      .map((id) => ({
+        assetId: id,
+        report: analyses[id],
+        weight: project.match.referenceWeights?.[id] ?? 100,
+        sectionIndex: project.match.referenceSectionIndices?.[id],
+      }));
     if (!references.length) {
       set({ toast: 'Analyse at least one reference track first.' });
       return;

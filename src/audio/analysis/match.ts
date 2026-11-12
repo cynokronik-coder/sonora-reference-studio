@@ -70,7 +70,7 @@ export interface MatchPlan {
 export interface MatchGenerationOptions {
   settings: MatchSettings;
   target: AnalysisReport;
-  references: { assetId: string; report: AnalysisReport; weight?: number }[];
+  references: { assetId: string; report: AnalysisReport; weight?: number; sectionIndex?: number }[];
   targetTruePeakDb?: number;
 }
 
@@ -111,17 +111,24 @@ export function effectiveScales(settings: MatchSettings): CategorySource {
   };
 }
 
-function pickSection(report: AnalysisReport, which: 'full' | 'chorus' | 'verse'): SectionReport | null {
+export function selectAnalysisSection(
+  report: AnalysisReport,
+  which: 'full' | 'chorus' | 'verse',
+  exactIndex?: number,
+): SectionReport | null {
+  if (Number.isInteger(exactIndex) && (exactIndex as number) >= 0) {
+    return report.sections.find((section) => section.index === exactIndex) ?? null;
+  }
   if (which === 'full') return null;
-  const matching = report.sections.filter((s) => s.label === which);
+  const matching = report.sections.filter((section) => section.label === which);
   if (!matching.length) return null;
-  // Choose the most representative (longest) matching section.
+  // Automatic mode uses the longest detected occurrence of the requested class.
   return matching.reduce((a, b) => ((b.end - b.start) > (a.end - a.start) ? b : a));
 }
 
 function bandsFor(report: AnalysisReport, section: 'full' | 'chorus' | 'verse'): BandLevel[] {
-  const s = pickSection(report, section);
-  return s ? s.bands : report.spectrum.bands;
+  const selected = selectAnalysisSection(report, section);
+  return selected ? selected.bands : report.spectrum.bands;
 }
 
 interface Metrics {
@@ -146,7 +153,7 @@ interface Metrics {
   duration: number;
 }
 
-type ReferenceInput = { assetId: string; report: AnalysisReport; weight?: number };
+type ReferenceInput = { assetId: string; report: AnalysisReport; weight?: number; sectionIndex?: number };
 
 export interface ResolvedReferenceMetrics {
   metrics: Metrics;
@@ -157,10 +164,13 @@ export interface ResolvedReferenceMetrics {
   quality: number;
 }
 
-function metricsFrom(report: AnalysisReport, section: 'full' | 'chorus' | 'verse'): Metrics {
-  const sec = pickSection(report, section);
+function metricsFrom(report: AnalysisReport, section: 'full' | 'chorus' | 'verse', exactIndex?: number): Metrics {
+  const sec = selectAnalysisSection(report, section, exactIndex);
+  const exactRequested = Number.isInteger(exactIndex) && (exactIndex as number) >= 0;
   return {
     lufs: sec ? sec.lufs : report.loudness.integratedLufs,
+    // The current section analysis does not calculate Annex 2 true peak, LRA,
+    // PLR, mono compatibility or low-band side ratio. Those stay full-track.
     truePeakDb: report.loudness.truePeakDb,
     crestDb: sec ? sec.crestDb : report.loudness.crestDb,
     lra: report.loudness.lra,
@@ -177,8 +187,8 @@ function metricsFrom(report: AnalysisReport, section: 'full' | 'chorus' | 'verse
     lowEnergyDb: report.spectrum.lowEnergyDb,
     tempoBpm: report.rhythm.tempoBpm,
     bands: sec ? sec.bands : report.spectrum.bands,
-    sectionFallback: section !== 'full' && !sec,
-    duration: report.duration,
+    sectionFallback: (!sec && (exactRequested || section !== 'full')),
+    duration: sec ? sec.end - sec.start : report.duration,
   };
 }
 
@@ -231,7 +241,7 @@ export function resolveReferenceMetrics(
     ? requested.filter((entry) => Number.isFinite(entry.weight) && (entry.weight as number) > 0)
     : requested;
   const selected = blended && positiveWeightReferences.length ? positiveWeightReferences : requested;
-  const selectedMetrics = selected.map((entry) => metricsFrom(entry.report, section));
+  const selectedMetrics = selected.map((entry) => metricsFrom(entry.report, section, entry.sectionIndex));
   let weights = selected.map((entry) => blended && Number.isFinite(entry.weight) ? Math.max(0, entry.weight as number) : 1);
   if (weights.every((weight) => weight <= 0)) weights = selected.map(() => 1);
   const sum = weights.reduce((a, b) => a + b, 0);
@@ -457,7 +467,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
   const { settings, target, references } = options;
   const sources = settings.categorySource as CategorySource;
   const scales = effectiveScales(settings);
-  const tgt = metricsFrom(target, settings.targetSection);
+  const tgt = metricsFrom(target, settings.targetSection, settings.targetSectionIndex);
   const warnings: MatchWarning[] = [
     {
       kind: 'info',
@@ -473,10 +483,13 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
   const diagnostics: MetricDiff[] = [];
 
   const sectionFallbackWarnings = new Set<string>();
-  if (settings.targetSection !== 'full' && !pickSection(target, settings.targetSection)) {
+  if (tgt.sectionFallback) {
+    const targetChoice = settings.targetSectionIndex !== undefined
+      ? `selected target segment #${settings.targetSectionIndex + 1}`
+      : `requested target section (“${settings.targetSection}”)`;
     warnings.push({
       kind: 'limitation',
-      message: `The requested target section (“${settings.targetSection}”) was not detected. Full-track measurements are being used for the target.`,
+      message: `The ${targetChoice} was not found. Full-track measurements are being used for the target.`,
     });
   }
   const refFor = (category: keyof CategorySource) => {
@@ -484,9 +497,15 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
     const newlyMissingSections = resolved.fallbackAssetIds.filter((assetId) => !sectionFallbackWarnings.has(assetId));
     if (newlyMissingSections.length) {
       newlyMissingSections.forEach((assetId) => sectionFallbackWarnings.add(assetId));
+      const exactSelection = resolved.assetIds.some((assetId) => {
+        const selectedReference = references.find((entry) => entry.assetId === assetId);
+        return Number.isInteger(selectedReference?.sectionIndex) && (selectedReference?.sectionIndex as number) >= 0;
+      });
       warnings.push({
         kind: 'limitation',
-        message: `The requested reference section (“${settings.referenceSection}”) was not detected in ${newlyMissingSections.length} selected reference(s). Full-track measurements are used for those files.`,
+        message: exactSelection
+          ? `A selected reference segment was not found in ${newlyMissingSections.length} selected reference(s). Full-track measurements are used for those files.`
+          : `The requested reference section (“${settings.referenceSection}”) was not detected in ${newlyMissingSections.length} selected reference(s). Full-track measurements are used for those files.`,
       });
     }
     return resolved;

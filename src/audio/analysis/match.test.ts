@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { AnalysisReport } from './analyze';
-import { estimatePreLimiterTruePeak, resolveReferenceMetrics } from './match';
+import { createProject } from '../model/defaults';
+import { computeMatchPreview } from './preview';
+import { estimatePreLimiterTruePeak, resolveReferenceMetrics, selectAnalysisSection } from './match';
 
 function report(options: {
   lufs?: number;
@@ -97,6 +99,40 @@ function report(options: {
 }
 
 describe('reference consensus resolution', () => {
+  it('selects an exact detected occurrence instead of the longest matching label', () => {
+    const source = report({ chorus: true, lufs: -18 });
+    source.sections.push({
+      ...source.sections[0],
+      index: 1,
+      start: 62,
+      end: 88,
+      lufs: -9,
+      crestDb: 4.5,
+      widthDb: -5,
+      bands: source.sections[0].bands.map((band) => ({ ...band, db: band.db + 4 })),
+    });
+
+    const exact = selectAnalysisSection(source, 'chorus', 1);
+    expect(exact?.index).toBe(1);
+    expect(exact?.start).toBe(62);
+
+    const resolved = resolveReferenceMetrics(-1, [
+      { assetId: 'reference', report: source, sectionIndex: 1 },
+    ], 'full');
+    expect(resolved.metrics.lufs).toBeCloseTo(-9, 5);
+    expect(resolved.metrics.crestDb).toBeCloseTo(4.5, 5);
+    expect(resolved.fallbackAssetIds).toEqual([]);
+  });
+
+  it('falls back to full-track metrics when an exact reference segment is missing', () => {
+    const source = report({ lufs: -16, chorus: true });
+    const resolved = resolveReferenceMetrics(-1, [
+      { assetId: 'reference', report: source, sectionIndex: 99 },
+    ], 'chorus');
+    expect(resolved.fallbackAssetIds).toEqual(['reference']);
+    expect(resolved.metrics.lufs).toBeCloseTo(-16, 5);
+  });
+
   it('blends loudness in linear power using the configured reference weights', () => {
     const resolved = resolveReferenceMetrics(-1, [
       { assetId: 'warm', report: report({ lufs: -18 }), weight: 100 },
@@ -162,6 +198,54 @@ describe('reference consensus resolution', () => {
     ], 'full');
     expect(divergent.agreement.stereoWidth).toBeLessThan(aligned.agreement.stereoWidth);
     expect(divergent.agreement.punch).toBeLessThan(aligned.agreement.punch);
+  });
+});
+
+describe('section-aware tonal preview', () => {
+  it('uses exact target and per-reference segments in the comparison chart', () => {
+    const target = report({ chorus: true });
+    const reference = report({ chorus: true });
+    const targetTemplate = target.sections[0];
+    const referenceTemplate = reference.sections[0];
+    if (!targetTemplate || !referenceTemplate) throw new Error('Test fixture is missing its chorus section.');
+
+    const makeBands = (bands: typeof targetTemplate.bands, boostedIndex: number) => {
+      const selected = bands.map((band, index) => ({
+        ...band,
+        db: band.db + (index === boostedIndex ? 7 : 0),
+        relativeDb: 0,
+      }));
+      const average = selected.reduce((sum, band) => sum + band.db, 0) / selected.length;
+      selected.forEach((band) => { band.relativeDb = band.db - average; });
+      return selected;
+    };
+    const targetSegment = {
+      ...targetTemplate,
+      index: 1,
+      start: 58,
+      end: 82,
+      bands: makeBands(targetTemplate.bands, 0),
+    };
+    const referenceSegment = {
+      ...referenceTemplate,
+      index: 1,
+      start: 64,
+      end: 91,
+      bands: makeBands(referenceTemplate.bands, 3),
+    };
+    target.sections.push(targetSegment);
+    reference.sections.push(referenceSegment);
+
+    const project = createProject('section preview test');
+    project.targetAssetIds = ['target'];
+    project.referenceAssetIds = ['reference'];
+    project.match.targetSectionIndex = 1;
+    project.match.referenceSectionIndices = { reference: 1 };
+
+    const preview = computeMatchPreview(project, { target, reference });
+    expect(preview?.targetBands).toEqual(targetSegment.bands);
+    expect(preview?.before).toEqual(targetSegment.bands.map((band) => band.relativeDb));
+    expect(preview?.referenceBands[3]?.relativeDb).toBeCloseTo(referenceSegment.bands[3]?.relativeDb ?? 0, 5);
   });
 });
 

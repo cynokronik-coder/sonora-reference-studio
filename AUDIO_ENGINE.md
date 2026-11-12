@@ -82,7 +82,11 @@ The realtime limiter still uses its conservative 4x IIR estimator with a 0.5 dB 
 
 Reference weights are relative influence values. Zero excludes a reference from a weighted blend; when all weights are zero, the resolver falls back to equal weights and keeps the analysis usable. Explicitly selecting one reference for a category takes precedence over its blend weight.
 
-When a requested chorus or verse is unavailable in a selected reference (or in the target), the matcher uses full-track measurements and adds a visible limitation warning. It does not silently label full-track measurements as section-specific. Proposal confidence is a heuristic guidance score, not a calibrated probability; it is reduced when references disagree on the relevant characteristic or when source analysis quality is weak. The final output must still be rendered, listened to and measured.
+The Reference Match controls can use the automatic full-track / chorus / verse choice or select an exact detected segment occurrence independently for the target and each reference file. An exact occurrence overrides the automatic label choice; automatic chorus/verse mode chooses the longest detected occurrence with that label. If a stored exact segment index is unavailable after re-analysis, the matcher falls back to full-track measurements and adds a visible limitation warning. It does not silently label full-track measurements as section-specific.
+
+Segment-level measurements currently include integrated LUFS, crest factor, stereo width, stereo correlation and spectral bands. The current analysis report does not calculate per-segment Annex 2 true peak, LRA, PLR, mono compatibility, low-band side ratio or a reliable per-segment transient score; those values remain full-track measurements. The tonal comparison chart follows the same exact target and per-reference segment choices as the matcher. The before/after A/B audition still plays the complete project timeline: section choices affect the analysis and generated processing proposals, not playback cropping or export range.
+
+Proposal confidence is a heuristic guidance score, not a calibrated probability; it is reduced when references disagree on the relevant characteristic or when source analysis quality is weak. The final output must still be rendered, listened to and measured.
 
 ## Reference Match before/after audition
 
