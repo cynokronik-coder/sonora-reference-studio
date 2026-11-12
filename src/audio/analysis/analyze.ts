@@ -1,13 +1,11 @@
 import { analyzeLoudness, type LoudnessReport } from './loudness';
 import {
-  accumulateSpectrum,
-  createSpectrumAccum,
-  finalizeSpectrum,
   type BandLevel,
   type Resonance,
   type SpectrumReport,
 } from './spectrum';
-import { analyzeStereo, type StereoReport } from './stereo';
+import { type StereoReport } from './stereo';
+import { analyzeSpectrumAndStereo } from './spectral-analysis';
 import { analyzeRhythm, labelSections, type RhythmReport } from './rhythm';
 import type { SectionBoundary } from './rhythm';
 
@@ -105,13 +103,13 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
   progress('Measuring loudness', 0.02);
   const loudness = analyzeLoudness(L, R, sampleRate, (f) => progress('Measuring loudness', 0.02 + f * 0.33));
 
-  progress('Analysing spectrum', 0.36);
-  const accum = createSpectrumAccum(sampleRate);
-  accumulateSpectrum(accum, L, R, 0, n, (f) => progress('Analysing spectrum', 0.36 + f * 0.22));
-  const spectrum = finalizeSpectrum(accum);
-
-  progress('Analysing stereo image', 0.6);
-  const stereo = analyzeStereo(L, R, sampleRate, (f) => progress('Analysing stereo image', 0.6 + f * 0.18));
+  progress('Analysing spectrum and stereo', 0.36);
+  const { spectrum, stereo } = analyzeSpectrumAndStereo(
+    L,
+    R,
+    sampleRate,
+    (fraction) => progress('Analysing spectrum and stereo', 0.36 + fraction * 0.42),
+  );
 
   progress('Detecting tempo and sections', 0.8);
   const rhythm = analyzeRhythm(L, R, sampleRate);
@@ -144,10 +142,11 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
       if (!measured) return;
       const { boundary, sectionL, sectionR, sectionLoudness } = measured;
       const sectionDuration = sectionL.length / sampleRate;
-      const sectionStereo = analyzeStereo(sectionL, sectionR, sampleRate);
-      const sectionAccum = createSpectrumAccum(sampleRate);
-      accumulateSpectrum(sectionAccum, sectionL, sectionR);
-      const sectionSpectrum = finalizeSpectrum(sectionAccum);
+      const { spectrum: sectionSpectrum, stereo: sectionStereo } = analyzeSpectrumAndStereo(
+        sectionL,
+        sectionR,
+        sampleRate,
+      );
       // Structural section detection is already complete. Reuse the rhythm
       // feature engine without running another self-similarity segmentation.
       const sectionRhythm = sectionDuration >= 2
