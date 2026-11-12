@@ -29,7 +29,7 @@ const COMMANDS: Command[] = [
   { id: 'analysis', label: 'Audio Analysis', description: 'Inspect loudness, spectrum and stereo behaviour', screen: 'analysis', group: 'Production', icon: 'activity', keywords: 'measure spectrum lufs stereo waveform', requiresProject: true },
   { id: 'export', label: 'Export Center', description: 'Render and download your finished audio', screen: 'export', group: 'Production', icon: 'download', keywords: 'render bounce wav mp3 download', requiresProject: true },
   { id: 'learn', label: 'Learn & Help', description: 'Guides, explanations and workflow help', screen: 'learn', group: 'Support', icon: 'sparkles', keywords: 'help tutorial guide documentation' },
-  { id: 'settings', label: 'Settings', description: 'Configure your Sonora workspace', screen: 'settings', group: 'Support', icon: 'settings', keywords: 'preferences interface audio storage' },
+  { id: 'settings', label: 'Settings', description: 'Configure your Sonora workspace', screen: 'settings', group: 'Support', icon: 'sliders', keywords: 'preferences interface audio storage' },
 ];
 
 const GROUP_ORDER: CommandGroup[] = ['Workspace', 'Production', 'Support'];
