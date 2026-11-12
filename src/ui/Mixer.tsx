@@ -443,13 +443,13 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex items-center justify-between gap-4 border-b border-white/[.07] px-6 py-5 sm:px-8 sm:py-6">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2.5 text-xl font-semibold tracking-[-.02em] text-ink-100 sm:text-2xl"><Icon name="sparkles" size={15} className="text-[#A77AFF]" /> Sonora AI</div>
-          <div className="mt-1 text-sm text-ink-400">Your mixing companion · preview-first DSP edits</div>
+    <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden">
+      <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-white/[.07] px-4 py-4 sm:flex-nowrap sm:items-center sm:px-6 sm:py-5">
+        <div className="min-w-0 flex-1">
+          <div className="flex min-w-0 items-center gap-2.5 text-lg font-semibold tracking-[-.02em] text-ink-100 sm:text-xl"><Icon name="sparkles" size={15} className="shrink-0 text-[#A77AFF]" /> <span className="truncate">Sonora AI</span></div>
+          <div className="mt-1 break-words text-xs leading-5 text-ink-400 sm:text-sm">Your mixing companion · preview-first DSP edits</div>
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1 sm:w-auto sm:shrink-0">
           {aiStatus?.configured ? (
             <Badge tone="accent">AI online</Badge>
           ) : (
@@ -458,33 +458,33 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
           <HelpTip title="How Sonora AI works" steps={['The AI receives project metadata and measured analysis, not the raw audio file.', 'It can request local audio analysis when a report is missing.', 'It proposes real processors and parameter changes from the DSP registry.', 'Nothing is changed until you accept the proposal.']}>
             The connected model reasons about your project. If the API is not configured, Sonora uses its built-in offline command interpreter.
           </HelpTip>
-          {onExpand && <button type="button" onClick={onExpand} title="Open AI Assistant full screen" aria-label="Open AI Assistant full screen" className="rounded-xl border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-3 py-2 text-sm font-semibold text-[#C4A2FF] transition-colors hover:bg-[#8957FF]/15">⤢ <span className="hidden sm:inline">Full screen</span></button>}
-          <button type="button" onClick={() => { if (onClose) onClose(); else useApp.getState().toggleAssistant(); }} aria-label="Close assistant" className="rounded-md px-1.5 py-1 text-ink-500 transition-colors hover:bg-white/[.05] hover:text-ink-100">×</button>
+          {onExpand && <button type="button" onClick={onExpand} title="Open AI Assistant full screen" aria-label="Open AI Assistant full screen" className="focus-ring flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-2.5 text-xs font-semibold text-[#C4A2FF] transition-colors hover:bg-[#8957FF]/15">⤢ <span className="hidden md:inline">Full screen</span></button>}
+          <button type="button" onClick={() => { if (onClose) onClose(); else useApp.getState().toggleAssistant(); }} aria-label="Close assistant" className="focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base text-ink-500 transition-colors hover:bg-white/[.05] hover:text-ink-100">×</button>
         </div>
       </div>
 
-      <div ref={scrollRef} className="mx-auto min-h-0 w-full max-w-[1440px] flex-1 space-y-5 overflow-y-auto p-6 sm:space-y-6 sm:p-8 lg:p-10">
+      <div ref={scrollRef} className="mx-auto min-h-0 w-full max-w-[1440px] min-w-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden p-4 sm:space-y-5 sm:p-6 lg:p-8">
         {chat.length === 0 && (
           <div className="space-y-3">
             <div>
-              <p className="text-base leading-8 text-ink-100 sm:text-lg">
+              <p className="break-words text-sm leading-7 text-ink-100 sm:text-base">
                 Tell me what you hear or what kind of result you want. I can inspect your project's measurements, explain the options and prepare editable processing changes.
               </p>
               {aiStatus?.configured ? (
-                <p className="mt-3 text-sm leading-7 text-ink-400">Connected to {aiStatus.model}. I only receive project metadata and analysis results—not the original audio waveform.</p>
+                <p className="mt-3 break-words text-xs leading-6 text-ink-400 sm:text-sm">Connected to {aiStatus.model}. I only receive project metadata and analysis results—not the original audio waveform.</p>
               ) : (
-                <p className="mt-3 text-sm leading-7 text-ink-400">
+                <p className="mt-3 break-words text-xs leading-6 text-ink-400 sm:text-sm">
                   The offline assistant is available. To enable natural-language AI, add OPENAI_API_KEY to your local .env.local file and restart the server.
                 </p>
               )}
-              {statusError && <p className="mt-3 text-sm text-signal-amber">{statusError}</p>}
+              {statusError && <p className="mt-3 break-words text-xs text-signal-amber sm:text-sm">{statusError}</p>}
             </div>
-            <div className="rounded-2xl border border-white/[.08] bg-[#0D0D1B]/75 p-5 sm:p-6">
+            <div className="min-w-0 rounded-2xl border border-white/[.08] bg-[#0D0D1B]/75 p-4 sm:p-5">
               <div className="mb-4 flex items-center gap-3">
                 <span aria-hidden="true" className="text-accent">✦</span>
                 <span className="text-sm font-semibold text-ink-100">Try asking</span>
               </div>
-              <div className="flex flex-wrap gap-2.5">
+              <div className="flex min-w-0 flex-wrap gap-2">
                 {[
                   'Analyze my mix and tell me the three biggest issues',
                   'Make the vocals clearer without making them harsh',
@@ -495,7 +495,7 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
                     key={suggestion}
                     type="button"
                     onClick={() => ask(suggestion)}
-                    className="rounded-full border border-white/[.08] bg-[#171727] px-4 py-3 text-sm text-ink-200 transition-all hover:border-[#A77AFF]/40 hover:bg-[#8957FF]/10 hover:text-[#C4A2FF]"
+                    className="max-w-full rounded-full border border-white/[.08] bg-[#171727] px-3 py-2.5 text-left text-xs leading-5 text-ink-200 transition-colors hover:border-[#A77AFF]/40 hover:bg-[#8957FF]/10 hover:text-[#C4A2FF] sm:px-4 sm:text-sm"
                   >
                     {suggestion}
                   </button>
@@ -503,7 +503,7 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
               </div>
             </div>
             {project && project.tracks.filter((t) => t.clips.length > 0 && t.kind !== 'reference').length <= 1 && (
-              <p className="rounded-xl border border-signal-amber/20 bg-signal-amber/5 p-4 text-sm leading-7 text-signal-amber/90">
+              <p className="break-words rounded-xl border border-signal-amber/20 bg-signal-amber/5 p-3 text-xs leading-6 text-signal-amber/90 sm:p-4 sm:text-sm">
                 This project currently has one stereo source. The assistant can process the combined mix, but it cannot independently change vocals, bass or drums without separate stems.
               </p>
             )}
@@ -513,17 +513,17 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
         {chat.map((message) => (
           <div
             key={message.id}
-            className={`rounded-2xl border p-4 text-base leading-8 sm:p-5 ${
+            className={`min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-2xl border p-3 text-sm leading-7 sm:p-4 sm:text-[15px] ${
               message.role === 'user'
-                ? 'ml-6 border-[#A77AFF]/20 bg-[#8957FF]/[.12] text-ink-100'
-                : 'mr-2 border-white/[.07] bg-[#171727]/85 text-ink-200'
+                ? 'ml-0 border-[#A77AFF]/20 bg-[#8957FF]/[.12] text-ink-100 sm:ml-6'
+                : 'mr-0 border-white/[.07] bg-[#171727]/85 text-ink-200 sm:mr-2'
             }`}
           >
             {message.text}
             {message.detail && message.detail.length > 0 && (
               <ul className="mt-4 space-y-2 border-t border-ink-700 pt-4">
                 {message.detail.map((line, i) => (
-                  <li key={i} className="flex gap-2 text-sm leading-7 text-ink-300">
+                  <li key={i} className="flex min-w-0 gap-2 break-words text-xs leading-6 text-ink-300 sm:text-sm">
                     <span className="text-accent/60">·</span>
                     <span>{line}</span>
                   </li>
@@ -534,27 +534,27 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
         ))}
 
         {isThinking && (
-          <div className="mr-8 flex items-center gap-3 rounded-2xl border border-accent/20 bg-accent/5 px-5 py-4 text-sm text-ink-200">
+          <div className="mr-0 flex min-w-0 max-w-full items-start gap-3 break-words rounded-2xl border border-accent/20 bg-accent/5 px-4 py-3 text-xs text-ink-200 sm:mr-8 sm:items-center sm:px-5 sm:py-4 sm:text-sm">
             <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-accent" />
             {busy?.label || 'Sonora AI is working…'}
           </div>
         )}
 
         {assistantProposal && assistantProposal.operations.length > 0 && (
-          <div className="rounded-2xl border border-[#A77AFF]/30 bg-[#8957FF]/[.08] p-5 sm:p-7 shadow-violet-soft">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <span className="font-mono text-2xs uppercase tracking-wider text-accent">Preview · proposed changes</span>
+          <div className="min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-2xl border border-[#A77AFF]/30 bg-[#8957FF]/[.08] p-4 shadow-violet-soft sm:p-6">
+            <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
+              <span className="font-mono text-[10px] uppercase tracking-wider text-accent">Preview · proposed changes</span>
               <Badge tone="accent">{Math.round(assistantProposal.confidence * 100)}% confidence</Badge>
             </div>
-            <p className="mb-4 text-base leading-7 text-ink-100">{assistantProposal.message}</p>
+            <p className="mb-4 break-words text-sm leading-6 text-ink-100 sm:text-base">{assistantProposal.message}</p>
             <div className="space-y-1.5">
               {assistantProposal.operations.map((op, index) => (
-                <div key={index} className="rounded-xl border border-white/[.07] bg-[#0D0D1B]/80 px-4 py-3 text-sm leading-7">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium text-ink-100">{op.label || op.processorType}</span>
-                    <span className="font-mono uppercase text-accent">{op.kind}</span>
+                <div key={index} className="min-w-0 rounded-xl border border-white/[.07] bg-[#0D0D1B]/80 px-3 py-3 text-xs leading-6 sm:px-4 sm:text-sm">
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-1.5">
+                    <span className="min-w-0 break-words font-medium text-ink-100">{op.label || op.processorType}</span>
+                    <span className="shrink-0 font-mono text-[10px] uppercase text-accent">{op.kind}</span>
                   </div>
-                  <div className="mt-1 text-ink-300">{op.note}</div>
+                  <div className="mt-1 break-words text-ink-300">{op.note}</div>
                   <div className="mt-0.5 font-mono text-[9px] text-ink-600">{op.scope}{op.trackId ? ` · ${op.trackId}` : ''}</div>
                 </div>
               ))}
@@ -573,21 +573,21 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
               <Button size="md" onClick={rejectAssistantProposal}>
                 Reject
               </Button>
-              <span className="self-center text-sm text-ink-400">Nothing changes until accepted.</span>
+              <span className="self-center text-xs text-ink-400 sm:text-sm">Nothing changes until accepted.</span>
             </div>
           </div>
         )}
       </div>
 
       {suggestions.length > 0 && chat.length > 0 && (
-        <div className="flex flex-wrap gap-2.5 border-t border-ink-700 px-6 py-4 sm:px-8">
+        <div className="flex min-w-0 flex-wrap gap-2 border-t border-ink-700 px-4 py-3 sm:px-6 sm:py-4">
           {suggestions.slice(0, 3).map((suggestion) => (
             <button
               key={suggestion}
               type="button"
               disabled={disabled}
               onClick={() => ask(suggestion)}
-              className="rounded-full border border-ink-700 px-4 py-2.5 text-sm text-ink-300 hover:border-ink-500 hover:text-ink-200 disabled:opacity-40"
+              className="max-w-full rounded-full border border-ink-700 px-3 py-2 text-left text-xs leading-5 text-ink-300 hover:border-ink-500 hover:text-ink-200 disabled:opacity-40 sm:px-4 sm:text-sm"
             >
               {suggestion}
             </button>
@@ -596,7 +596,7 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
       )}
 
       <form
-        className="flex gap-3 border-t border-white/[.07] bg-[#0D0D1B]/90 p-5 sm:gap-4 sm:p-7"
+        className="flex min-w-0 flex-col gap-2 border-t border-white/[.07] bg-[#0D0D1B]/90 p-3 sm:flex-row sm:gap-3 sm:p-5"
         onSubmit={(event) => {
           event.preventDefault();
           if (!input.trim()) return;
@@ -609,9 +609,9 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
           disabled={disabled}
           onChange={(event) => setInput(event.target.value)}
           placeholder={disabled ? 'Open a project to use Sonora AI' : 'Describe what you hear or want to improve…'}
-          className="focus-ring min-w-0 flex-1 rounded-2xl border border-white/[.12] bg-[#090914] px-5 py-4 text-base text-ink-100 placeholder:text-sm min-h-[58px] placeholder:text-ink-500 disabled:opacity-50"
+          className="focus-ring min-h-[50px] w-full min-w-0 flex-1 rounded-xl border border-white/[.12] bg-[#090914] px-4 py-3 text-sm text-ink-100 placeholder:text-xs placeholder:text-ink-500 disabled:opacity-50 sm:min-h-[54px] sm:rounded-2xl sm:px-5 sm:py-4 sm:text-base"
         />
-        <Button type="submit" variant="primary" size="md" disabled={disabled || !input.trim()}>
+        <Button type="submit" variant="primary" size="md" className="w-full shrink-0 sm:w-auto" disabled={disabled || !input.trim()}>
           {isThinking ? '…' : 'Ask'}
         </Button>
       </form>

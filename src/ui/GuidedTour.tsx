@@ -156,7 +156,10 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
     if (target) {
       const bounds = target.getBoundingClientRect();
       const outsideViewport = bounds.top < 12 || bounds.bottom > window.innerHeight - 12 || bounds.left < 8 || bounds.right > window.innerWidth - 8;
-      if (outsideViewport) target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
+      if (outsideViewport) {
+        const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        target.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reduceMotion ? 'auto' : 'smooth' });
+      }
     }
 
     frame = window.requestAnimationFrame(update);
@@ -275,7 +278,7 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
         aria-modal="true"
         aria-labelledby="sonora-tour-title"
         tabIndex={-1}
-        className="fixed w-[min(360px,calc(100vw-32px))] rounded-xl border border-white/[.11] bg-[rgba(20,20,37,.96)] p-4 text-left shadow-floating backdrop-blur-xl animate-[sonora-tour-pop_180ms_ease-out]"
+        className="fixed w-[min(360px,calc(100vw-32px))] rounded-xl border border-white/[.11] bg-[rgba(20,20,37,.96)] p-4 text-left shadow-floating backdrop-blur-xl sonora-tour-surface sonora-tour-motion"
         style={{ top: tooltip.top, left: tooltip.left }}
       >
         <div className="mb-2 flex items-center justify-between gap-3">

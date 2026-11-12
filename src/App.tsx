@@ -41,7 +41,9 @@ export default function App() {
   const { screen, setScreen, project, init, mode, setMode, busy, toast, setToast, undo, redo, saveNow, engineError, storageError } = useApp();
   const [showLanding, setShowLanding] = useState(() => {
     const hash = window.location.hash;
-    return !['#studio', '#plans', '#account', '#reset-password'].includes(hash) && !hash.includes('access_token=');
+    const route = hash.slice(1) as Screen;
+    const knownRoute = NAV.some((item) => item.screen === route);
+    return !knownRoute && hash !== '#reset-password' && !hash.includes('access_token=');
   });
   const [tourOpen, setTourOpen] = useState(false);
   const [assistantFullScreen, setAssistantFullScreen] = useState(false);
@@ -92,16 +94,31 @@ export default function App() {
     const syncFromHash = () => {
       const hash = window.location.hash;
       const authCallback = hash.includes('access_token=');
-      const inApp = hash === '#studio' || hash === '#plans' || hash === '#account' || hash === '#reset-password' || authCallback;
-      setShowLanding(!inApp);
-      if (hash === '#plans') setScreen('plans');
-      else if (hash === '#account' || hash === '#reset-password' || authCallback) setScreen('account');
-      else if (hash === '#studio') setScreen('studio');
+      const route = hash.slice(1) as Screen;
+      const knownRoute = NAV.some((item) => item.screen === route);
+
+      if (authCallback || hash === '#reset-password') {
+        setShowLanding(false);
+        setScreen('account');
+      } else if (knownRoute) {
+        setShowLanding(false);
+        setScreen(route);
+      } else {
+        setShowLanding(true);
+      }
     };
     syncFromHash();
     window.addEventListener('hashchange', syncFromHash);
     return () => window.removeEventListener('hashchange', syncFromHash);
   }, []);
+
+  useEffect(() => {
+    if (showLanding || window.location.hash.includes('access_token=')) return;
+    const nextHash = `#${screen}`;
+    if (window.location.hash !== nextHash) {
+      window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${nextHash}`);
+    }
+  }, [screen, showLanding]);
 
   useEffect(() => {
     if (showLanding) return;
@@ -182,7 +199,7 @@ export default function App() {
           </div>
         )}
 
-        <main className={`relative z-0 min-h-0 flex-1 overflow-y-auto rounded-b-[26px] ${screen === 'studio' ? '' : 'p-4 sm:p-6 lg:p-8'}`}>
+        <main className="relative z-0 min-h-0 flex-1 overflow-y-auto rounded-b-[26px]">
           {blocked ? (
             <div className="p-5">
               <Panel>
@@ -244,8 +261,8 @@ export default function App() {
       <CommandPalette open={commandPaletteOpen} hasProject={Boolean(project)} onClose={() => setCommandPaletteOpen(false)} onNavigate={navigateToScreen} />
 
       {assistantFullScreen && (
-        <div className="fixed inset-0 z-[100] flex bg-[#070710]/95 p-3 backdrop-blur-xl sm:p-5 lg:p-7">
-          <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-[30px] border border-white/[.12] bg-[#0D0D1B] shadow-[0_28px_100px_rgba(0,0,0,.68)]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-hidden bg-[#070710]/95 p-3 backdrop-blur-xl sm:p-5 lg:p-7">
+          <div className="mx-auto flex h-full min-h-0 w-full max-w-[1600px] min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/[.12] bg-[#0D0D1B] shadow-[0_28px_100px_rgba(0,0,0,.68)] sm:rounded-[30px]">
             <AssistantPanel onClose={() => setAssistantFullScreen(false)} />
           </div>
         </div>
