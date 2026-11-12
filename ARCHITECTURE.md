@@ -44,7 +44,7 @@ clip audio → track chain → latency compensation → pre-fader sends → fade
 - **ProcessorChain** reconciles declarative processor configs against live instances by id. Parameters update in place;
   removed processors are disposed; order changes do not reset filter state.
 - **Solo/mute/polarity/mono** are applied in the graph, not in the UI.
-- **Sends** support pre- and post-fader routing. **External sidechain** keys come from another track's pre-chain audio.
+- **Sends** support pre- and post-fader routing. **External sidechain** keys come from another track's pre-chain audio and can feed dynamics processors on tracks or buses. The renderer refreshes or clears each assignment every block to prevent stale key signals.
 - **Buses** receive direct outputs and sends, process their own chain, and sum into master. One level of bus nesting is
   not supported.
 - **Master chain** processes the summed mix, then master gain.
