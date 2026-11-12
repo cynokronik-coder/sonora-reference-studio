@@ -11,8 +11,8 @@ The suite uses synthetic signals only — no fixtures with unknown provenance.
 | Area | What is asserted |
 |---|---|
 | FFT | forward/inverse round-trip error < 1e-8 |
-| Biquad | +6 dB bell has ~6 dB gain at centre and near unity an octave away |
-| Parametric EQ | a 1 kHz sine is amplified by ~6 dB through a +6 dB bell; DC is removed by a 100 Hz high-pass |
+| Biquad | +6 dB bell has ~6 dB gain at centre and near unity an octave away; low/high shelf slope clamped to RBJ monotonic range and tested for finite coefficients |
+| Parametric EQ | bell gain and high-pass DC removal; RBJ shelf coefficients stay finite across ±18 dB, multiple sample rates and hostile Q inputs; Mid/Side-only routing isolation; separate M/S response curves; linear-phase 513-tap impulse peak aligns to reported 256-sample latency; factory preset ranges |
 | Compressor | a signal over threshold is reduced and reports real gain reduction |
 | Limiter | output stays under a -1 dBTP ceiling with lookahead, and GR is reported |
 | Saturation | output remains finite and differs from input (harmonics added) |

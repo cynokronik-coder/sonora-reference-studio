@@ -3,7 +3,7 @@ import type { BiquadCoeffs } from './biquad';
 
 /**
  * Uniform-block FFT convolution (overlap-add). Used by the linear-phase EQ
- * mode. A 512-tap symmetric FIR at 48 kHz gives roughly 10 ms of latency and a
+ * mode. A 513-tap symmetric FIR has an exact 256-sample group delay (about 5.33 ms at 48 kHz) and a
  * smooth magnitude response without phase distortion.
  */
 export class FirConvolver {
@@ -29,12 +29,14 @@ export class FirConvolver {
   setTaps(taps: Float32Array): void {
     this.taps = taps;
     if (this.fft) this.buildKernel();
+    // A changed kernel must not convolve stale overlap from the previous EQ curve.
+    this.reset();
   }
 
   prepare(blockSize: number): void {
     if (this.fft && this.blockSize === blockSize) return;
     this.blockSize = blockSize;
-    this.fftSize = nextPow2(blockSize + this.taps.length);
+    this.fftSize = nextPow2(blockSize + this.taps.length - 1);
     this.fft = new FFT(this.fftSize);
     this.overlap = [];
     this.inputRe = [];
@@ -105,7 +107,7 @@ export class FirConvolver {
  */
 export function designLinearPhaseFir(
   cascade: BiquadCoeffs[],
-  _length = 512,
+  _length = 513,
 ): Float32Array {
   const length = _length;
   const half = length >> 1;
