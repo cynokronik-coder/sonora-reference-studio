@@ -9,7 +9,7 @@ import { Icon } from './Icon';
 import { LevelMeter, useMeters } from './viz';
 
 export function TransportBar() {
-  const { transport, togglePlay, stop, setLoop, undo, redo, monitorDb, setMonitorDb, project, lastSavedAt } = useApp();
+  const { transport, togglePlay, stop, setLoop, undo, redo, monitorDb, setMonitorDb, project } = useApp();
   const [loopStart, setLoopStart] = useState(transport.loopStart);
   const [loopEnd, setLoopEnd] = useState(transport.loopEnd);
   const [toolsOpen, setToolsOpen] = useState(false);
@@ -54,9 +54,6 @@ export function TransportBar() {
       <div className="ml-auto flex items-center gap-1.5">
         <IconButton title="Undo (Ctrl/Cmd+Z)" onClick={undo}>↶</IconButton>
         <IconButton title="Redo (Ctrl/Cmd+Shift+Z)" onClick={redo}>↷</IconButton>
-        <span className="hidden font-mono text-2xs text-ink-500 sm:inline">
-          {lastSavedAt ? 'saved ' + new Date(lastSavedAt).toLocaleTimeString() : project?.autosave ? 'autosave on' : 'unsaved'}
-        </span>
         <div className="relative" ref={moreRef}>
           <button
             type="button"
@@ -395,7 +392,7 @@ function MasterStrip({ selected, onSelect }: { selected: boolean; onSelect: () =
   );
 }
 
-export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; onExpand?: () => void } = {}) {
+export function AssistantPanel({ onClose, onExpand, draggable = false }: { onClose?: () => void; onExpand?: () => void; draggable?: boolean } = {}) {
   const {
     project,
     chat,
@@ -412,6 +409,7 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
   const [aiStatus, setAiStatus] = useState<SonoraAiStatus | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const stickToBottomRef = useRef(true);
   const track = project?.tracks.find((t) => t.id === selectedTrackId);
   const isThinking = busy?.kind === 'assistant' || busy?.kind === 'analyze';
 
@@ -431,7 +429,9 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
   }, []);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    const container = scrollRef.current;
+    if (!container || !stickToBottomRef.current) return;
+    container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
   }, [chat.length, assistantProposal, isThinking]);
 
   const suggestions = assistantSuggestions();
@@ -444,10 +444,20 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
 
   return (
     <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden">
-      <div className="flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-white/[.07] px-4 py-4 sm:flex-nowrap sm:items-center sm:px-6 sm:py-5">
+      <div data-assistant-drag-handle={draggable ? '' : undefined} className={`flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-white/[.07] px-4 py-3 sm:flex-nowrap sm:items-center sm:px-5 sm:py-4 ${draggable ? 'cursor-grab touch-none select-none active:cursor-grabbing' : ''}`}>
         <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 items-center gap-2.5 text-lg font-semibold tracking-[-.02em] text-ink-100 sm:text-xl"><Icon name="sparkles" size={15} className="shrink-0 text-[#A77AFF]" /> <span className="truncate">Sonora AI</span></div>
-          <div className="mt-1 break-words text-xs leading-5 text-ink-400 sm:text-sm">Your mixing companion · preview-first DSP edits</div>
+          <div className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-[-.02em] text-ink-100 sm:text-lg">
+            {draggable && <span aria-hidden="true" className="text-xs tracking-[-.2em] text-ink-500">⠿</span>}
+            <Icon name="sparkles" size={15} className="shrink-0 text-[#A77AFF]" />
+            <span className="truncate">Sonora AI</span>
+          </div>
+
+          {track && (
+            <div className="mt-2 inline-flex items-center gap-1 rounded-lg border border-white/[.08] bg-black/20 p-0.5">
+              <button type="button" aria-pressed={assistantScope === 'master'} onClick={() => setAssistantScope('master')} className={`rounded-md px-2 py-1 text-[9px] font-medium transition-colors ${assistantScope === 'master' ? 'bg-[#8957FF]/20 text-[#C4A2FF]' : 'text-ink-500 hover:text-ink-200'}`}>Full mix</button>
+              <button type="button" aria-pressed={assistantScope === 'track'} onClick={() => setAssistantScope('track')} className={`max-w-[130px] truncate rounded-md px-2 py-1 text-[9px] font-medium transition-colors ${assistantScope === 'track' ? 'bg-[#8957FF]/20 text-[#C4A2FF]' : 'text-ink-500 hover:text-ink-200'}`}>Selected track</button>
+            </div>
+          )}
         </div>
         <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1 sm:w-auto sm:shrink-0">
           {aiStatus?.configured ? (
@@ -463,73 +473,98 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
         </div>
       </div>
 
-      <div ref={scrollRef} className="mx-auto min-h-0 w-full max-w-[1440px] min-w-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden p-4 sm:space-y-5 sm:p-6 lg:p-8">
+      <div
+        ref={scrollRef}
+        role="log"
+        aria-live="polite"
+        aria-relevant="additions"
+        onScroll={(event) => {
+          const element = event.currentTarget;
+          stickToBottomRef.current = element.scrollHeight - element.scrollTop - element.clientHeight < 140;
+        }}
+        className="mx-auto flex min-h-0 w-full max-w-[1440px] min-w-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden px-4 py-5 sm:gap-5 sm:px-5 sm:py-6"
+      >
         {chat.length === 0 && (
-          <div className="space-y-3">
-            <div>
-              <p className="break-words text-sm leading-7 text-ink-100 sm:text-base">
-                Tell me what you hear or what kind of result you want. I can inspect your project's measurements, explain the options and prepare editable processing changes.
-              </p>
-              {aiStatus?.configured ? (
-                <p className="mt-3 break-words text-xs leading-6 text-ink-400 sm:text-sm">Connected to {aiStatus.model}. I only receive project metadata and analysis results—not the original audio waveform.</p>
-              ) : (
-                <p className="mt-3 break-words text-xs leading-6 text-ink-400 sm:text-sm">
-                  The offline assistant is available. To enable natural-language AI, add OPENAI_API_KEY to your local .env.local file and restart the server.
-                </p>
-              )}
-              {statusError && <p className="mt-3 break-words text-xs text-signal-amber sm:text-sm">{statusError}</p>}
-            </div>
-            <div className="min-w-0 rounded-2xl border border-white/[.08] bg-[#0D0D1B]/75 p-4 sm:p-5">
-              <div className="mb-4 flex items-center gap-3">
-                <span aria-hidden="true" className="text-accent">✦</span>
-                <span className="text-sm font-semibold text-ink-100">Try asking</span>
+          <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-5 py-3">
+            <div className="rounded-2xl border border-[#A77AFF]/20 bg-[radial-gradient(ellipse_at_top_right,rgba(137,87,255,.14),transparent_48%),#11111F] p-5 sm:p-6">
+              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-[#A77AFF]/25 bg-[#8957FF]/10 px-3 py-1 font-mono text-[9px] uppercase tracking-[.16em] text-[#C4A2FF]">
+                <Icon name="sparkles" size={12} /> Studio copilot
               </div>
-              <div className="flex min-w-0 flex-wrap gap-2">
+              <h2 className="text-lg font-semibold tracking-[-.02em] text-white sm:text-xl">What would you like to improve?</h2>
+              <p className="mt-2 max-w-2xl text-xs leading-6 text-ink-300 sm:text-sm">
+                Ask about your mix, get a focused analysis, or prepare processing changes. Sonora explains each suggestion before anything is applied.
+              </p>
+              <div className="mt-4 flex flex-wrap items-center gap-2 text-[10px] text-ink-500">
+                <span className="rounded-lg border border-white/[.08] bg-black/20 px-2.5 py-1.5">{assistantScope === 'track' && track ? track.name : 'Full mix context'}</span>
+                <span className="rounded-lg border border-white/[.08] bg-black/20 px-2.5 py-1.5">{aiStatus?.configured ? aiStatus.model : 'Offline command mode'}</span>
+              </div>
+            </div>
+            <div className="min-w-0">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[.14em] text-ink-400">Start with a task</p>
+                <span className="text-[10px] text-ink-600">Choose one to begin</span>
+              </div>
+              <div className="grid min-w-0 gap-2 sm:grid-cols-2">
                 {[
-                  'Analyze my mix and tell me the three biggest issues',
-                  'Make the vocals clearer without making them harsh',
-                  'Help me get a tighter low end',
-                  'Explain what my master loudness means',
-                ].map((suggestion) => (
+                  ['Mix diagnosis', 'Analyze my mix and tell me the three biggest issues'],
+                  ['Vocal clarity', 'Make the vocals clearer without making them harsh'],
+                  ['Low-end control', 'Help me get a tighter low end'],
+                  ['Mastering basics', 'Explain what my master loudness means'],
+                ].map(([label, suggestion]) => (
                   <button
-                    key={suggestion}
+                    key={label}
                     type="button"
                     onClick={() => ask(suggestion)}
-                    className="max-w-full rounded-full border border-white/[.08] bg-[#171727] px-3 py-2.5 text-left text-xs leading-5 text-ink-200 transition-colors hover:border-[#A77AFF]/40 hover:bg-[#8957FF]/10 hover:text-[#C4A2FF] sm:px-4 sm:text-sm"
+                    className="group flex min-w-0 items-start gap-3 rounded-xl border border-white/[.08] bg-[#171727]/75 px-3.5 py-3 text-left transition-colors hover:border-[#A77AFF]/35 hover:bg-[#8957FF]/[.08]"
                   >
-                    {suggestion}
+                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-[#A77AFF]/20 bg-[#8957FF]/10 text-[#C4A2FF]"><Icon name="sparkles" size={13} /></span>
+                    <span className="min-w-0">
+                      <span className="block text-xs font-semibold text-ink-100">{label}</span>
+                      <span className="mt-1 block break-words text-[11px] leading-5 text-ink-400">{suggestion}</span>
+                    </span>
                   </button>
                 ))}
               </div>
             </div>
+            {!aiStatus?.configured && (
+              <div className="rounded-xl border border-white/[.07] bg-[#11111F]/80 px-3.5 py-3 text-[11px] leading-5 text-ink-400">
+                Sonora is currently using its offline command interpreter. Configure the server-side AI key in your Render service environment to enable connected natural-language responses.
+                {statusError && <p className="mt-1 break-words text-signal-amber">{statusError}</p>}
+              </div>
+            )}
             {project && project.tracks.filter((t) => t.clips.length > 0 && t.kind !== 'reference').length <= 1 && (
-              <p className="break-words rounded-xl border border-signal-amber/20 bg-signal-amber/5 p-3 text-xs leading-6 text-signal-amber/90 sm:p-4 sm:text-sm">
-                This project currently has one stereo source. The assistant can process the combined mix, but it cannot independently change vocals, bass or drums without separate stems.
+              <p className="rounded-xl border border-signal-amber/20 bg-signal-amber/5 p-3 text-[11px] leading-5 text-signal-amber/90">
+                This project has one stereo source. Sonora can process the combined mix, but separate vocal, bass and drum controls require individual stems.
               </p>
             )}
           </div>
         )}
 
         {chat.map((message) => (
-          <div
-            key={message.id}
-            className={`min-w-0 max-w-full break-words [overflow-wrap:anywhere] rounded-2xl border p-3 text-sm leading-7 sm:p-4 sm:text-[15px] ${
+          <div key={message.id} className={`flex w-full min-w-0 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <article className={`min-w-0 max-w-[94%] rounded-2xl border p-3 sm:p-4 ${
               message.role === 'user'
-                ? 'ml-0 border-[#A77AFF]/20 bg-[#8957FF]/[.12] text-ink-100 sm:ml-6'
-                : 'mr-0 border-white/[.07] bg-[#171727]/85 text-ink-200 sm:mr-2'
-            }`}
-          >
-            {message.text}
-            {message.detail && message.detail.length > 0 && (
-              <ul className="mt-4 space-y-2 border-t border-ink-700 pt-4">
-                {message.detail.map((line, i) => (
-                  <li key={i} className="flex min-w-0 gap-2 break-words text-xs leading-6 text-ink-300 sm:text-sm">
-                    <span className="text-accent/60">·</span>
-                    <span>{line}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
+                ? 'max-w-[88%] border-[#A77AFF]/25 bg-[#8957FF]/[.13] text-ink-100'
+                : 'w-full border-white/[.07] bg-[#171727]/85 text-ink-200'
+            }`}>
+              <div className="mb-2 flex items-center gap-2">
+                <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[9px] font-semibold ${message.role === 'user' ? 'bg-[#8957FF]/25 text-[#D8C6FF]' : 'border border-[#A77AFF]/20 bg-[#8957FF]/10 text-[#C4A2FF]'}`}>
+                  {message.role === 'user' ? 'Y' : <Icon name="sparkles" size={12} />}
+                </span>
+                <span className="text-[10px] font-semibold text-ink-300">{message.role === 'user' ? 'You' : 'Sonora AI'}</span>
+              </div>
+              <p className="whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-xs leading-6 sm:text-sm sm:leading-7">{message.text}</p>
+              {message.detail && message.detail.length > 0 && (
+                <ul className="mt-3 space-y-1.5 border-t border-white/[.07] pt-3">
+                  {message.detail.map((line, i) => (
+                    <li key={i} className="flex min-w-0 gap-2 break-words text-[11px] leading-5 text-ink-300 sm:text-xs">
+                      <span className="text-accent/60">·</span>
+                      <span>{line}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </article>
           </div>
         ))}
 
@@ -618,4 +653,3 @@ export function AssistantPanel({ onClose, onExpand }: { onClose?: () => void; on
     </div>
   );
 }
-

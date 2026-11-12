@@ -2,7 +2,7 @@ import { ProcessorChain } from '../dsp/chain';
 import { valueAtTime, findLane } from '../dsp/automation';
 import type { ParamValues } from '../dsp/types';
 import { dbToGain, clamp } from '../dsp/util';
-import type { BusState, ProjectState, TrackState } from '../model/types';
+import type { BusState, ProcessorNodeState, ProjectState, TrackState } from '../model/types';
 
 export interface EngineAsset {
   id: string;
@@ -257,6 +257,26 @@ export class ProjectRenderer {
     };
   }
 
+  /**
+   * Refresh every processor's external key on every render block.
+   *
+   * Passing null is intentional: it explicitly returns a dynamics processor
+   * to its internal detector when a user disconnects a sidechain. This also
+   * keeps a deleted/missing source from leaving an old block buffer latched.
+   * Raw track buffers are populated before either track or bus chains run.
+   */
+  private syncSidechains(
+    processors: ProcessorNodeState[],
+    chain: ProcessorChain,
+  ): void {
+    for (const processor of processors) {
+      const key = processor.sidechainFrom
+        ? this.rawKeys.get(processor.sidechainFrom)
+        : undefined;
+      chain.setSidechain(processor.id, key?.L ?? null, key?.R ?? null);
+    }
+  }
+
   private applyAutomatedParams(
     track: TrackState,
     chain: ProcessorChain,
@@ -364,11 +384,7 @@ export class ProjectRenderer {
           buf.R[i] = m;
         }
       }
-      for (const processor of track.processors) {
-        // Always refresh the key, including clearing it when a sidechain route is removed.
-        const key = processor.sidechainFrom ? this.rawKeys.get(processor.sidechainFrom) : undefined;
-        path.chain.setSidechain(processor.id, key?.L ?? null, key?.R ?? null);
-      }
+      this.syncSidechains(track.processors, path.chain);
       // Automation must be applied after the structural sync and immediately
       // before processing, otherwise the base parameter values overwrite it.
       this.applyAutomatedParams(track, path.chain, time);
@@ -439,6 +455,7 @@ export class ProjectRenderer {
         acc.R.fill(0, 0, frames);
         continue;
       }
+      this.syncSidechains(bus.processors, path.chain);
       this.applyAutomatedParams({ ...this.emptyTrack(bus.id), automation: bus.automation, processors: bus.processors } as TrackState, path.chain, time);
       path.chain.process(acc.L, acc.R, frames);
       if (bus.polarity) {
