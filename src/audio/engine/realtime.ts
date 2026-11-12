@@ -157,6 +157,24 @@ export class RealtimeHost {
     this.node.port.postMessage({ type: 'configure', project: JSON.parse(JSON.stringify(project)) });
   }
 
+  /** Configure two independent live render paths for Reference Match audition. */
+  setMatchAuditionProjects(projects: { before: ProjectState; after: ProjectState }): void {
+    if (!this.ready || !this.node) throw new Error('Audio engine is not ready for Reference Match audition.');
+    this.node.port.postMessage({
+      type: 'match-audition-projects',
+      before: JSON.parse(JSON.stringify(projects.before)),
+      after: JSON.parse(JSON.stringify(projects.after)),
+    });
+  }
+
+  setMatchAudition(active: boolean, mode: 'before' | 'after' = 'before'): void {
+    this.node?.port.postMessage({ type: 'match-audition-mode', active, mode });
+  }
+
+  clearMatchAuditionBuffers(): void {
+    this.node?.port.postMessage({ type: 'clear-match-audition' });
+  }
+
   async play(position?: number): Promise<void> {
     await this.initialise();
     await this.ctx?.resume();

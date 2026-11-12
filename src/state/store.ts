@@ -9,6 +9,7 @@ import { requestSonoraAi } from '../audio/ai/client';
 import { buildAssistantContext } from '../audio/ai/context';
 import { createValidatedAiProposal } from '../audio/ai/proposals';
 import { realtimeHost } from '../audio/engine/realtime';
+import type { AuditionMode } from '../audio/engine/audition';
 import type { EngineAsset } from '../audio/engine/renderer';
 import { createProcessorNode, createProject as newProject, createTrack, createClip, createBus, defaultMatchSettings, uid } from '../audio/model/defaults';
 import type {
@@ -80,6 +81,14 @@ export interface ABWorkingMix {
   volumeDb: number;
 }
 
+export interface MatchAuditionState {
+  mode: AuditionMode;
+  loudnessMatch: boolean;
+  comparisonDb: number;
+  before: RenderStats;
+  after: RenderStats;
+}
+
 export interface BusyState {
   kind: 'import' | 'load' | 'analyze' | 'render' | 'match' | 'decode' | 'assistant';
   label: string;
@@ -121,6 +130,7 @@ interface AppState {
   analyses: Record<string, AnalysisReport>;
   matchPlan: MatchPlan | null;
   matchPreview: { before: number[]; after: number[] } | null;
+  matchAudition: MatchAuditionState | null;
   presets: PresetDefinition[];
   exports: ExportRecord[];
   selectedTrackId: string | null;
@@ -207,6 +217,10 @@ interface AppState {
   setMonitorDb: (db: number) => void;
 
   generateMatch: () => Promise<void>;
+  prepareMatchAudition: (proposalIds?: string[]) => Promise<void>;
+  setMatchAuditionMode: (mode: AuditionMode) => void;
+  setMatchAuditionLoudnessMatch: (on: boolean) => void;
+  clearMatchAudition: () => void;
   applyMatchPlan: (proposalIds?: string[]) => void;
   clearMatchPlan: () => void;
   verifyMaster: () => Promise<void>;
@@ -313,6 +327,7 @@ export const useApp = create<AppState>((set, get) => ({
   analyses: {},
   matchPlan: null,
   matchPreview: null,
+  matchAudition: null,
   presets: [...BUILT_IN_PRESETS],
   exports: [],
   selectedTrackId: null,
@@ -375,7 +390,10 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
 
-  setScreen: (screen) => set({ screen }),
+  setScreen: (screen) => {
+    if (get().screen === 'reference' && screen !== 'reference') get().clearMatchAudition();
+    set({ screen });
+  },
   setMode: (mode) => {
     try {
       localStorage.setItem('sonora:mode', mode);
@@ -406,6 +424,8 @@ export const useApp = create<AppState>((set, get) => ({
       return;
     }
     realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     set({
       project,
       assets: [],
@@ -413,6 +433,7 @@ export const useApp = create<AppState>((set, get) => ({
       analyses: {},
       matchPlan: null,
       matchPreview: null,
+      matchAudition: null,
       selectedTrackId: null,
       selectedProcessorId: null,
       exports: [],
@@ -476,6 +497,8 @@ export const useApp = create<AppState>((set, get) => ({
       project.sampleRate = targetRate;
       await db.saveProject(project);
       realtimeHost.setComparisonGain(0);
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.clearMatchAuditionBuffers();
       set({
         project,
         assets,
@@ -495,6 +518,7 @@ export const useApp = create<AppState>((set, get) => ({
         history: [],
         future: [],
         matchPlan: null,
+        matchAudition: null,
         transport: {
           playing: false,
           position: 0,
@@ -514,7 +538,9 @@ export const useApp = create<AppState>((set, get) => ({
   closeProject: () => {
     realtimeHost.stop();
     realtimeHost.setComparisonGain(0);
-    set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, abSlots: [], activeSlot: null, workingMix: null, loudnessMatch: false, comparisonDb: 0, screen: 'projects' });
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
+    set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, matchPreview: null, matchAudition: null, abSlots: [], activeSlot: null, workingMix: null, loudnessMatch: false, comparisonDb: 0, screen: 'projects' });
   },
 
   deleteProjectById: async (id) => {
@@ -700,10 +726,16 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   mutate: (mutator, options) => {
-    const state = get();
+    let state = get();
     if (!state.project) return;
-    const previous = cloneProject(state.project);
-    const next = cloneProject(state.project);
+    if (state.matchAudition) {
+      get().clearMatchAudition();
+      state = get();
+      if (!state.project) return;
+    }
+    const project = state.project;
+    const previous = cloneProject(project);
+    const next = cloneProject(project);
     mutator(next);
     const projectContentChanged = JSON.stringify(previous) !== JSON.stringify(next);
     const mixContextChanged = JSON.stringify(previous.tracks) !== JSON.stringify(next.tracks) ||
@@ -713,7 +745,7 @@ export const useApp = create<AppState>((set, get) => ({
     const clearAudition = projectContentChanged && state.activeSlot !== null && !options?.preserveAb;
     // A/B recalls are temporary views. Keep history and the persisted project
     // anchored to the user's working master, not to the auditioned snapshot.
-    if (state.activeSlot !== null && state.workingMix?.projectId === state.project.id) {
+    if (state.activeSlot !== null && state.workingMix?.projectId === project.id) {
       previous.master.processors = structuredClone(state.workingMix.processors);
       previous.master.volumeDb = state.workingMix.volumeDb;
       if (clearAudition && !masterChanged) {
@@ -733,13 +765,20 @@ export const useApp = create<AppState>((set, get) => ({
       lastCoalesceAt: Date.now(),
       ...(mixContextChanged && state.abSlots.length ? { abSlots: state.abSlots.map((slot) => ({ ...slot, stale: true })) } : {}),
       ...(clearAudition ? { activeSlot: null, workingMix: null, comparisonDb: 0 } : {}),
+      ...(projectContentChanged && state.matchAudition ? { matchAudition: null } : {}),
     });
     if (clearAudition) realtimeHost.setComparisonGain(0);
+    if (projectContentChanged && state.matchAudition) {
+      realtimeHost.clearMatchAuditionBuffers();
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.setComparisonGain(state.comparisonDb);
+    }
     if (!options?.skipPersist && !(state.activeSlot !== null && !projectContentChanged)) schedulePersist(next);
     syncEngine(next, get().assetBuffers);
   },
 
   undo: () => {
+    if (get().matchAudition) get().clearMatchAudition();
     if (get().activeSlot !== null) {
       get().restoreWorkingMix();
       return;
@@ -752,16 +791,20 @@ export const useApp = create<AppState>((set, get) => ({
       history: history.slice(0, -1),
       future: [project, ...future].slice(0, 50),
       selectedProcessorId: null,
+      matchAudition: null,
       activeSlot: null,
       workingMix: null,
       comparisonDb: 0,
     });
     schedulePersist(previous);
     realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     syncEngine(previous, get().assetBuffers);
   },
 
   redo: () => {
+    if (get().matchAudition) get().clearMatchAudition();
     if (get().activeSlot !== null) {
       get().restoreWorkingMix();
       return;
@@ -774,12 +817,15 @@ export const useApp = create<AppState>((set, get) => ({
       future: future.slice(1),
       history: [...history, project].slice(-50),
       selectedProcessorId: null,
+      matchAudition: null,
       activeSlot: null,
       workingMix: null,
       comparisonDb: 0,
     });
     schedulePersist(next);
     realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     syncEngine(next, get().assetBuffers);
   },
 
@@ -976,7 +1022,7 @@ export const useApp = create<AppState>((set, get) => ({
     realtimeHost.loadAssets(engineAssets(project, assetBuffers));
     realtimeHost.pushProject(project);
     realtimeHost.setMonitorGain(get().monitorDb);
-    realtimeHost.setComparisonGain(get().comparisonDb);
+    realtimeHost.setComparisonGain(get().matchAudition?.comparisonDb ?? get().comparisonDb);
     realtimeHost.setLoop(transport.loopEnabled, transport.loopStart, transport.loopEnd);
     if (transport.playing) {
       realtimeHost.pause();
@@ -1012,6 +1058,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   generateMatch: async () => {
+    get().clearMatchAudition();
     const { project, analyses, assets } = get();
     if (!project) return;
     const targetId = project.targetAssetIds[0];
@@ -1042,6 +1089,158 @@ export const useApp = create<AppState>((set, get) => ({
     void assets;
   },
 
+  prepareMatchAudition: async (proposalIds) => {
+    const initial = get();
+    if (!initial.project || !initial.matchPlan) {
+      set({ toast: 'Generate a Reference Match processing chain first.' });
+      return;
+    }
+    if (initial.busy) {
+      set({ toast: 'Finish the current task before preparing the audio comparison.' });
+      return;
+    }
+    const selectedPlan = proposalIds
+      ? { ...initial.matchPlan, proposals: initial.matchPlan.proposals.filter((proposal) => proposalIds.includes(proposal.id)) }
+      : initial.matchPlan;
+    if (!selectedPlan.proposals.length) {
+      set({ toast: 'Select at least one proposed processor before preparing the audition.' });
+      return;
+    }
+
+    const projectSnapshot = cloneProject(initial.project);
+    const projectSignature = JSON.stringify(projectSnapshot);
+    const planSignature = JSON.stringify(initial.matchPlan);
+    const projectId = projectSnapshot.id;
+    const startPosition = initial.transport.playing ? realtimeHost.position : initial.transport.position;
+    get().clearMatchAudition();
+
+    try {
+      await realtimeHost.initialise();
+      if (realtimeHost.playing) realtimeHost.pause();
+      set((state) => ({
+        transport: { ...state.transport, playing: false, position: startPosition },
+      }));
+
+      const beforeProject = cloneProject(projectSnapshot);
+      const afterProject = cloneProject(projectSnapshot);
+      afterProject.master.processors = planToNodes(selectedPlan);
+      afterProject.match.enabled = true;
+      const endSec = timelineDuration(projectSnapshot);
+
+      const beforeResult = await renderProject(get, {
+        mode: 'master', startSec: 0, endSec,
+        label: 'Measuring original mix for A/B audition',
+        projectOverride: beforeProject, statsOnly: true,
+      });
+      const afterResult = await renderProject(get, {
+        mode: 'master', startSec: 0, endSec,
+        label: 'Measuring matched mix for A/B audition',
+        projectOverride: afterProject, statsOnly: true,
+      });
+
+      const current = get();
+      if (
+        current.screen !== 'reference' ||
+        !current.project ||
+        current.project.id !== projectId ||
+        JSON.stringify(current.project) !== projectSignature ||
+        !current.matchPlan ||
+        JSON.stringify(current.matchPlan) !== planSignature
+      ) {
+        set({ busy: null, toast: 'The project or match plan changed during rendering. Prepare the A/B audition again.' });
+        return;
+      }
+      if (
+        beforeResult.sampleRate !== realtimeHost.sampleRate ||
+        beforeResult.sampleRate !== afterResult.sampleRate ||
+        Math.abs(beforeResult.stats.duration - afterResult.stats.duration) > 1 / beforeResult.sampleRate
+      ) {
+        throw new Error('The original and matched renders do not share the same sample timeline.');
+      }
+
+      realtimeHost.loadAssets(engineAssets(current.project, current.assetBuffers));
+      realtimeHost.pushProject(current.project);
+      realtimeHost.setMatchAuditionProjects({ before: beforeProject, after: afterProject });
+      const comparisonDb = loudnessMatchedMonitorGain([
+        { id: 'before', lufs: beforeResult.stats.lufs },
+        { id: 'after', lufs: afterResult.stats.lufs },
+      ], 'before');
+      realtimeHost.setMatchAudition(true, 'before');
+      realtimeHost.setMonitorGain(current.monitorDb);
+      realtimeHost.setComparisonGain(comparisonDb);
+      realtimeHost.setLoop(current.transport.loopEnabled, current.transport.loopStart, current.transport.loopEnd);
+      realtimeHost.seek(Math.min(startPosition, beforeResult.stats.duration));
+      set({
+        matchAudition: {
+          mode: 'before',
+          loudnessMatch: true,
+          comparisonDb,
+          before: beforeResult.stats,
+          after: afterResult.stats,
+        },
+        transport: {
+          ...get().transport,
+          playing: false,
+          position: Math.min(startPosition, beforeResult.stats.duration),
+          duration: beforeResult.stats.duration,
+        },
+        busy: null,
+        toast: 'A/B audition ready. Press Play, then switch between A (original) and B (Reference Match).',
+      });
+    } catch (error) {
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.clearMatchAuditionBuffers();
+      realtimeHost.setComparisonGain(get().comparisonDb);
+      set({
+        busy: null,
+        matchAudition: null,
+        toast: error instanceof Error ? `Could not prepare the A/B audition: ${error.message}` : 'Could not prepare the A/B audition.',
+      });
+    }
+  },
+
+  setMatchAuditionMode: (mode) => {
+    const audition = get().matchAudition;
+    if (!audition) return;
+    const comparisonDb = audition.loudnessMatch
+      ? loudnessMatchedMonitorGain([
+          { id: 'before', lufs: audition.before.lufs },
+          { id: 'after', lufs: audition.after.lufs },
+        ], mode)
+      : 0;
+    realtimeHost.setMatchAudition(true, mode);
+    realtimeHost.setComparisonGain(comparisonDb);
+    set({ matchAudition: { ...audition, mode, comparisonDb } });
+  },
+
+  setMatchAuditionLoudnessMatch: (on) => {
+    const audition = get().matchAudition;
+    if (!audition) return;
+    const comparisonDb = on
+      ? loudnessMatchedMonitorGain([
+          { id: 'before', lufs: audition.before.lufs },
+          { id: 'after', lufs: audition.after.lufs },
+        ], audition.mode)
+      : 0;
+    realtimeHost.setComparisonGain(comparisonDb);
+    set({ matchAudition: { ...audition, loudnessMatch: on, comparisonDb } });
+  },
+
+  clearMatchAudition: () => {
+    const state = get();
+    if (!state.matchAudition) return;
+    if (state.transport.playing || realtimeHost.playing) {
+      realtimeHost.pause();
+      set((current) => ({
+        transport: { ...current.transport, playing: false, position: realtimeHost.position },
+      }));
+    }
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
+    realtimeHost.setComparisonGain(state.comparisonDb);
+    set({ matchAudition: null });
+  },
+
   applyMatchPlan: (proposalIds) => {
     const plan = get().matchPlan;
     if (!plan) return;
@@ -1057,7 +1256,10 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
 
-  clearMatchPlan: () => set({ matchPlan: null, matchPreview: null }),
+  clearMatchPlan: () => {
+    get().clearMatchAudition();
+    set({ matchPlan: null, matchPreview: null });
+  },
 
   verifyMaster: async () => {
     const { project } = get();
@@ -1668,6 +1870,8 @@ export const useApp = create<AppState>((set, get) => ({
   clearAllData: async () => {
     realtimeHost.stop();
     realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     await db.clearAllData();
     set({
       projects: [],
@@ -1675,6 +1879,9 @@ export const useApp = create<AppState>((set, get) => ({
       assets: [],
       assetBuffers: {},
       analyses: {},
+      matchPlan: null,
+      matchPreview: null,
+      matchAudition: null,
       exports: [],
       presets: [...BUILT_IN_PRESETS],
       screen: 'dashboard',
@@ -1698,10 +1905,10 @@ function timelineDuration(project: ProjectState): number {
 
 async function renderProject(
   get: () => AppState,
-  options: { mode: 'master' | 'track'; trackId?: string; startSec: number; endSec: number; label?: string },
+  options: { mode: 'master' | 'track'; trackId?: string; startSec: number; endSec: number; label?: string; projectOverride?: ProjectState; statsOnly?: boolean },
 ): Promise<{ L: Float32Array; R: Float32Array; sampleRate: number; stats: RenderStats }> {
   const state = get();
-  const project = state.project;
+  const project = options.projectOverride ?? state.project;
   if (!project) throw new Error('No project open.');
   let renderProjectState = cloneProject(project);
   if (options.mode === 'track' && options.trackId) {
@@ -1767,6 +1974,7 @@ async function renderProject(
         sampleRate: renderProjectState.sampleRate,
         startSec: options.startSec,
         endSec: options.endSec,
+        statsOnly: options.statsOnly,
       });
     });
   } finally {

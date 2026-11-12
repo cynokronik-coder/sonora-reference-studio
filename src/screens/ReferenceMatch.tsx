@@ -8,6 +8,7 @@ import { MATCH_CATEGORIES, resolveReferenceMetrics, type CategorySource } from '
 import type { MatchSettings } from '../audio/model/types';
 import { computeMatchPreview } from '../audio/analysis/preview';
 import { formatTime } from '../audio/dsp/util';
+import { TransportBar } from '../ui/Mixer';
 
 export default function ReferenceMatch() {
   const {
@@ -16,6 +17,11 @@ export default function ReferenceMatch() {
     assetBuffers,
     analyses,
     matchPlan,
+    matchAudition,
+    prepareMatchAudition,
+    setMatchAuditionMode,
+    setMatchAuditionLoudnessMatch,
+    clearMatchAudition,
     importFiles,
     analyzeProjectAssets,
     removeReference,
@@ -102,11 +108,13 @@ export default function ReferenceMatch() {
           <Button size="sm" onClick={() => void analyzeProjectAssets()} disabled={!targetId && referenceIds.length === 0}>
             Analyse all
           </Button>
-          <Button size="sm" variant="primary" onClick={() => void generateMatch()} disabled={!ready}>
+          <Button size="sm" variant="primary" onClick={() => void generateMatch()} disabled={!ready || Boolean(busy)}>
             <Icon name="sparkles" size={14} /> Generate chain
           </Button>
         </div>
       </header>
+
+      <TransportBar />
 
       <section className="grid items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_112px_minmax(0,1fr)]">
         <Panel dataTour="reference-target" title="Your Track" subtitle="The mix you want to improve." right={targetMeta && <Badge tone={targetReport ? 'accent' : 'warn'}>{targetReport ? 'Analysed' : 'Analysis pending'}</Badge>}>
@@ -410,7 +418,9 @@ export default function ReferenceMatch() {
                 <input
                   type="checkbox"
                   checked={!excluded.has(proposal.id)}
+                  disabled={Boolean(busy)}
                   onChange={() => {
+                    clearMatchAudition();
                     const next = new Set(excluded);
                     if (next.has(proposal.id)) next.delete(proposal.id);
                     else next.add(proposal.id);
@@ -455,14 +465,76 @@ export default function ReferenceMatch() {
               <Button
                 variant="primary"
                 onClick={() => applyMatchPlan(matchPlan.proposals.filter((p) => !excluded.has(p.id)).map((p) => p.id))}
+                disabled={Boolean(busy) || matchPlan.proposals.every((p) => excluded.has(p.id))}
               >
                 Apply {matchPlan.proposals.length - excluded.size} processors to master
               </Button>
-              <Button onClick={() => void verifyMaster()}>Render & measure master</Button>
+              <Button onClick={() => void verifyMaster()} disabled={Boolean(busy)}>Render & measure master</Button>
               <Button variant="ghost" onClick={() => useApp.getState().setScreen('mastering')}>Open mastering</Button>
               <span className="ml-auto text-2xs text-ink-500">
                 Predicted pre-limiter: {matchPlan.predicted.integratedLufs.toFixed(1)} LUFS · {matchPlan.predicted.truePeakDb.toFixed(1)} dBTP
               </span>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-[#A77AFF]/20 bg-[#8957FF]/[.055] p-3 sm:p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Icon name="headphones" size={16} className="text-[#C4A2FF]" />
+                    <h3 className="text-sm font-semibold text-ink-100">Before / after audition</h3>
+                    {matchAudition && <Badge tone="accent">Ready</Badge>}
+                  </div>
+                  <p className="mt-1 max-w-2xl text-2xs leading-relaxed text-ink-400">
+                    Render the original and proposed chain, then switch A/B during playback at the same timeline position. The preview is temporary and does not modify your master.
+                  </p>
+                </div>
+                <Button
+                  size="md"
+                  variant="primary"
+                  disabled={Boolean(busy) || matchPlan.proposals.every((p) => excluded.has(p.id))}
+                  onClick={() => void prepareMatchAudition(matchPlan.proposals.filter((p) => !excluded.has(p.id)).map((p) => p.id))}
+                >
+                  <Icon name="audio-lines" size={14} />
+                  {matchAudition ? 'Rebuild audition' : 'Prepare A/B audition'}
+                </Button>
+              </div>
+
+              {matchAudition && (
+                <div className="mt-4 space-y-3 border-t border-white/[.08] pt-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className={`rounded-xl border p-3 ${matchAudition.mode === 'before' ? 'border-[#A77AFF]/55 bg-[#8957FF]/[.12]' : 'border-white/[.07] bg-[#0D0D1B]/65'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-semibold text-ink-100">A · Original mix</span>
+                        {matchAudition.mode === 'before' && <Badge tone="accent">Auditioning</Badge>}
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <Stat label="Integrated" value={`${matchAudition.before.lufs.toFixed(1)} LUFS`} />
+                        <Stat label="True peak" value={`${matchAudition.before.truePeakDb.toFixed(1)} dBTP`} />
+                      </div>
+                      <Button size="md" variant={matchAudition.mode === 'before' ? 'primary' : 'secondary'} className="mt-3 w-full" onClick={() => setMatchAuditionMode('before')}>Listen to A</Button>
+                    </div>
+                    <div className={`rounded-xl border p-3 ${matchAudition.mode === 'after' ? 'border-[#A77AFF]/55 bg-[#8957FF]/[.12]' : 'border-white/[.07] bg-[#0D0D1B]/65'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-semibold text-ink-100">B · Reference Match</span>
+                        {matchAudition.mode === 'after' && <Badge tone="accent">Auditioning</Badge>}
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <Stat label="Integrated" value={`${matchAudition.after.lufs.toFixed(1)} LUFS`} />
+                        <Stat label="True peak" value={`${matchAudition.after.truePeakDb.toFixed(1)} dBTP`} />
+                      </div>
+                      <Button size="md" variant={matchAudition.mode === 'after' ? 'primary' : 'secondary'} className="mt-3 w-full" onClick={() => setMatchAuditionMode('after')}>Listen to B</Button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/[.07] bg-[#0D0D1B]/60 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <Toggle checked={matchAudition.loudnessMatch} onChange={setMatchAuditionLoudnessMatch} label="Loudness-matched A/B" description="Uses the quieter measured render as the common reference. Attenuation only; monitor path, not export." />
+                      <p className="mt-1 font-mono text-2xs text-ink-500">Monitor trim {matchAudition.comparisonDb >= 0 ? '+' : ''}{matchAudition.comparisonDb.toFixed(1)} dB · {formatTime(matchAudition.before.duration)} render</p>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={clearMatchAudition}>Exit audition</Button>
+                  </div>
+                  <p className="text-2xs leading-relaxed text-ink-500">Use the transport above to play, pause, seek or loop. A/B switching follows the same playhead and crossfades over 8 ms. If you change the project or matching settings, prepare a fresh comparison.</p>
+                </div>
+              )}
             </div>
           </div>
         </Panel>
