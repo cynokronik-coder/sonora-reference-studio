@@ -30,6 +30,10 @@ Clip fill (offset, gain, fades)
 Solo logic: if any track is soloed, only soloed tracks contribute. Muted buses are zeroed. Reference tracks behave like
 audio tracks and can be auditioned independently.
 
+The multiband compressor splits programme audio and external sidechain keys through separate, identically configured
+LR4 crossover networks. Each band compressor receives only its matching frequency region of the external key. Sidechain
+filter state is reset when the key source changes; the normal renderer uses stable raw-key buffers across blocks.
+
 ## The chain
 
 `ProcessorChain` receives `{ id, type, enabled, params }[]`. It:

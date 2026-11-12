@@ -1,161 +1,232 @@
 import { describe, expect, it } from 'vitest';
-import { MultibandCompressor, MULTIBAND_COMP_PRESETS, multibandCompDefinition } from './multiband';
+import { createDefaultParams } from '../registry';
+import { MultibandCompressor, MULTIBAND_PRESETS, multibandCompDefinition } from './multiband';
 
-const SAMPLE_RATE = 48_000;
-const BLOCK_SIZE = 256;
-const FRAME_COUNT = SAMPLE_RATE;
+const frequencies = [50, 100, 200, 500, 1000, 2000, 4000, 8000, 12000];
 
-function completeDefaults(): Record<string, number> {
-  return Object.fromEntries(multibandCompDefinition.params.map((param) => [param.key, param.default]));
+function rms(signal: Float32Array, sampleRate: number, fromSeconds = 0.5): number {
+  const start = Math.min(signal.length, Math.floor(fromSeconds * sampleRate));
+  let sum = 0;
+  for (let i = start; i < signal.length; i++) sum += signal[i] * signal[i];
+  return Math.sqrt(sum / Math.max(1, signal.length - start));
 }
 
-function makeTone(frequency: number, amplitude: number, start: number, frames: number): Float32Array {
-  const result = new Float32Array(frames);
-  for (let i = 0; i < frames; i++) {
-    result[i] = amplitude * Math.sin((2 * Math.PI * frequency * (start + i)) / SAMPLE_RATE);
+function sine(amplitude: number, frequency: number, sampleRate: number, length: number, phase = 0): Float32Array {
+  const signal = new Float32Array(length);
+  for (let i = 0; i < length; i++) signal[i] = amplitude * Math.sin((2 * Math.PI * frequency * i) / sampleRate + phase);
+  return signal;
+}
+
+function amplitudeAt(signal: Float32Array, frequency: number, sampleRate: number, fromSeconds = 0.5): number {
+  const start = Math.min(signal.length, Math.floor(fromSeconds * sampleRate));
+  let sinSum = 0;
+  let cosSum = 0;
+  const count = Math.max(1, signal.length - start);
+  for (let i = start; i < signal.length; i++) {
+    const phase = (2 * Math.PI * frequency * i) / sampleRate;
+    sinSum += signal[i] * Math.sin(phase);
+    cosSum += signal[i] * Math.cos(phase);
   }
-  return result;
+  return (2 / count) * Math.hypot(sinSum, cosSum);
 }
 
-function runSidechainCase(keyFrequency: number): number {
-  const processor = new MultibandCompressor();
-  processor.prepare(SAMPLE_RATE, BLOCK_SIZE);
-  processor.setValues({
-    ...completeDefaults(),
-    xLow: 180,
-    xHigh: 4_500,
-    b0_on: 1,
-    b0_threshold: -36,
-    b0_ratio: 12,
-    b0_attack: 0.1,
-    b0_release: 100,
-    b0_knee: 0,
-    b1_on: 0,
-    b2_on: 0,
-  });
-
-  const targetL = new Float32Array(BLOCK_SIZE);
-  const targetR = new Float32Array(BLOCK_SIZE);
-  const keyL = new Float32Array(BLOCK_SIZE);
-  const keyR = new Float32Array(BLOCK_SIZE);
-  for (let start = 0; start < FRAME_COUNT; start += BLOCK_SIZE) {
-    const target = makeTone(80, 0.12, start, BLOCK_SIZE);
-    const key = makeTone(keyFrequency, 0.8, start, BLOCK_SIZE);
-    targetL.set(target);
-    targetR.set(target);
-    keyL.set(key);
-    keyR.set(key);
-    processor.setSidechain(keyL, keyR);
-    processor.process(targetL, targetR, BLOCK_SIZE);
+function neutralParameters() {
+  const values = createDefaultParams('multibandComp');
+  for (let band = 0; band < 3; band++) {
+    values[`b${band}_ratio`] = 1;
+    values[`b${band}_makeup`] = 0;
+    values[`b${band}_mix`] = 100;
   }
-  return Math.abs(processor.meter().bands?.[0] ?? 0);
+  values.output = 0;
+  return values;
 }
 
-describe('MultibandCompressor', () => {
-  it('reconstructs unity magnitude when all three compressors are bypassed', () => {
-    const processor = new MultibandCompressor();
-    processor.prepare(SAMPLE_RATE, BLOCK_SIZE);
-    processor.setValues({
-      ...completeDefaults(),
-      b0_on: 0,
-      b1_on: 0,
-      b2_on: 0,
-    });
+describe('Multiband compressor crossover reconstruction', () => {
+  it.each([44100, 48000, 96000])('keeps the neutral summed response flat at %i Hz sample rate', (sampleRate) => {
+    for (const frequency of frequencies) {
+      const length = sampleRate;
+      const input = sine(0.25, frequency, sampleRate, length);
+      const left = input.slice();
+      const right = input.slice();
+      const processor = new MultibandCompressor();
+      processor.prepare(sampleRate, 512);
+      processor.setValues(neutralParameters());
 
-    let inputPower = 0;
-    let outputPower = 0;
-    let count = 0;
-    const left = new Float32Array(BLOCK_SIZE);
-    const right = new Float32Array(BLOCK_SIZE);
-    for (let start = 0; start < FRAME_COUNT; start += BLOCK_SIZE) {
-      const input = makeTone(1_000, 0.5, start, BLOCK_SIZE);
-      left.set(input);
-      right.set(input);
-      processor.process(left, right, BLOCK_SIZE);
-      if (start >= FRAME_COUNT / 2) {
-        for (let i = 0; i < BLOCK_SIZE; i++) {
-          inputPower += input[i] * input[i];
-          outputPower += left[i] * left[i];
-          count++;
-        }
+      for (let offset = 0; offset < length; offset += 257) {
+        const frames = Math.min(257, length - offset);
+        processor.process(left.subarray(offset, offset + frames), right.subarray(offset, offset + frames), frames);
       }
+
+      const inputRms = rms(input, sampleRate);
+      const outputRms = rms(left, sampleRate);
+      const gainDb = 20 * Math.log10(Math.max(outputRms, 1e-12) / Math.max(inputRms, 1e-12));
+      expect(gainDb, `frequency ${frequency} Hz at ${sampleRate} Hz`).toBeGreaterThan(-0.15);
+      expect(gainDb, `frequency ${frequency} Hz at ${sampleRate} Hz`).toBeLessThan(0.15);
     }
-    const ratio = Math.sqrt(outputPower / Math.max(1, inputPower));
-    expect(count).toBeGreaterThan(0);
-    expect(ratio).toBeGreaterThan(0.97);
-    expect(ratio).toBeLessThan(1.03);
   });
 
-  it('splits an external sidechain into the same frequency bands as the programme', () => {
-    const highKeyReduction = runSidechainCase(8_000);
-    const lowKeyReduction = runSidechainCase(80);
-    expect(lowKeyReduction).toBeGreaterThan(6);
-    expect(highKeyReduction).toBeLessThan(0.5);
-  });
-
-  it('supports band solo without changing the stored compression enable state', () => {
+  it('accepts changing block sizes and preserves finite stereo output', () => {
+    const sampleRate = 48000;
     const processor = new MultibandCompressor();
-    processor.prepare(SAMPLE_RATE, BLOCK_SIZE);
-    processor.setValues({
-      ...completeDefaults(),
-      b0_on: 0,
-      b1_on: 0,
-      b2_on: 0,
-      b0_solo: 1,
-    });
-
-    let highProjection = 0;
-    let highReferencePower = 0;
-    const left = new Float32Array(BLOCK_SIZE);
-    const right = new Float32Array(BLOCK_SIZE);
-    for (let start = 0; start < FRAME_COUNT; start += BLOCK_SIZE) {
-      for (let i = 0; i < BLOCK_SIZE; i++) {
-        const absolute = start + i;
-        left[i] = 0.3 * Math.sin((2 * Math.PI * 80 * absolute) / SAMPLE_RATE)
-          + 0.3 * Math.sin((2 * Math.PI * 10_000 * absolute) / SAMPLE_RATE);
-        right[i] = left[i];
-      }
-      processor.process(left, right, BLOCK_SIZE);
-      if (start >= FRAME_COUNT / 2) {
-        for (let i = 0; i < BLOCK_SIZE; i++) {
-          const reference = Math.sin((2 * Math.PI * 10_000 * (start + i)) / SAMPLE_RATE);
-          highProjection += left[i] * reference;
-          highReferencePower += reference * reference;
-        }
-      }
+    processor.prepare(sampleRate, 512);
+    processor.setValues(neutralParameters());
+    const left = sine(0.2, 73, sampleRate, sampleRate);
+    const right = sine(0.17, 6130, sampleRate, sampleRate, 0.23);
+    const blockSizes = [128, 257, 512, 1024, 191];
+    let offset = 0;
+    let blockIndex = 0;
+    while (offset < left.length) {
+      const frames = Math.min(blockSizes[blockIndex % blockSizes.length], left.length - offset);
+      processor.process(left.subarray(offset, offset + frames), right.subarray(offset, offset + frames), frames);
+      offset += frames;
+      blockIndex++;
     }
-    expect(Math.abs(highProjection / highReferencePower)).toBeLessThan(0.01);
+    expect(left.every(Number.isFinite)).toBe(true);
+    expect(right.every(Number.isFinite)).toBe(true);
   });
 
-  it('reports maximum reduction and individual band reductions with negative gain values', () => {
+  it('keeps bypassed bands audible and solos only the selected band', () => {
+    const sampleRate = 48000;
+    const length = sampleRate;
+    const low = sine(0.2, 100, sampleRate, length);
+    const high = sine(0.15, 6000, sampleRate, length);
+    const input = Float32Array.from(low, (value, index) => value + high[index]);
+    const left = input.slice();
+    const right = input.slice();
+    const params = neutralParameters();
+    params.b0_on = 0; // Bypass compression, not the low band signal.
+    params.b0_solo = 1;
     const processor = new MultibandCompressor();
-    processor.prepare(SAMPLE_RATE, BLOCK_SIZE);
-    processor.setValues({
-      ...completeDefaults(),
-      b0_on: 1,
-      b0_threshold: -42,
-      b0_ratio: 10,
-      b0_attack: 0.1,
-      b1_on: 0,
-      b2_on: 0,
-    });
-    const left = new Float32Array(BLOCK_SIZE);
-    const right = new Float32Array(BLOCK_SIZE);
-    for (let start = 0; start < FRAME_COUNT; start += BLOCK_SIZE) {
-      const tone = makeTone(70, 0.9, start, BLOCK_SIZE);
-      left.set(tone);
-      right.set(tone);
-      processor.process(left, right, BLOCK_SIZE);
+    processor.prepare(sampleRate, 512);
+    processor.setValues(params);
+    for (let offset = 0; offset < length; offset += 512) {
+      const frames = Math.min(512, length - offset);
+      processor.process(left.subarray(offset, offset + frames), right.subarray(offset, offset + frames), frames);
     }
-    const meter = processor.meter();
-    expect(meter.reduction).toBeGreaterThan(2);
-    expect(meter.bands).toHaveLength(3);
-    expect(meter.bands?.[0]).toBeLessThan(-2);
+
+    const outputLow = amplitudeAt(left, 100, sampleRate);
+    const outputHigh = amplitudeAt(left, 6000, sampleRate);
+    expect(outputLow).toBeGreaterThan(0.18);
+    expect(outputLow).toBeLessThan(0.22);
+    expect(outputHigh).toBeLessThan(0.002);
+  });
+});
+
+describe('Multiband external sidechain routing', () => {
+  it('splits the external key into matching frequency bands before detection', () => {
+    const sampleRate = 48000;
+    const length = sampleRate;
+    const left = sine(0.12, 100, sampleRate, length);
+    const right = sine(0.12, 100, sampleRate, length);
+    const keyLeft = sine(0.8, 6000, sampleRate, length);
+    const keyRight = sine(0.8, 6000, sampleRate, length);
+    const params = neutralParameters();
+    params.xLow = 200;
+    params.xHigh = 2000;
+    for (let band = 0; band < 3; band++) {
+      params[`b${band}_threshold`] = -30;
+      params[`b${band}_ratio`] = 8;
+      params[`b${band}_attack`] = 0.1;
+      params[`b${band}_release`] = 100;
+      params[`b${band}_knee`] = 0;
+    }
+
+    const processor = new MultibandCompressor();
+    processor.prepare(sampleRate, 512);
+    processor.setValues(params);
+    // Reuse fixed key buffers exactly as the realtime renderer does.
+    const keyBlockL = new Float32Array(512);
+    const keyBlockR = new Float32Array(512);
+    for (let offset = 0; offset < length; offset += 512) {
+      const frames = Math.min(512, length - offset);
+      keyBlockL.set(keyLeft.subarray(offset, offset + frames));
+      keyBlockR.set(keyRight.subarray(offset, offset + frames));
+      processor.setSidechain(keyBlockL, keyBlockR);
+      processor.process(left.subarray(offset, offset + frames), right.subarray(offset, offset + frames), frames);
+    }
+
+    const bands = processor.meter().bands ?? [];
+    expect(Math.abs(bands[0] ?? 0)).toBeLessThan(0.5);
+    expect(Math.abs(bands[1] ?? 0)).toBeLessThan(0.5);
+    expect(Math.abs(bands[2] ?? 0)).toBeGreaterThan(5);
+    expect(processor.meter().reduction ?? 0).toBeGreaterThan(5);
   });
 
-  it('keeps all factory presets complete and within the live parameter registry', () => {
-    const specs = new Map(multibandCompDefinition.params.map((param) => [param.key, param]));
-    for (const preset of MULTIBAND_COMP_PRESETS) {
+  it('lets a low-frequency external key trigger the low band only', () => {
+    const sampleRate = 48000;
+    const length = sampleRate;
+    const left = sine(0.12, 100, sampleRate, length);
+    const right = sine(0.12, 100, sampleRate, length);
+    const key = sine(0.8, 100, sampleRate, length);
+    const params = neutralParameters();
+    params.xLow = 200;
+    params.xHigh = 2000;
+    params.b0_threshold = -30;
+    params.b0_ratio = 8;
+    params.b0_attack = 0.1;
+    params.b0_release = 100;
+    params.b0_knee = 0;
+    params.b1_on = 0;
+    params.b2_on = 0;
+
+    const processor = new MultibandCompressor();
+    processor.prepare(sampleRate, 512);
+    processor.setValues(params);
+    const keyBlock = new Float32Array(512);
+    for (let offset = 0; offset < length; offset += 512) {
+      const frames = Math.min(512, length - offset);
+      keyBlock.set(key.subarray(offset, offset + frames));
+      processor.setSidechain(keyBlock, keyBlock);
+      processor.process(left.subarray(offset, offset + frames), right.subarray(offset, offset + frames), frames);
+    }
+
+    const bands = processor.meter().bands ?? [];
+    expect(bands[0]).toBeLessThan(-5);
+    expect(Math.abs(bands[1] ?? 0)).toBeLessThan(0.5);
+    expect(Math.abs(bands[2] ?? 0)).toBeLessThan(0.5);
+  });
+
+  it('returns to internal band detection when the external key is cleared', () => {
+    const sampleRate = 48000;
+    const length = sampleRate;
+    const input = sine(0.6, 100, sampleRate, length);
+    const key = sine(0.8, 6000, sampleRate, length);
+    const left = input.slice();
+    const right = input.slice();
+    const params = neutralParameters();
+    params.xLow = 200;
+    params.xHigh = 2000;
+    for (let band = 0; band < 3; band++) {
+      params[`b${band}_threshold`] = -30;
+      params[`b${band}_ratio`] = 8;
+      params[`b${band}_attack`] = 0.1;
+      params[`b${band}_release`] = 100;
+      params[`b${band}_knee`] = 0;
+    }
+    const processor = new MultibandCompressor();
+    processor.prepare(sampleRate, 512);
+    processor.setValues(params);
+    const keyBlock = new Float32Array(512);
+    for (let offset = 0; offset < length / 2; offset += 512) {
+      const frames = Math.min(512, length / 2 - offset);
+      keyBlock.set(key.subarray(offset, offset + frames));
+      processor.setSidechain(keyBlock, keyBlock);
+      processor.process(left.subarray(offset, offset + frames), right.subarray(offset, offset + frames), frames);
+    }
+    processor.setSidechain(null, null);
+    for (let offset = length / 2; offset < length; offset += 512) {
+      const frames = Math.min(512, length - offset);
+      processor.process(left.subarray(offset, offset + frames), right.subarray(offset, offset + frames), frames);
+    }
+    expect(processor.meter().reduction ?? 0).toBeGreaterThan(5);
+  });
+});
+
+describe('Multiband factory presets', () => {
+  it('provides complete, finite and in-range parameter snapshots', () => {
+    const specs = new Map(multibandCompDefinition.params.map((spec) => [spec.key, spec]));
+    expect(MULTIBAND_PRESETS.length).toBeGreaterThanOrEqual(4);
+    for (const preset of MULTIBAND_PRESETS) {
       expect(Object.keys(preset.values).sort()).toEqual([...specs.keys()].sort());
       for (const [key, value] of Object.entries(preset.values)) {
         const spec = specs.get(key);
@@ -175,4 +246,5 @@ describe('MultibandCompressor', () => {
       }
     }
   });
+
 });
