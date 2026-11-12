@@ -48,7 +48,7 @@ export function designBiquad(
       a2 = 1 - alpha / A;
       break;
     case 'lowshelf': {
-      const S = Math.max(0.1, Q);
+      const S = Math.min(1, Math.max(0.1, Q));
       const a = sinw / 2 * Math.sqrt((A + 1 / A) * (1 / S - 1) + 2);
       const sa = 2 * Math.sqrt(A) * a;
       b0 = A * (A + 1 - (A - 1) * cosw + sa);
@@ -60,7 +60,7 @@ export function designBiquad(
       break;
     }
     case 'highshelf': {
-      const S = Math.max(0.1, Q);
+      const S = Math.min(1, Math.max(0.1, Q));
       const a = sinw / 2 * Math.sqrt((A + 1 / A) * (1 / S - 1) + 2);
       const sa = 2 * Math.sqrt(A) * a;
       b0 = A * (A + 1 + (A - 1) * cosw + sa);
@@ -133,6 +133,38 @@ export class Biquad {
   private x2 = 0;
   private y1 = 0;
   private y2 = 0;
+  private targetB0 = 1;
+  private targetB1 = 0;
+  private targetB2 = 0;
+  private targetA1 = 0;
+  private targetA2 = 0;
+  private stepB0 = 0;
+  private stepB1 = 0;
+  private stepB2 = 0;
+  private stepA1 = 0;
+  private stepA2 = 0;
+  private smoothingRemaining = 0;
+
+  get isSmoothing(): boolean {
+    return this.smoothingRemaining > 0;
+  }
+
+  private advanceCoefficients(): void {
+    if (this.smoothingRemaining <= 0) return;
+    this.b0 += this.stepB0;
+    this.b1 += this.stepB1;
+    this.b2 += this.stepB2;
+    this.a1 += this.stepA1;
+    this.a2 += this.stepA2;
+    this.smoothingRemaining -= 1;
+    if (this.smoothingRemaining === 0) {
+      this.b0 = this.targetB0;
+      this.b1 = this.targetB1;
+      this.b2 = this.targetB2;
+      this.a1 = this.targetA1;
+      this.a2 = this.targetA2;
+    }
+  }
 
   constructor(coeffs?: BiquadCoeffs) {
     if (coeffs) this.set(coeffs);
@@ -144,6 +176,33 @@ export class Biquad {
     this.b2 = c.b2;
     this.a1 = c.a1;
     this.a2 = c.a2;
+    this.smoothingRemaining = 0;
+  }
+
+  setSmoothed(c: BiquadCoeffs, sampleCount: number): void {
+    const count = Number.isFinite(sampleCount) ? Math.max(0, Math.floor(sampleCount)) : 0;
+    if (!count) {
+      this.set(c);
+      return;
+    }
+    if (
+      c.b0 === this.b0 && c.b1 === this.b1 && c.b2 === this.b2
+      && c.a1 === this.a1 && c.a2 === this.a2
+    ) {
+      this.smoothingRemaining = 0;
+      return;
+    }
+    this.targetB0 = c.b0;
+    this.targetB1 = c.b1;
+    this.targetB2 = c.b2;
+    this.targetA1 = c.a1;
+    this.targetA2 = c.a2;
+    this.smoothingRemaining = count;
+    this.stepB0 = (c.b0 - this.b0) / count;
+    this.stepB1 = (c.b1 - this.b1) / count;
+    this.stepB2 = (c.b2 - this.b2) / count;
+    this.stepA1 = (c.a1 - this.a1) / count;
+    this.stepA2 = (c.a2 - this.a2) / count;
   }
 
   configure(type: FilterType, freq: number, gainDb: number, q: number, sampleRate: number): void {
@@ -152,9 +211,11 @@ export class Biquad {
 
   reset(): void {
     this.x1 = this.x2 = this.y1 = this.y2 = 0;
+    this.smoothingRemaining = 0;
   }
 
   process(x: number): number {
+    this.advanceCoefficients();
     const y = this.b0 * x + this.b1 * this.x1 + this.b2 * this.x2 - this.a1 * this.y1 - this.a2 * this.y2;
     this.x2 = this.x1;
     this.x1 = x;
@@ -164,11 +225,11 @@ export class Biquad {
   }
 
   processBlock(buf: Float32Array, n: number): void {
-    const { b0, b1, b2, a1, a2 } = this;
     let { x1, x2, y1, y2 } = this;
     for (let i = 0; i < n; i++) {
+      this.advanceCoefficients();
       const x = buf[i];
-      const y = b0 * x + b1 * x1 + b2 * x2 - a1 * y1 - a2 * y2;
+      const y = this.b0 * x + this.b1 * x1 + this.b2 * x2 - this.a1 * y1 - this.a2 * y2;
       x2 = x1;
       x1 = x;
       y2 = y1;

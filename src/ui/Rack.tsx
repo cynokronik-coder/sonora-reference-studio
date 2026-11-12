@@ -42,7 +42,7 @@ export function Rack({
   const [addOpen, setAddOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const { addProcessor, moveProcessor, mode } = useApp();
+  const { addProcessor, moveProcessor, mode, project } = useApp();
   const selected = processors.find((p) => p.id === selectedId) ?? null;
 
   const visibleDefinitions = useMemo(
@@ -180,7 +180,7 @@ export function Rack({
 
                   {node.type === 'eq' && (
                     <div className="mb-2">
-                      <EQCurve params={node.params} height={120} />
+                      <EQCurve params={node.params} sampleRate={project?.sampleRate ?? 48000} height={120} />
                     </div>
                   )}
 
@@ -314,7 +314,14 @@ function ProcessorParams({
           </summary>
           <div className="grid gap-x-3 gap-y-2 px-2 pb-2 sm:grid-cols-2">
             {specs.map((spec) => {
-              const value = node.params[spec.key] ?? spec.default;
+              const candidateValue = node.params[spec.key] ?? spec.default;
+              const rawValue = Number.isFinite(candidateValue) ? candidateValue : spec.default;
+              const eqQMatch = node.type === 'eq' ? /^b(\d+)_q$/.exec(spec.key) : null;
+              const eqBandType = eqQMatch ? Math.round(node.params[`b${eqQMatch[1]}_type`] ?? 0) : -1;
+              const isShelfSlope = Boolean(eqQMatch && (eqBandType === 1 || eqBandType === 2));
+              const value = isShelfSlope ? clamp(rawValue, 0.1, 1) : rawValue;
+              const min = eqQMatch ? (isShelfSlope ? 0.1 : 0.2) : spec.min ?? 0;
+              const max = eqQMatch && isShelfSlope ? 1 : spec.max ?? 1;
               if (spec.kind === 'bool') {
                 return (
                   <div key={spec.key} className="pt-1">
@@ -336,15 +343,15 @@ function ProcessorParams({
               return (
                 <ParamSlider
                   key={spec.key}
-                  label={spec.label}
+                  label={isShelfSlope ? 'Shelf slope (S)' : spec.label}
                   value={value}
-                  min={spec.min ?? 0}
-                  max={spec.max ?? 1}
+                  min={min}
+                  max={max}
                   step={spec.step ?? 0.01}
                   unit={spec.unit}
                   logarithmic={spec.scale === 'log'}
                   compact
-                  onChange={(next) => update(spec.key, clamp(next, spec.min ?? -Infinity, spec.max ?? Infinity))}
+                  onChange={(next) => update(spec.key, clamp(next, min, max))}
                   format={
                     spec.scale === 'log' && (spec.max ?? 0) >= 1000
                       ? (v) => `${v >= 1000 ? `${(v / 1000).toFixed(1)}k` : Math.round(v)} ${spec.unit ?? ''}`.trim()

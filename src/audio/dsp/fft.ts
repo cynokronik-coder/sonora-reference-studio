@@ -9,6 +9,51 @@ export function nextPow2(n: number): number {
   return p;
 }
 
+interface FFTPlan {
+  levels: number;
+  cos: Float64Array;
+  sin: Float64Array;
+}
+
+const FFT_PLAN_CACHE_LIMIT = 12;
+const FFT_PLAN_CACHE_MAX_BYTES = 8 * 1024 * 1024;
+const fftPlanCache = new Map<number, FFTPlan>();
+let fftPlanCacheBytes = 0;
+
+function getFFTPlan(size: number): FFTPlan {
+  const cached = fftPlanCache.get(size);
+  if (cached) {
+    fftPlanCache.delete(size);
+    fftPlanCache.set(size, cached);
+    return cached;
+  }
+
+  const levels = Math.round(Math.log2(size));
+  const cos = new Float64Array(size / 2);
+  const sin = new Float64Array(size / 2);
+  for (let i = 0; i < size / 2; i++) {
+    cos[i] = Math.cos((2 * Math.PI * i) / size);
+    sin[i] = Math.sin((2 * Math.PI * i) / size);
+  }
+
+  const plan = { levels, cos, sin };
+  const planBytes = size * Float64Array.BYTES_PER_ELEMENT;
+  if (planBytes <= FFT_PLAN_CACHE_MAX_BYTES) {
+    while (
+      fftPlanCache.size >= FFT_PLAN_CACHE_LIMIT ||
+      fftPlanCacheBytes + planBytes > FFT_PLAN_CACHE_MAX_BYTES
+    ) {
+      const oldestSize = fftPlanCache.keys().next().value;
+      if (oldestSize === undefined) break;
+      fftPlanCache.delete(oldestSize);
+      fftPlanCacheBytes -= oldestSize * Float64Array.BYTES_PER_ELEMENT;
+    }
+    fftPlanCache.set(size, plan);
+    fftPlanCacheBytes += planBytes;
+  }
+  return plan;
+}
+
 export class FFT {
   readonly size: number;
   private readonly levels: number;
@@ -18,13 +63,10 @@ export class FFT {
   constructor(size: number) {
     if ((size & (size - 1)) !== 0 || size < 2) throw new Error('FFT size must be a power of two >= 2');
     this.size = size;
-    this.levels = Math.round(Math.log2(size));
-    this.cos = new Float64Array(size / 2);
-    this.sin = new Float64Array(size / 2);
-    for (let i = 0; i < size / 2; i++) {
-      this.cos[i] = Math.cos((2 * Math.PI * i) / size);
-      this.sin[i] = Math.sin((2 * Math.PI * i) / size);
-    }
+    const plan = getFFTPlan(size);
+    this.levels = plan.levels;
+    this.cos = plan.cos;
+    this.sin = plan.sin;
   }
 
   /** In-place complex forward transform. */
