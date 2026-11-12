@@ -52,12 +52,11 @@ Factory starting points include Gentle resonance control, Vocal harshness, Snare
 - External sidechain key can be routed from another track on track or bus compressor instances. The key is tapped from the source track's raw clip signal before its own processing and fader; disconnecting it returns the detector to the compressed signal.
 
 ### Multiband Compressor
-Three bands from LR4 crossovers at adjustable splits. Each band runs an independent compressor with its own threshold,
-ratio, attack, release, knee, makeup, character, dry/wet mix and stereo-link amount. Band bypass preserves the split
-signal without compression; band solo auditions an individual frequency region. External sidechain audio is split
-through a separate LR4 network at the same frequencies, so each band detector listens to its corresponding key band
-rather than receiving the full-range key. The processor reports per-band gain reduction and the maximum band reduction.
-Factory starting points include Low-end control, Gentle multiband glue, Presence control and Dynamic master.
+- Three bands split by cascaded LR4 filters at adjustable low/mid and mid/high frequencies. The split frequencies are independent, with a small minimum gap. The neutral configuration is tested across 44.1, 48 and 96 kHz, including tones close to both crossover points.
+- Every band has its own threshold, ratio, attack, release, knee, makeup, dry/wet, behaviour style and stereo-link amount.
+- External sidechain audio is passed through a second, matched LR4 crossover. The low-band compressor therefore detects the low band of the key, the mid compressor detects the mid band, and the high compressor detects the high band; a broadband external key does not make all three detectors react identically.
+- **Compression enabled** bypasses gain reduction for that band while keeping the band audible. **Solo band** auditions one or more frequency regions without changing the source project.
+- The meter reports the strongest band reduction plus per-band gain reduction. Factory starting points include Low-end control, Gentle multiband glue, Presence control, Dynamic master, Presence smoothing, Modern density, and Dynamic and open. All settings remain editable.
 
 ### De-esser
 LR4 split above a tunable frequency; the high band is detected and dynamically reduced. Wideband mode applies the same

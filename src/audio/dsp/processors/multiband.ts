@@ -1,5 +1,6 @@
 import { Lr4Crossover } from '../crossover';
 import type { AudioProcessor, ParamValues, ProcessorDefinition, ProcessorMeter } from '../types';
+import { clamp, dbToGain } from '../util';
 import { Compressor } from './compressor';
 
 const BAND_NAMES = ['Low', 'Mid', 'High'] as const;
@@ -63,14 +64,21 @@ export class MultibandCompressor implements AudioProcessor {
   }
 
   setSidechain(L: Float32Array | null, R: Float32Array | null): void {
-    this.sidechainL = L && R ? L : null;
-    this.sidechainR = L && R ? R : null;
+    const sidechainL = L && R ? L : null;
+    const sidechainR = L && R ? R : null;
+    if (sidechainL !== this.sidechainL || sidechainR !== this.sidechainR) {
+      this.keyXover.reset();
+    }
+    this.sidechainL = sidechainL;
+    this.sidechainR = sidechainR;
   }
 
   setValues(values: ParamValues): void {
-    this.values = values;
-    const low = values.xLow ?? 200;
-    const high = values.xHigh ?? 4000;
+    const low = clamp(values.xLow ?? 200, 40, Math.min(600, this.sr * 0.4));
+    const highLimit = Math.min(12_000, this.sr * 0.45);
+    const minimumGap = 20;
+    const high = clamp(Math.max(values.xHigh ?? 4000, low + minimumGap), Math.min(800, highLimit), highLimit);
+    this.values = { ...values, xLow: low, xHigh: high };
     this.xover.configure(this.sr, low, high);
     this.keyXover.configure(this.sr, low, high);
     for (let i = 0; i < 3; i++) {
@@ -92,6 +100,10 @@ export class MultibandCompressor implements AudioProcessor {
   }
 
   process(L: Float32Array, R: Float32Array, n: number): void {
+    if (n > this.maxBlock) {
+      this.prepare(this.sr, n);
+      this.setValues(this.values);
+    }
     this.xover.split(L, R, n, this.bufs);
 
     const hasExternalKey = this.sidechainL !== null && this.sidechainR !== null;
@@ -129,7 +141,7 @@ export class MultibandCompressor implements AudioProcessor {
 
     const outputDb = this.values.output ?? 0;
     if (outputDb !== 0) {
-      const gain = Math.pow(10, outputDb / 20);
+      const gain = dbToGain(outputDb);
       for (let i = 0; i < n; i++) {
         L[i] *= gain;
         R[i] *= gain;
@@ -252,4 +264,24 @@ export const MULTIBAND_COMP_PRESETS: MultibandPreset[] = [
     b1_threshold: -22, b1_ratio: 1.7, b1_attack: 22, b1_release: 160, b1_knee: 10,
     b2_threshold: -23, b2_ratio: 1.7, b2_attack: 12, b2_release: 130, b2_knee: 10,
   }),
+  multibandPreset('presence-smoothing', 'Presence smoothing', 'Reduces bright-band peaks while keeping the lows and body more open.', {
+    xLow: 250, xHigh: 3600,
+    b0_threshold: -22, b0_ratio: 1.5, b0_attack: 28, b0_release: 200,
+    b1_threshold: -20, b1_ratio: 1.6, b1_attack: 18, b1_release: 160,
+    b2_threshold: -28, b2_ratio: 2.8, b2_attack: 5, b2_release: 110,
+  }),
+  multibandPreset('modern-density', 'Modern density', 'More consistent low, mid and high energy for dense productions.', {
+    xLow: 160, xHigh: 5000,
+    b0_threshold: -24, b0_ratio: 2.6, b0_attack: 18, b0_release: 150,
+    b1_threshold: -24, b1_ratio: 2.2, b1_attack: 12, b1_release: 120,
+    b2_threshold: -26, b2_ratio: 1.8, b2_attack: 6, b2_release: 100,
+  }),
+  multibandPreset('dynamic-open', 'Dynamic and open', 'Low ratios and slower attacks preserve more transient movement.', {
+    xLow: 180, xHigh: 4500,
+    b0_threshold: -18, b0_ratio: 1.3, b0_attack: 45, b0_release: 260,
+    b1_threshold: -18, b1_ratio: 1.25, b1_attack: 35, b1_release: 220,
+    b2_threshold: -20, b2_ratio: 1.2, b2_attack: 24, b2_release: 180,
+  }),
 ];
+
+export const MULTIBAND_PRESETS = MULTIBAND_COMP_PRESETS;

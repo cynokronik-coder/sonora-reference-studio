@@ -16,8 +16,8 @@ The suite uses synthetic signals only — no fixtures with unknown provenance.
 | Compressor | a signal over threshold is reduced and reports real gain reduction |
 | Limiter | output stays under a -1 dBTP ceiling with lookahead, and GR is reported |
 | Saturation | output remains finite and differs from input (harmonics added) |
-| Multiband | summed bands remain audible and finite |
-| Crossover | LR4 three-band sum stays within ±1.5 dB of the input RMS |
+| Multiband | neutral three-band response stays within ±0.15 dB from 50 Hz–12 kHz at 44.1/48/96 kHz; band solo/bypass, frequency-matched external sidechain response, detector reset and preset parameter ranges |
+| Crossover | LR4 three-band response remains within ±0.15 dB at test tones around both splits and across supported session rates |
 | Loudness | -20 dBFS stereo 1 kHz tone measures near -20 LUFS; true peak ≥ sample peak |
 | Stereo | identical channels correlate at +1 and score >99% mono compatibility; inverted channels correlate at -1 and cancel |
 | Tempo | 120 BPM click pattern estimates 110–130 BPM and returns at least one section |
