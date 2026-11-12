@@ -67,3 +67,15 @@ The Limiter's 4x IIR true-peak mode is a safety estimate only. It must not be pr
 - Julius O. Smith, *Physical Audio Signal Processing*, Feedback Delay Networks: https://ccrma.stanford.edu/~jos/pasp/Feedback_Delay_Networks.html
   - Reference for delay-line feedback, stability and decay behaviour.
 - Sonora Delay uses one feedback delay line per channel, cross-feedback in ping-pong mode, and three read heads in multi-tap mode. This is an artistic tempo delay, not a physically modelled echo or room.
+
+
+## BS.1770-5 programme loudness and true peak
+
+- ITU-R Recommendation BS.1770-5 (November 2023): https://www.itu.int/rec/R-REC-BS.1770-5-202311-I/en
+  - Annex 1 defines K-weighted programme loudness, 400 ms gating blocks, 75% overlap, the -70 LUFS absolute gate and -10 LU relative gate.
+  - Annex 2 provides one compliant 4-phase, 48-tap FIR interpolation coefficient set for 4x true-peak estimation at 48 kHz. Floating-point implementations do not need the optional -12.04 dB attenuation.
+- EBU Tech 3341, Loudness Metering: https://tech.ebu.ch/publications/tech3341
+  - Defines the 400 ms ungated Momentary and 3 s ungated Short-term measurement time-scales, with 100 ms updates.
+- EBU Tech 3342, Loudness Range: https://tech.ebu.ch/publications/tech3342
+  - Defines LRA using 3 s short-term loudness, -70 LUFS absolute gating, -20 LU relative gating and the 10th–95th percentile range. For file-based measurement it specifies at least 1.5 s trailing silence to flush the final short-term window.
+- Sonora's offline analysis now uses a dedicated Annex 2 FIR true-peak meter. The realtime limiter remains an IIR approximation with an added safety margin and is not claimed to be a standards-compliant Annex 2 meter.

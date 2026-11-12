@@ -60,22 +60,21 @@ in the realtime path.
 
 ## True peak
 
-- `TruePeakMeter` applies a 4x oversampled low-pass chain and tracks the maximum absolute interpolated sample.
-- Analysis uses it in 512-frame chunks to measure dBTP over the whole file.
-- The limiter measures a 4x IIR-interpolated block peak and tightens the effective ceiling by the inter-sample/sample-peak ratio, with an additional 0.5 dB safety guard to cover block-based estimation and look-ahead alignment. This is a conservative engineering approximation, not certification of standards-compliant dBTP measurement; verify delivery masters with an independent compliant meter when required.
+- `Annex2TruePeakMeter` implements the 4-phase, 48-tap FIR interpolation coefficient set in ITU-R BS.1770-5 Annex 2. Offline analysis uses it in 512-frame chunks and flushes the 11-sample FIR tail after the final block.
+- `TruePeakMeter` remains the 4x IIR estimate used by the realtime limiter. It is kept separate because the limiter's look-ahead, block detector and audio-delay alignment still need a separate end-to-end audit.
+- The limiter uses the IIR estimate with a 0.5 dB safety guard. This is conservative realtime protection, not certification of standards-compliant dBTP measurement; verify delivery masters with the offline Annex 2 analysis and, for critical compliance work, an independent standards test meter.
 
 ## Loudness
 
-`analyzeLoudness` implements BS.1770-4:
+`analyzeLoudness` implements the BS.1770-5 stereo programme-loudness path and EBU Tech 3341/3342 metering:
 - high-shelf K-weighting (1681.97 Hz, +4 dB, Q 0.707) then RLB high-pass (38.14 Hz);
-- 400 ms blocks with 100 ms hops;
-- absolute gate −70 LUFS, relative gate −10 LU below the gated mean;
-- integrated value from the gated mean power;
-- 3 s short-term windows for LRA;
-- momentary and short-term series for graphs.
+- Integrated loudness: complete 400 ms blocks, 75% overlap (100 ms hop), −70 LUFS absolute gate and −10 LU relative gate below the absolute-gated mean.
+- Momentary loudness: ungated 400 ms sliding windows; short-term loudness: ungated 3 s sliding windows. Both update every 100 ms.
+- File-based LRA: 3 s short-term windows with 1.5 s trailing silence, −70 LUFS absolute gate, −20 LU relative gate and 10th–95th percentile range.
+- True peak: 4-phase, 48-tap FIR interpolation from BS.1770-5 Annex 2, including FIR-tail flush after the last input block. This offline analysis path is separate from the realtime limiter.
+- Sample peak and RMS are measured from the original PCM, independently of K-weighted loudness.
 
-True peak and sample peak are measured independently. LRA follows the 10th/95th percentile method with absolute and
-relative gates.
+The realtime limiter still uses its conservative 4x IIR estimator with a 0.5 dB safety guard. It is not represented as a certified Annex 2 dBTP meter; use the offline export analysis for the standards-based report.
 
 ## Automation
 

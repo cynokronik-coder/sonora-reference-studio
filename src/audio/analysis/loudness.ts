@@ -1,6 +1,5 @@
 import { Biquad } from '../dsp/biquad';
-import { TruePeakMeter } from '../dsp/oversample';
-import { gainToDb, percentile } from '../dsp/util';
+import { Annex2TruePeakMeter } from '../dsp/oversample';
 
 export interface LoudnessPoint {
   time: number;
@@ -22,13 +21,53 @@ export interface LoudnessReport {
   momentary: LoudnessPoint[];
 }
 
+const ABSOLUTE_GATE_LUFS = -70;
+const INTEGRATED_RELATIVE_GATE_LU = -10;
+const LRA_RELATIVE_GATE_LU = -20;
+const MOMENTARY_SECONDS = 0.4;
+const SHORT_TERM_SECONDS = 3;
+const SHORT_TERM_FLUSH_SECONDS = 1.5;
+const ANALYSIS_HOP_SECONDS = 0.1;
+
+const safeDb = (value: number): number => value > 0 ? 20 * Math.log10(value) : -Infinity;
+const finiteDifference = (a: number, b: number): number =>
+  Number.isFinite(a) && Number.isFinite(b) ? a - b : 0;
+
+/** EBU Tech 3342's reference percentile selection uses a rounded rank. */
+function ebuPercentile(values: number[], fraction: number): number {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const rank = Math.round((sorted.length - 1) * Math.max(0, Math.min(1, fraction)));
+  return sorted[rank];
+}
+
+function emptyReport(): LoudnessReport {
+  return {
+    integratedLufs: -Infinity,
+    momentaryMaxLufs: -Infinity,
+    shortTermMaxLufs: -Infinity,
+    lra: 0,
+    truePeakDb: -Infinity,
+    samplePeakDb: -Infinity,
+    rmsDb: -Infinity,
+    crestDb: 0,
+    plrDb: 0,
+    dynamicRangeDb: 0,
+    shortTerm: [],
+    momentary: [],
+  };
+}
+
 /**
- * ITU-R BS.1770-4 loudness measurement.
+ * ITU-R BS.1770-5 Annex 1 loudness measurement for stereo programme audio,
+ * with EBU Tech 3341 time windows and EBU Tech 3342 Loudness Range.
  *
- * Two-stage K-weighting (high shelf then RLB high-pass) is applied per channel,
- * 400 ms blocks are gated at -70 LUFS absolute and -10 LU relative, and the
- * integrated value is the gated mean power. True peak is estimated with 4x
- * oversampling, not from the sample peak.
+ * K-weighting is applied independently per channel. Integrated loudness uses
+ * complete 400 ms blocks with 75% overlap and the -70 LUFS / -10 LU relative
+ * gates. Momentary and short-term values use ungated 400 ms and 3 s sliding
+ * windows, updated every 100 ms. The 3 s analysis is flushed with 1.5 s of
+ * trailing silence as specified for file-based LRA calculation by Tech 3342.
+ * True peak uses the 4-phase FIR interpolation filter in BS.1770-5 Annex 2.
  */
 export function analyzeLoudness(
   L: Float32Array,
@@ -37,17 +76,9 @@ export function analyzeLoudness(
   onProgress?: (fraction: number) => void,
 ): LoudnessReport {
   const n = Math.min(L.length, R.length);
-  if (n === 0) {
-    return {
-      integratedLufs: -Infinity, momentaryMaxLufs: -Infinity, shortTermMaxLufs: -Infinity,
-      lra: 0, truePeakDb: -Infinity, samplePeakDb: -Infinity, rmsDb: -Infinity,
-      crestDb: 0, plrDb: 0, dynamicRangeDb: 0, shortTerm: [], momentary: [],
-    };
-  }
+  if (n === 0 || !Number.isFinite(sampleRate) || sampleRate <= 0) return emptyReport();
 
-  // BS.1770 K-weighting must have independent filter histories per channel.
-  // Sharing a biquad between L and R interleaves their state and contaminates
-  // each channel's output, especially when the stereo channels differ.
+  // ITU-R BS.1770 K-weighting: independent shelving and RLB stages for L/R.
   const makeKWeighting = () => {
     const shelf = new Biquad();
     shelf.configure('highshelf', 1681.974450955533, 3.999843853973347, 0.7071752369554196, sampleRate);
@@ -57,17 +88,21 @@ export function analyzeLoudness(
   };
   const leftWeighting = makeKWeighting();
   const rightWeighting = makeKWeighting();
-
   const filteredL = new Float32Array(n);
   const filteredR = new Float32Array(n);
+
   for (let i = 0; i < n; i++) {
     filteredL[i] = leftWeighting.rlb.process(leftWeighting.shelf.process(L[i]));
     filteredR[i] = rightWeighting.rlb.process(rightWeighting.shelf.process(R[i]));
     if (onProgress && (i & 0xfffff) === 0) onProgress(i / n);
   }
 
-  const blockSize = Math.max(1, Math.round(sampleRate * 0.4));
-  const hop = Math.max(1, Math.round(sampleRate * 0.1));
+  const blockSize = Math.max(1, Math.round(sampleRate * MOMENTARY_SECONDS));
+  const hop = Math.max(1, Math.round(sampleRate * ANALYSIS_HOP_SECONDS));
+  const loudnessOfPower = (power: number) =>
+    power > 0 ? -0.691 + 10 * Math.log10(power) : -Infinity;
+
+  // BS.1770-5 integrated loudness: discard incomplete 400 ms gating blocks.
   const blockPowers: number[] = [];
   const blockTimes: number[] = [];
   for (let start = 0; start + blockSize <= n; start += hop) {
@@ -76,87 +111,109 @@ export function analyzeLoudness(
       sum += filteredL[i] * filteredL[i] + filteredR[i] * filteredR[i];
     }
     blockPowers.push(sum / blockSize);
-    blockTimes.push(start / sampleRate);
+    blockTimes.push(start / sampleRate + MOMENTARY_SECONDS * 0.5);
   }
-  if (blockPowers.length === 0) {
-    let sum = 0;
-    for (let i = 0; i < n; i++) sum += filteredL[i] * filteredL[i] + filteredR[i] * filteredR[i];
-    blockPowers.push(sum / n);
-    blockTimes.push(0);
-  }
-  const loudnessOf = (power: number) => -0.691 + 10 * Math.log10(Math.max(power, 1e-12));
-  const loudnessBlocks = blockPowers.map(loudnessOf);
 
-  const absGated = blockPowers.filter((_, i) => loudnessBlocks[i] > -70);
-  const absMeanPower = absGated.length
-    ? absGated.reduce((a, b) => a + b, 0) / absGated.length
-    : blockPowers[0];
-  const relativeGate = loudnessOf(absMeanPower) - 10;
-  const gated = blockPowers.filter((_, i) => loudnessBlocks[i] > -70 && loudnessBlocks[i] > relativeGate);
-  const integratedPower = gated.length
-    ? gated.reduce((a, b) => a + b, 0) / gated.length
-    : absMeanPower;
-  const integratedLufs = loudnessOf(integratedPower);
-
-  // Momentary (400 ms, ungated) and short-term (3 s) series.
-  const momentary: LoudnessPoint[] = blockTimes.map((t, i) => ({ time: t, lufs: loudnessBlocks[i] }));
-  const shortBlock = Math.round(sampleRate * 3);
-  const shortHop = Math.round(sampleRate * 0.1);
-  const shortTerm: LoudnessPoint[] = [];
-  for (let start = 0; start + shortBlock <= n; start += shortHop) {
-    let sum = 0;
-    for (let i = start; i < start + shortBlock; i++) {
-      sum += filteredL[i] * filteredL[i] + filteredR[i] * filteredR[i];
+  const loudnessBlocks = blockPowers.map(loudnessOfPower);
+  const absoluteGatedPowers = blockPowers.filter((_, i) => loudnessBlocks[i] > ABSOLUTE_GATE_LUFS);
+  let integratedLufs = -Infinity;
+  if (absoluteGatedPowers.length > 0) {
+    const absoluteMeanPower = absoluteGatedPowers.reduce((sum, value) => sum + value, 0) / absoluteGatedPowers.length;
+    const relativeGate = loudnessOfPower(absoluteMeanPower) + INTEGRATED_RELATIVE_GATE_LU;
+    const gatedPowers = blockPowers.filter(
+      (_, i) => loudnessBlocks[i] > ABSOLUTE_GATE_LUFS && loudnessBlocks[i] > relativeGate,
+    );
+    if (gatedPowers.length > 0) {
+      const integratedPower = gatedPowers.reduce((sum, value) => sum + value, 0) / gatedPowers.length;
+      integratedLufs = loudnessOfPower(integratedPower);
     }
-    shortTerm.push({ time: start / sampleRate, lufs: loudnessOf(sum / shortBlock) });
   }
-  if (shortTerm.length === 0) shortTerm.push({ time: 0, lufs: integratedLufs });
 
-  // EBU Tech 3342 loudness range: 10th to 95th percentile of gated short-term.
-  const stValues = shortTerm.map((p) => p.lufs).filter((v) => Number.isFinite(v) && v > -70);
-  const stMeanPower = stValues.length
-    ? stValues.reduce((a, v) => a + Math.pow(10, v / 10), 0) / stValues.length
+  // EBU Tech 3341 Momentary is an ungated 400 ms sliding window.
+  const momentary: LoudnessPoint[] = blockTimes.map((time, i) => ({ time, lufs: loudnessBlocks[i] }));
+  let momentaryMaxLufs = -Infinity;
+  for (const point of momentary) momentaryMaxLufs = Math.max(momentaryMaxLufs, point.lufs);
+
+  // EBU Tech 3341 Short-term is an ungated 3 s sliding window, updated at
+  // 10 Hz. Tech 3342 specifies 1.5 s of trailing silence for file-based LRA
+  // analysis so the final centred windows are included.
+  const shortBlock = Math.max(1, Math.round(sampleRate * SHORT_TERM_SECONDS));
+  const shortHop = Math.max(1, Math.round(sampleRate * ANALYSIS_HOP_SECONDS));
+  const flushSamples = Math.round(sampleRate * SHORT_TERM_FLUSH_SECONDS);
+  const shortTerm: LoudnessPoint[] = [];
+  if (n + flushSamples >= shortBlock) {
+    for (let start = 0; start < n && start + shortBlock <= n + flushSamples; start += shortHop) {
+      const end = Math.min(n, start + shortBlock);
+      let sum = 0;
+      for (let i = start; i < end; i++) {
+        sum += filteredL[i] * filteredL[i] + filteredR[i] * filteredR[i];
+      }
+      // Remaining samples in the 3 s window are trailing silence (zero power).
+      shortTerm.push({
+        time: start / sampleRate + SHORT_TERM_SECONDS * 0.5,
+        lufs: loudnessOfPower(sum / shortBlock),
+      });
+    }
+  }
+  let shortTermMaxLufs = -Infinity;
+  for (const point of shortTerm) shortTermMaxLufs = Math.max(shortTermMaxLufs, point.lufs);
+
+  // EBU Tech 3342 LRA: -70 LUFS absolute gate, then -20 LU relative to
+  // the mean power of the absolute-gated 3 s short-term loudness distribution.
+  const absoluteGatedShortTerm = shortTerm
+    .map((point) => point.lufs)
+    .filter((value) => Number.isFinite(value) && value >= ABSOLUTE_GATE_LUFS);
+  let lra = 0;
+  if (absoluteGatedShortTerm.length > 0) {
+    const meanShortTermPower = absoluteGatedShortTerm.reduce(
+      (sum, value) => sum + Math.pow(10, value / 10),
+      0,
+    ) / absoluteGatedShortTerm.length;
+    const relativeGate = 10 * Math.log10(meanShortTermPower) + LRA_RELATIVE_GATE_LU;
+    const relativeGated = absoluteGatedShortTerm.filter((value) => value >= relativeGate);
+    if (relativeGated.length > 0) {
+      lra = ebuPercentile(relativeGated, 0.95) - ebuPercentile(relativeGated, 0.10);
+    }
+  }
+
+  // Non-standard supplementary dynamic-range descriptor (P95 - P05). It is
+  // intentionally kept separate from EBU LRA and must not be labelled LRA.
+  const dynamicRangeDb = absoluteGatedShortTerm.length > 1
+    ? ebuPercentile(absoluteGatedShortTerm, 0.95) - ebuPercentile(absoluteGatedShortTerm, 0.05)
     : 0;
-  const stRelativeGate = (stMeanPower > 0 ? 10 * Math.log10(stMeanPower) : -70) - 20;
-  const lraValues = stValues.filter((v) => v > stRelativeGate);
-  const lra = lraValues.length > 1 ? percentile(lraValues, 0.95) - percentile(lraValues, 0.1) : 0;
-  const dynamicRangeDb =
-    stValues.length > 1 ? percentile(stValues, 0.95) - percentile(stValues, 0.05) : 0;
 
-  // Peaks.
+  // Sample peak and RMS are measured from the original, unweighted PCM.
   let samplePeak = 0;
   let sumSquares = 0;
   for (let i = 0; i < n; i++) {
-    const al = Math.abs(L[i]);
-    const ar = Math.abs(R[i]);
-    if (al > samplePeak) samplePeak = al;
-    if (ar > samplePeak) samplePeak = ar;
+    samplePeak = Math.max(samplePeak, Math.abs(L[i]), Math.abs(R[i]));
     sumSquares += L[i] * L[i] + R[i] * R[i];
   }
   const rms = Math.sqrt(sumSquares / (n * 2));
-  const tpMeter = new TruePeakMeter(sampleRate, 2, 2048);
+
+  // True peak: BS.1770-5 Annex 2 4-phase FIR interpolation, including the
+  // post-file FIR tail so the last input samples contribute to the maximum.
+  const truePeakMeter = new Annex2TruePeakMeter();
   let truePeak = 0;
   for (let start = 0; start < n; start += 512) {
     const end = Math.min(n, start + 512);
-    const lChunk = L.subarray(start, end);
-    const rChunk = R.subarray(start, end);
-    const tp = tpMeter.process(lChunk, rChunk, end - start);
-    if (tp > truePeak) truePeak = tp;
+    truePeak = Math.max(truePeak, truePeakMeter.process(L.subarray(start, end), R.subarray(start, end), end - start));
   }
+  truePeak = Math.max(truePeak, truePeakMeter.flush());
 
-  const samplePeakDb = gainToDb(samplePeak);
-  const truePeakDb = gainToDb(truePeak);
-  const rmsDb = gainToDb(rms);
+  const samplePeakDb = safeDb(samplePeak);
+  const truePeakDb = safeDb(truePeak);
+  const rmsDb = safeDb(rms);
   return {
     integratedLufs,
-    momentaryMaxLufs: Math.max(...momentary.map((p) => p.lufs)),
-    shortTermMaxLufs: Math.max(...shortTerm.map((p) => p.lufs)),
+    momentaryMaxLufs,
+    shortTermMaxLufs,
     lra,
     truePeakDb,
     samplePeakDb,
     rmsDb,
-    crestDb: samplePeakDb - rmsDb,
-    plrDb: truePeakDb - integratedLufs,
+    crestDb: finiteDifference(samplePeakDb, rmsDb),
+    plrDb: finiteDifference(truePeakDb, integratedLufs),
     dynamicRangeDb,
     shortTerm: downsampleSeries(shortTerm, 400),
     momentary: downsampleSeries(momentary, 400),
@@ -181,7 +238,7 @@ export function loudnessOfRange(
 ): { lufs: number; crestDb: number } {
   const start = Math.max(0, Math.floor(startSec * sampleRate));
   const end = Math.min(L.length, Math.floor(endSec * sampleRate));
-  if (end - start < sampleRate * 0.2) return { lufs: -Infinity, crestDb: 0 };
+  if (end - start < sampleRate * MOMENTARY_SECONDS) return { lufs: -Infinity, crestDb: 0 };
   const report = analyzeLoudness(L.subarray(start, end), R.subarray(start, end), sampleRate);
   return { lufs: report.integratedLufs, crestDb: report.crestDb };
 }

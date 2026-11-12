@@ -186,7 +186,7 @@ export default function Mastering() {
           </section>
 
           <div className="grid gap-3 xl:grid-cols-[1.15fr_.85fr]">
-            <Panel dataTour="mastering-metering" title="Master metering" subtitle="Peak and gain reduction are live; loudness is measured from an offline render." right={<HelpTip title="Understanding the meters">Peak shows the signal level. Gain reduction shows how much a dynamics processor is turning the signal down. LUFS describes perceived loudness; dBTP measures estimated reconstructed peaks.</HelpTip>}>
+            <Panel dataTour="mastering-metering" title="Master metering" subtitle="Peak and gain reduction are live; LUFS, LRA and Annex 2 FIR true peak are measured offline." right={<HelpTip title="Understanding the meters">Peak is the live sample level. Gain reduction shows how much a dynamics processor is turning the signal down. LUFS and LRA are measured offline using the BS.1770-5 and EBU analysis windows; dBTP uses the Annex 2 FIR interpolation meter. The realtime limiter still uses its separate conservative IIR estimate.</HelpTip>}>
               <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
                 <div className="flex gap-3">
                   <div className="text-center">
