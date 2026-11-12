@@ -8,7 +8,7 @@ import { Badge, Button, HelpTip, IconButton, Modal, ParamSlider, Select, Toggle 
 import { EQCurve, GainReductionMeter } from './viz';
 import { clamp } from '../audio/dsp/util';
 import { COMPRESSOR_PRESETS } from '../audio/dsp/processors/compressor';
-import { MULTIBAND_COMP_PRESETS } from '../audio/dsp/processors/multiband';
+import { MULTIBAND_PRESETS } from '../audio/dsp/processors/multiband';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -103,8 +103,7 @@ export function Rack({
         {visibleProcessors.map(({ node, index, definition: def }) => {
           if (!def) return null;
           const isSelected = node.id === selectedId;
-          const meter = meters?.[node.id];
-          const reduction = meter?.reduction ?? 0;
+          const reduction = meters?.[node.id]?.reduction ?? 0;
           return (
             <div
               key={node.id}
@@ -187,24 +186,7 @@ export function Rack({
                     </div>
                   )}
 
-                  {node.type === 'multibandComp' && meter?.bands && (
-                    <div className="mb-3 grid grid-cols-3 gap-2">
-                      {(['Low', 'Mid', 'High'] as const).map((label, bandIndex) => {
-                        const reductionDb = Math.abs(meter.bands?.[bandIndex] ?? 0);
-                        return (
-                          <div key={label} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
-                            <div className="mb-1 flex items-center justify-between gap-1">
-                              <span className="text-[10px] text-ink-500">{label}</span>
-                              <span className="font-mono text-[10px] text-signal-amber">{reductionDb > 0.05 ? `-${reductionDb.toFixed(1)}` : '0.0'} dB</span>
-                            </div>
-                            <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
-                              <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                  {node.type === 'multibandComp' && <MultibandCrossoverView params={node.params} />}
 
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
@@ -213,6 +195,22 @@ export function Rack({
                       <span className="text-2xs text-ink-500">Gain reduction</span>
                       <GainReductionMeter reductionDb={reduction} height={8} />
                       <span className="font-mono text-2xs text-signal-amber">{reduction > 0.05 ? `-${reduction.toFixed(1)} dB` : '0.0 dB'}</span>
+                    </div>
+                  )}
+                  {node.type === 'multibandComp' && (
+                    <div className="mt-2 grid grid-cols-3 gap-2">
+                      {['Low', 'Mid', 'High'].map((label, bandIndex) => {
+                        const amount = Math.abs(meters?.[node.id]?.bands?.[bandIndex] ?? 0);
+                        return (
+                          <div key={label} className="min-w-0 rounded-lg border border-white/[.06] bg-black/15 p-2">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">{label}</span>
+                              <span className="font-mono text-[9px] text-ink-400">{amount > 0.05 ? `-${amount.toFixed(1)}` : '0.0'} dB</span>
+                            </div>
+                            <GainReductionMeter reductionDb={amount} height={6} />
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -296,8 +294,41 @@ function SidechainSelect({ scope, trackId, node }: { scope: ChainScope; trackId:
         onChange={(value) => useApp.getState().setProcessorSidechain(scope, trackId, node.id, value || null)}
       />
       <p className="mt-1 text-2xs text-ink-500">
-        The key signal changes what the detector hears, not the audio that is processed.
+        {node.type === 'multibandComp'
+          ? 'The external key is split into matching low, mid and high bands, so each compressor responds to its own frequency region.'
+          : 'The key signal changes what the detector hears, not the audio that is processed.'}
       </p>
+    </div>
+  );
+}
+
+function MultibandCrossoverView({ params }: { params: Record<string, number> }) {
+  const low = clamp(params.xLow ?? 200, 40, 600);
+  const minimumHigh = Math.max(800, low + 20);
+  const high = clamp(Math.max(params.xHigh ?? 4000, minimumHigh), minimumHigh, 12000);
+  const position = (frequency: number) => (Math.log(frequency / 20) / Math.log(20000 / 20)) * 100;
+  const lowWidth = clamp(position(low), 1, 98);
+  const midWidth = clamp(position(high) - position(low), 1, 98 - lowWidth);
+  const highWidth = Math.max(1, 100 - lowWidth - midWidth);
+  const formatHz = (frequency: number) => frequency >= 1000
+    ? `${(frequency / 1000).toFixed(frequency % 1000 === 0 ? 0 : 1)} kHz`
+    : `${Math.round(frequency)} Hz`;
+  return (
+    <div className="mb-2 rounded-xl border border-white/[.07] bg-black/15 p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <span className="text-2xs font-medium text-ink-300">LR4 crossover layout</span>
+        <span className="text-[9px] text-ink-600">24 dB/oct · logarithmic</span>
+      </div>
+      <div className="flex h-2.5 overflow-hidden rounded-full bg-white/[.05]">
+        <div className="h-full bg-[#38BDF8]" style={{ width: `${lowWidth}%` }} />
+        <div className="h-full bg-[#A78BFA]" style={{ width: `${midWidth}%` }} />
+        <div className="h-full bg-[#F0B45A]" style={{ width: `${highWidth}%` }} />
+      </div>
+      <div className="mt-2 grid grid-cols-3 gap-2 text-[9px]">
+        <div className="min-w-0"><span className="block text-[#7DD3FC]">LOW</span><span className="text-ink-400">20 Hz–{formatHz(low)}</span></div>
+        <div className="min-w-0 text-center"><span className="block text-[#C4B5FD]">MID</span><span className="text-ink-400">{formatHz(low)}–{formatHz(high)}</span></div>
+        <div className="min-w-0 text-right"><span className="block text-[#FCD34D]">HIGH</span><span className="text-ink-400">{formatHz(high)}–20 kHz</span></div>
+      </div>
     </div>
   );
 }
@@ -336,28 +367,13 @@ function ProcessorParams({
     setCompressorPreset(preset.id);
   };
   const applyMultibandPreset = (presetId: string) => {
-    const preset = MULTIBAND_COMP_PRESETS.find((item) => item.id === presetId);
+    const preset = MULTIBAND_PRESETS.find((item) => item.id === presetId);
     if (!preset) return;
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setMultibandPreset(preset.id);
   };
   return (
     <div className="space-y-2">
-      {node.type === 'multibandComp' && (
-        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
-          <Select
-            label="Multiband starting point"
-            value={multibandPreset}
-            options={[{ value: '', label: 'Choose a starting point…' }, ...MULTIBAND_COMP_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
-            onChange={applyMultibandPreset}
-          />
-          {multibandPreset && (
-            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
-              {MULTIBAND_COMP_PRESETS.find((preset) => preset.id === multibandPreset)?.description} All band settings remain editable.
-            </p>
-          )}
-        </div>
-      )}
       {node.type === 'compressor' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select
@@ -369,6 +385,21 @@ function ProcessorParams({
           {compressorPreset && (
             <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
               {COMPRESSOR_PRESETS.find((preset) => preset.id === compressorPreset)?.description} All parameters remain editable.
+            </p>
+          )}
+        </div>
+      )}
+      {node.type === 'multibandComp' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Multiband starting point"
+            value={multibandPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...MULTIBAND_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyMultibandPreset}
+          />
+          {multibandPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {MULTIBAND_PRESETS.find((preset) => preset.id === multibandPreset)?.description} All band controls remain editable.
             </p>
           )}
         </div>
@@ -422,11 +453,6 @@ function ProcessorParams({
                   {node.type === 'compressor' && spec.key === 'link' && (
                     <p className="mt-1 text-[10px] leading-relaxed text-ink-500">
                       0% compresses left and right independently. 100% uses the louder detector for shared stereo gain reduction.
-                    </p>
-                  )}
-                  {node.type === 'multibandComp' && spec.key.endsWith('_link') && (
-                    <p className="mt-1 text-[10px] leading-relaxed text-ink-500">
-                      0% uses independent left/right detection in this band. 100% applies shared gain reduction to both channels.
                     </p>
                   )}
                 </div>
