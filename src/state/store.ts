@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import type { AnalysisReport } from '../audio/analysis/analyze';
 import { decodeAudioFile, resampleToRate } from '../audio/io/decode';
-import { encodeAiff, encodeWav, type WavBitDepth } from '../audio/io/wav';
+import { encodeAiff, encodeWav, writeAiffToWritable, writeWavToWritable, type SequentialPcmWritable, type WavBitDepth } from '../audio/io/wav';
 import { fillStereoPcm16Block } from '../audio/io/mp3';
 import { analyzeLoudness, normalizeToTruePeak } from '../audio/analysis/loudness';
 import { generateMatchPlan, planToNodes, type MatchPlan } from '../audio/analysis/match';
@@ -1843,8 +1843,22 @@ export const useApp = create<AppState>((set, get) => ({
   exportMix: async (settings) => {
     const project = get().project;
     if (!project) return;
-    set({ busy: { kind: 'render', label: 'Rendering offline', progress: 0 } });
+    if (settings.format === 'aiff' && settings.bitDepth === 32) {
+      set({ toast: 'AIFF export supports 16 or 24-bit. Choose WAV for 32-bit float.' });
+      return;
+    }
+    set({ busy: { kind: 'render', label: 'Preparing export destination', progress: 0 } });
     try {
+      const filename = sanitizeFilename(settings.filename || project.name);
+      const suggestedName = `${filename}.${settings.format}`;
+
+      // The native picker must be requested directly from the button action,
+      // before the offline render introduces any asynchronous work.
+      const directHandle = settings.format === 'wav' || settings.format === 'aiff'
+        ? await chooseDirectExportFile(suggestedName, settings.format)
+        : null;
+
+      set({ busy: { kind: 'render', label: 'Rendering offline', progress: 0 } });
       const result = await renderProject(get, {
         mode: settings.mode,
         trackId: settings.trackId,
@@ -1871,7 +1885,6 @@ export const useApp = create<AppState>((set, get) => ({
         normalizeToTruePeak(L, R, project.targetTruePeak ?? -1);
       }
 
-      // Measure the final PCM after resampling and optional true-peak gain.
       const pcmReport = analyzeLoudness(L, R, sampleRate);
       let finalStats: RenderStats = {
         ...result.stats,
@@ -1883,12 +1896,18 @@ export const useApp = create<AppState>((set, get) => ({
         duration: L.length / sampleRate,
       };
 
-      const filename = sanitizeFilename(settings.filename || project.name);
       const extension = settings.format === 'mp3' ? 'mp3' : settings.format;
-      const exportName = `${filename}.${extension}`;
-      let blob: Blob;
-      if (settings.format === 'wav') {
-        blob = encodeWav(L, R, {
+      let exportName = `${filename}.${extension}`;
+      let outputBlob: Blob;
+
+      if (directHandle) {
+        // On supporting browsers, encoded PCM is written sequentially to the
+        // user-selected file. No complete encoded Blob is assembled in-page.
+        const savedFile = await writeDirectExportFile(directHandle, L, R, sampleRate, settings);
+        outputBlob = savedFile;
+        exportName = savedFile.name || directHandle.name || exportName;
+      } else if (settings.format === 'wav') {
+        outputBlob = encodeWav(L, R, {
           sampleRate,
           bitDepth: settings.bitDepth,
           dither: settings.dither,
@@ -1899,22 +1918,20 @@ export const useApp = create<AppState>((set, get) => ({
             software: 'Sonora Reference Studio',
           },
         });
+        downloadBlob(outputBlob, exportName);
       } else if (settings.format === 'aiff') {
-        if (settings.bitDepth === 32) throw new Error('AIFF export supports 16 or 24-bit. Choose WAV for 32-bit float.');
-        blob = encodeAiff(L, R, sampleRate, settings.bitDepth === 16 ? 16 : 24);
+        outputBlob = encodeAiff(L, R, sampleRate, settings.bitDepth === 16 ? 16 : 24);
+        downloadBlob(outputBlob, exportName);
       } else {
-        blob = await encodeMp3(L, R, sampleRate);
+        outputBlob = await encodeMp3(L, R, sampleRate);
+        downloadBlob(outputBlob, exportName);
       }
 
-      // Download remains available even if the browser decoder cannot verify a
-      // particular encoded stream. In that case, history keeps the final PCM
-      // measurement and clearly reports that decoded-file verification failed.
-      downloadBlob(blob, exportName);
       let encodedVerification: EncodedFileMeasurements | null = null;
       let verificationWarning: string | null = null;
       try {
         set({ busy: { kind: 'render', label: 'Verifying encoded delivery file', progress: 0.98 } });
-        encodedVerification = await verifyEncodedBlob(blob);
+        encodedVerification = await verifyEncodedBlob(outputBlob);
       } catch (error) {
         verificationWarning = error instanceof Error ? error.message : String(error);
       }
@@ -1942,14 +1959,17 @@ export const useApp = create<AppState>((set, get) => ({
         duration: finalStats.duration,
         lufs: finalStats.lufs,
         truePeak: finalStats.truePeakDb,
-        sizeBytes: blob.size,
+        sizeBytes: outputBlob.size,
         settings: { ...settings },
       };
-      await db.saveExport(record, blob);
+      // File objects are Blobs, so the existing durable export history remains
+      // available for Download and Verify after a direct-to-file write.
+      await db.saveExport(record, outputBlob);
       const measuredText = `${finalStats.lufs.toFixed(1)} LUFS · ${finalStats.truePeakDb.toFixed(1)} dBTP`;
+      const delivery = directHandle ? 'Saved directly to file' : 'Exported';
       const toast = verificationWarning
-        ? `Exported ${record.name} · pre-encode measurement ${measuredText}. Encoded-file verification unavailable: ${verificationWarning}`
-        : `Exported and verified ${record.name} · ${measuredText}`;
+        ? `${delivery} ${record.name} · pre-encode measurement ${measuredText}. Encoded-file verification unavailable: ${verificationWarning}`
+        : `${delivery} and verified ${record.name} · ${measuredText}`;
       set((state) => ({
         exports: [record, ...state.exports],
         lastRenderStats: finalStats,
@@ -1970,7 +1990,8 @@ export const useApp = create<AppState>((set, get) => ({
         });
       }
     } catch (error) {
-      set({ busy: null, toast: error instanceof Error ? error.message : 'Export failed.' });
+      const cancelled = error instanceof DOMException && error.name === 'AbortError';
+      set({ busy: null, toast: cancelled ? 'Export cancelled.' : error instanceof Error ? error.message : 'Export failed.' });
     }
   },
 
@@ -2124,6 +2145,103 @@ function downloadBlob(blob: Blob, filename: string): void {
   anchor.click();
   anchor.remove();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
+}
+
+interface DirectExportWritable extends SequentialPcmWritable {
+  close(): Promise<void>;
+  abort(reason?: unknown): Promise<void>;
+}
+
+interface DirectExportFileHandle {
+  readonly name: string;
+  createWritable(): Promise<DirectExportWritable>;
+  getFile(): Promise<File>;
+}
+
+interface SaveFilePickerOptions {
+  suggestedName: string;
+  types: { description: string; accept: Record<string, string[]> }[];
+}
+
+interface SaveFilePickerWindow extends Window {
+  showSaveFilePicker?: (options: SaveFilePickerOptions) => Promise<DirectExportFileHandle>;
+}
+
+/** Request the destination while the Export button's user activation is still active. */
+async function chooseDirectExportFile(
+  suggestedName: string,
+  format: 'wav' | 'aiff',
+): Promise<DirectExportFileHandle | null> {
+  if (typeof window === 'undefined' || !window.isSecureContext) return null;
+  const picker = (window as SaveFilePickerWindow).showSaveFilePicker;
+  if (!picker) return null;
+  const type: SaveFilePickerOptions['types'][number] = format === 'wav'
+    ? { description: 'WAV audio', accept: { 'audio/wav': ['.wav'] } }
+    : { description: 'AIFF audio', accept: { 'audio/aiff': ['.aiff', '.aif'] } };
+  return picker.call(window, { suggestedName, types: [type] });
+}
+
+async function writeDirectExportFile(
+  handle: DirectExportFileHandle,
+  L: Float32Array,
+  R: Float32Array,
+  sampleRate: number,
+  settings: ExportSettings,
+): Promise<File> {
+  if (settings.format !== 'wav' && settings.format !== 'aiff') {
+    throw new Error('Direct file writing is available for WAV and AIFF only.');
+  }
+  const writable = await handle.createWritable();
+  const controller = new AbortController();
+  let abortPromise: Promise<void> | null = null;
+  const cancel = () => {
+    controller.abort();
+    if (!abortPromise) abortPromise = writable.abort('Export cancelled.').catch(() => undefined);
+  };
+  const label = settings.format === 'wav' ? 'Writing WAV directly to file' : 'Writing AIFF directly to file';
+  const onProgress = (progress: number) => {
+    useApp.setState({
+      busy: {
+        kind: 'render',
+        label,
+        progress: 0.91 + Math.min(1, Math.max(0, progress)) * 0.06,
+        cancel,
+      },
+    });
+  };
+
+  try {
+    if (settings.format === 'wav') {
+      await writeWavToWritable(L, R, {
+        sampleRate,
+        bitDepth: settings.bitDepth,
+        dither: settings.dither,
+        metadata: {
+          title: settings.metadata.title,
+          artist: settings.metadata.artist,
+          comment: settings.metadata.comment,
+          software: 'Sonora Reference Studio',
+        },
+      }, writable, { signal: controller.signal, onProgress });
+    } else {
+      if (settings.bitDepth === 32) {
+        throw new Error('AIFF export supports 16 or 24-bit. Choose WAV for 32-bit float.');
+      }
+      await writeAiffToWritable(
+        L, R, sampleRate, settings.bitDepth === 16 ? 16 : 24,
+        writable, { signal: controller.signal, onProgress },
+      );
+    }
+    if (controller.signal.aborted) throw new DOMException('The export was cancelled.', 'AbortError');
+    useApp.setState({ busy: { kind: 'render', label: 'Finalizing saved file', progress: 0.98 } });
+    await writable.close();
+  } catch (error) {
+    if (!abortPromise) abortPromise = writable.abort(error).catch(() => undefined);
+    await abortPromise;
+    throw error;
+  }
+
+  return handle.getFile();
 }
 
 async function encodeMp3(L: Float32Array, R: Float32Array, sampleRate: number): Promise<Blob> {

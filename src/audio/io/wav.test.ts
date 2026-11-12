@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { encodeAiff, encodeWav, parseAiffHeader, parseWavHeader } from './wav';
+import { encodeAiff, encodeWav, parseAiffHeader, parseWavHeader, writeAiffToWritable, writeWavToWritable } from './wav';
 
 function bytesOf(blob: Blob): Promise<Uint8Array> {
   return blob.arrayBuffer().then((buffer) => new Uint8Array(buffer));
@@ -154,5 +154,77 @@ describe('chunked AIFF encoding', () => {
 
   it('rejects an invalid sample rate', () => {
     expect(() => encodeAiff(new Float32Array(1), new Float32Array(1), 0, 16)).toThrow(RangeError);
+  });
+});
+
+
+describe('direct-to-file WAV and AIFF writers', () => {
+  it('writes byte-identical WAV output sequentially and reports progress', async () => {
+    const left = new Float32Array(16_384 + 5);
+    const right = new Float32Array(left.length);
+    for (let i = 0; i < left.length; i++) {
+      left[i] = Math.sin(i / 17) * 0.7;
+      right[i] = Math.cos(i / 23) * 0.6;
+    }
+    const written: ArrayBuffer[] = [];
+    const progress: number[] = [];
+    await writeWavToWritable(
+      left,
+      right,
+      { sampleRate: 48_000, bitDepth: 24, dither: true, metadata: { title: 'Direct write' } },
+      { write: async (chunk) => { written.push(chunk.slice(0)); } },
+      { onProgress: (value) => progress.push(value) },
+    );
+
+    const streamed = new Blob(written, { type: 'audio/wav' });
+    const buffered = encodeWav(
+      left,
+      right,
+      { sampleRate: 48_000, bitDepth: 24, dither: true, metadata: { title: 'Direct write' } },
+    );
+    expect(new Uint8Array(await streamed.arrayBuffer())).toEqual(
+      new Uint8Array(await buffered.arrayBuffer()),
+    );
+    expect(progress[progress.length - 1]).toBe(1);
+    expect(progress).toHaveLength(3);
+  });
+
+  it('writes byte-identical AIFF output sequentially across block boundaries', async () => {
+    const left = new Float32Array(16_384 + 9);
+    const right = new Float32Array(left.length);
+    left[16_384] = -1;
+    right[16_384] = 1;
+    left[left.length - 1] = 0.5;
+    right[right.length - 1] = -0.5;
+    const written: ArrayBuffer[] = [];
+    await writeAiffToWritable(
+      left,
+      right,
+      44_100,
+      24,
+      { write: async (chunk) => { written.push(chunk.slice(0)); } },
+    );
+
+    const streamed = new Blob(written, { type: 'audio/aiff' });
+    const buffered = encodeAiff(left, right, 44_100, 24);
+    expect(new Uint8Array(await streamed.arrayBuffer())).toEqual(
+      new Uint8Array(await buffered.arrayBuffer()),
+    );
+  });
+
+  it('stops before writing further WAV blocks after cancellation', async () => {
+    const controller = new AbortController();
+    const written: ArrayBuffer[] = [];
+    await expect(writeWavToWritable(
+      new Float32Array(16_384 + 1),
+      new Float32Array(16_384 + 1),
+      { sampleRate: 48_000, bitDepth: 16, dither: false },
+      { write: async (chunk) => { written.push(chunk.slice(0)); } },
+      { signal: controller.signal, onProgress: (progress) => {
+        if (progress === 0) controller.abort();
+      } },
+    )).rejects.toMatchObject({ name: 'AbortError' });
+    expect(written).toHaveLength(1);
+    expect(written[0].byteLength).toBe(44);
   });
 });

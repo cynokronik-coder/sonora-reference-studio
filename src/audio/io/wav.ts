@@ -179,7 +179,21 @@ export interface EncodeOptions {
 const PCM_CHUNK_FRAMES = 16_384;
 const UINT32_MAX = 0xffff_ffff;
 
-function asciiChunk(text: string): Uint8Array {
+export interface SequentialPcmWritable {
+  write(data: ArrayBuffer): Promise<void>;
+}
+
+export interface PcmStreamWriteOptions {
+  signal?: AbortSignal;
+  onProgress?: (progress: number) => void;
+}
+
+interface EncodedPcmChunk {
+  data: Uint8Array<ArrayBuffer>;
+  progress: number;
+}
+
+function asciiChunk(text: string): Uint8Array<ArrayBuffer> {
   const bytes = new TextEncoder().encode(text);
   const pad = bytes.length % 2 === 0 ? 0 : 1;
   const out = new Uint8Array(bytes.length + pad);
@@ -204,6 +218,12 @@ function assertContainerSize(dataSize: number, overhead: number, format: string)
   }
 }
 
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw new DOMException('The export was cancelled.', 'AbortError');
+  }
+}
+
 function nextDither(rng: { value: number }): number {
   let value = rng.value;
   value ^= value << 13;
@@ -219,9 +239,8 @@ function writeAscii(view: DataView, offset: number, text: string): number {
 }
 
 function createWavHeader(
-  frames: number,
   options: EncodeOptions,
-  infoChunks: { id: string; data: Uint8Array }[],
+  infoChunks: { id: string; data: Uint8Array<ArrayBuffer> }[],
   dataSize: number,
 ): Uint8Array<ArrayBuffer> {
   let infoSize = 0;
@@ -276,12 +295,7 @@ function createWavHeader(
   return header;
 }
 
-/**
- * Write a RIFF/WAVE file as bounded interleaved PCM Blob parts.
- * The final Blob is retained for downloads/history, but no song-sized encoded
- * ArrayBuffer is allocated during conversion.
- */
-export function encodeWav(L: Float32Array, R: Float32Array, options: EncodeOptions): Blob {
+function* wavChunks(L: Float32Array, R: Float32Array, options: EncodeOptions): Generator<EncodedPcmChunk> {
   const frames = assertPcmPair(L, R, options.sampleRate);
   const channels = 2;
   const bytesPerSample = options.bitDepth / 8;
@@ -292,11 +306,10 @@ export function encodeWav(L: Float32Array, R: Float32Array, options: EncodeOptio
   if (options.metadata?.comment) metaEntries.push(['ICMT', options.metadata.comment]);
   if (options.metadata?.software) metaEntries.push(['ISFT', options.metadata.software]);
   const infoChunks = metaEntries.map(([id, value]) => ({ id, data: asciiChunk(value) }));
-  const header = createWavHeader(frames, options, infoChunks, dataSize);
-  const parts: BlobPart[] = [header];
+  yield { data: createWavHeader(options, infoChunks, dataSize), progress: 0 };
+
   const rng = { value: 0x12345678 };
   const quantScale = options.bitDepth === 16 ? 32767 : 8388607;
-
   for (let frameOffset = 0; frameOffset < frames; frameOffset += PCM_CHUNK_FRAMES) {
     const blockFrames = Math.min(PCM_CHUNK_FRAMES, frames - frameOffset);
     const block = new Uint8Array(blockFrames * channels * bytesPerSample);
@@ -312,7 +325,6 @@ export function encodeWav(L: Float32Array, R: Float32Array, options: EncodeOptio
           offset += 4;
           continue;
         }
-
         const dither = options.dither ? (nextDither(rng) + nextDither(rng)) / quantScale : 0;
         const sample = Math.max(-1, Math.min(1, source + dither));
         const value = Math.round(sample * quantScale);
@@ -327,14 +339,36 @@ export function encodeWav(L: Float32Array, R: Float32Array, options: EncodeOptio
         }
       }
     }
-    parts.push(block);
+    yield { data: block, progress: (frameOffset + blockFrames) / frames };
   }
-
-  return new Blob(parts, { type: 'audio/wav' });
 }
 
-/** Write an AIFF file as bounded big-endian PCM Blob parts (16/24-bit only). */
-export function encodeAiff(L: Float32Array, R: Float32Array, sampleRate: number, bitDepth: 16 | 24): Blob {
+/** Encode a WAV file as bounded PCM Blob parts for browsers without file streaming. */
+export function encodeWav(L: Float32Array, R: Float32Array, options: EncodeOptions): Blob {
+  return new Blob(Array.from(wavChunks(L, R, options), (chunk) => chunk.data), { type: 'audio/wav' });
+}
+
+/** Write WAV header and PCM blocks sequentially to a file-like writable. */
+export async function writeWavToWritable(
+  L: Float32Array,
+  R: Float32Array,
+  options: EncodeOptions,
+  writable: SequentialPcmWritable,
+  writeOptions: PcmStreamWriteOptions = {},
+): Promise<void> {
+  for (const chunk of wavChunks(L, R, options)) {
+    throwIfAborted(writeOptions.signal);
+    await writable.write(chunk.data.buffer as ArrayBuffer);
+    writeOptions.onProgress?.(chunk.progress);
+  }
+}
+
+function* aiffChunks(
+  L: Float32Array,
+  R: Float32Array,
+  sampleRate: number,
+  bitDepth: 16 | 24,
+): Generator<EncodedPcmChunk> {
   const frames = assertPcmPair(L, R, sampleRate);
   const bytesPerSample = bitDepth / 8;
   const dataSize = frames * 2 * bytesPerSample;
@@ -366,8 +400,8 @@ export function encodeAiff(L: Float32Array, R: Float32Array, sampleRate: number,
   view.setUint32(offset, 0, false);
   offset += 4;
   view.setUint32(offset, 0, false);
+  yield { data: header, progress: 0 };
 
-  const parts: BlobPart[] = [header];
   const quant = bitDepth === 16 ? 32767 : 8388607;
   for (let frameOffset = 0; frameOffset < frames; frameOffset += PCM_CHUNK_FRAMES) {
     const blockFrames = Math.min(PCM_CHUNK_FRAMES, frames - frameOffset);
@@ -391,9 +425,27 @@ export function encodeAiff(L: Float32Array, R: Float32Array, sampleRate: number,
         }
       }
     }
-    parts.push(block);
+    yield { data: block, progress: (frameOffset + blockFrames) / frames };
   }
-
-  return new Blob(parts, { type: 'audio/aiff' });
 }
 
+/** Encode AIFF as bounded PCM Blob parts for browsers without file streaming. */
+export function encodeAiff(L: Float32Array, R: Float32Array, sampleRate: number, bitDepth: 16 | 24): Blob {
+  return new Blob(Array.from(aiffChunks(L, R, sampleRate, bitDepth), (chunk) => chunk.data), { type: 'audio/aiff' });
+}
+
+/** Write AIFF header and PCM blocks sequentially to a file-like writable. */
+export async function writeAiffToWritable(
+  L: Float32Array,
+  R: Float32Array,
+  sampleRate: number,
+  bitDepth: 16 | 24,
+  writable: SequentialPcmWritable,
+  writeOptions: PcmStreamWriteOptions = {},
+): Promise<void> {
+  for (const chunk of aiffChunks(L, R, sampleRate, bitDepth)) {
+    throwIfAborted(writeOptions.signal);
+    await writable.write(chunk.data.buffer as ArrayBuffer);
+    writeOptions.onProgress?.(chunk.progress);
+  }
+}

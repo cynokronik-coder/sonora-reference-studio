@@ -64,8 +64,7 @@ export default function Export() {
           <p className="section-label">Delivery</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-[-.025em] text-white">Export</h1>
           <p className="mt-1 text-xs text-ink-400">
-            Offline, deterministic rendering at the session rate or higher. The download is the encoded file itself — no
-            additional lossy conversion.
+            Offline, deterministic rendering at the session rate or higher. WAV/AIFF can be saved directly to a chosen file in supported browsers; MP3 and unsupported browsers use the standard download flow.
           </p>
         </div>
         <Badge tone="info">{audioTracks.length} audio track{audioTracks.length === 1 ? '' : 's'}</Badge>
@@ -193,7 +192,7 @@ export default function Export() {
                 })
               }
             >
-              <Icon name="download" size={14} /> Render &amp; download
+              <Icon name="download" size={14} /> Render &amp; export
             </Button>
             <span className="text-2xs text-ink-500">
               {settings.format === 'mp3' ? 'MP3 is limited to 44.1/48 kHz and is lossy.' : settings.format === 'aiff' && settings.bitDepth === 32 ? 'AIFF does not support 32-bit float here; choose WAV.' : `${settings.format.toUpperCase()} · ${settings.sampleRate} Hz`}

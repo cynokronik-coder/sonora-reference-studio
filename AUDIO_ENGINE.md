@@ -222,4 +222,13 @@ These changes reduce avoidable peak allocations; they do not make the export pip
 
 WAV and AIFF PCM conversion now writes bounded 16,384-frame interleaved blocks and creates a Blob from a small header plus those block parts. This avoids a single song-sized encoded-file ArrayBuffer and bounds each temporary conversion allocation. WAV TPDF dither state continues across block boundaries, preserving deterministic output for a given source and settings. The RIFF/FORM 32-bit size limits are checked before block allocation.
 
-This is chunk-based Blob assembly, not direct-to-disk streaming: the final encoded Blob and its chunk parts remain available for the existing automatic download, IndexedDB export history and Verify workflow. The rendered Float32 PCM also remains resident for measurement and encoding. Direct writes to a user-selected file and truly bounded-memory export history are separate future work.
+This is chunk-based Blob assembly for browsers without direct file writing. The final encoded Blob and its chunk parts remain available for the existing automatic download, IndexedDB export history and Verify workflow. The rendered Float32 PCM also remains resident for measurement and encoding.
+
+
+### Direct-to-file WAV and AIFF export
+
+On secure browser contexts with the File System Access API, the Export action can open the native Save File picker before starting the offline render. WAV/AIFF headers and 16,384-frame PCM blocks are then written sequentially to the selected file handle, one block at a time. The writer awaits each block write before preparing the next, applies cooperative cancellation, and closes the file before reading it back for the existing verification and IndexedDB export-history flow.
+
+Browsers without `showSaveFilePicker` retain the existing chunked Blob download path. Cancelling the native picker cancels the export instead of silently triggering a download.
+
+Direct-to-file avoids retaining a complete encoded-file Blob in the page during encoding, but the final rendered Float32 stereo PCM is still in memory for current full-programme loudness analysis and normalization. Reading the saved file back for verification and storing it in IndexedDB can also incur additional I/O/storage work. Real Safari/Chrome/Edge testing and large-session heap profiling remain necessary; do not assume File System Access support is universal.
