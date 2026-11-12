@@ -258,6 +258,48 @@ export function adaptiveOnsetEnvelope(
  * Convert a section-local beat phase into a song-relative phase. A beat phase
  * is periodic, so the result is wrapped into the current beat interval.
  */
+
+export interface BeatSectionState {
+  tempoBpm: number;
+  /** Beat-grid phase relative to the full song timeline, wrapped to one beat. */
+  beatPhaseSeconds: number;
+}
+
+export interface BeatSectionTransition {
+  /** Current section tempo minus the previous section tempo. */
+  tempoChangeBpm: number | null;
+  /** Signed phase shift in milliseconds; null when tempos are not comparable. */
+  beatPhaseShiftMs: number | null;
+  /** 0–1 continuity score for comparable adjacent section grids. */
+  beatContinuity: number | null;
+}
+
+/**
+ * Compare adjacent section beat grids. A meaningful tempo change is reported
+ * independently; phase shift is only compared when the two beat periods are
+ * close enough that a shared phase reference remains meaningful.
+ */
+export function compareBeatSectionTransition(
+  previous: BeatSectionState | null,
+  current: BeatSectionState | null,
+): BeatSectionTransition {
+  if (!previous || !current) {
+    return { tempoChangeBpm: null, beatPhaseShiftMs: null, beatContinuity: null };
+  }
+  const tempoChangeBpm = Math.round((current.tempoBpm - previous.tempoBpm) * 10) / 10;
+  const relativeTempoChange = Math.abs(tempoChangeBpm) / Math.max(previous.tempoBpm, current.tempoBpm);
+  if (relativeTempoChange > 0.02) {
+    return { tempoChangeBpm, beatPhaseShiftMs: null, beatContinuity: null };
+  }
+
+  const period = (60 / previous.tempoBpm + 60 / current.tempoBpm) * 0.5;
+  const rawDifference = current.beatPhaseSeconds - previous.beatPhaseSeconds;
+  const wrappedDifference = ((rawDifference + period / 2) % period + period) % period - period / 2;
+  const beatPhaseShiftMs = Math.round(wrappedDifference * 1000 * 10) / 10;
+  const beatContinuity = clamp(1 - Math.abs(wrappedDifference) / (period * 0.25), 0, 1);
+  return { tempoChangeBpm, beatPhaseShiftMs, beatContinuity };
+}
+
 export function absoluteBeatPhaseSeconds(
   sectionStartSeconds: number,
   localPhaseSeconds: number | null,
