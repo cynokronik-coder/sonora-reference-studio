@@ -16,16 +16,49 @@ export interface SectionReport {
   label: string;
   start: number;
   end: number;
+  /** Segment-level BS.1770-5 / EBU measurements. */
   lufs: number;
+  truePeakDb: number;
+  samplePeakDb: number;
+  rmsDb: number;
   crestDb: number;
+  plrDb: number;
+  /** Null when the section is too short for a stable short-term distribution. */
+  lra: number | null;
+  dynamicRangeDb: number;
+  momentaryMaxLufs: number;
+  shortTermMaxLufs: number;
+  /** Segment-level stereo image measurements. */
   widthDb: number;
   correlation: number;
+  monoCompatibility: number;
+  lowSideRatioDb: number;
+  midEnergyDb: number;
+  sideEnergyDb: number;
+  balanceDb: number;
+  /** Segment-level spectral descriptors. */
   bands: BandLevel[];
-  punchScore: number;
+  centroidHz: number;
+  rolloffHz: number;
+  tiltDbPerOct: number;
+  flatness: number;
+  lowEnergyDb: number;
+  highEnergyDb: number;
+  resonances: Resonance[];
+  maxBuildupDb: number;
+  buildupBands: number[];
+  /** Section rhythm metrics; tempo is omitted for short excerpts. */
+  tempoBpm: number | null;
+  beatConfidence: number | null;
+  attackDensity: number | null;
+  attackSharpness: number | null;
+  punchScore: number | null;
 }
 
 export interface AnalysisReport {
   version: 1;
+  /** Version of the expanded per-section measurement payload. Older stored reports require re-analysis. */
+  sectionMetricsVersion?: 2;
   createdAt: number;
   sampleRate: number;
   channels: number;
@@ -88,34 +121,80 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
   const includeSections = options.includeSections ?? true;
   if (includeSections) {
     const boundaries = rhythm.sections.length ? rhythm.sections : [{ start: 0, end: duration }];
-    const labels = labelSections(
-      boundaries.map((b) => ({
-        ...b,
-        lufs: quickLufs(L, R, sampleRate, b.start, b.end),
-      })),
-    );
-    boundaries.forEach((boundary: SectionBoundary, index: number) => {
-      const startSample = Math.floor(boundary.start * sampleRate);
+    // Measure segment loudness once. The same measured values drive automatic
+    // labels and the full section report, avoiding duplicate DSP passes.
+    const measuredBoundaries = boundaries.map((boundary) => {
+      const startSample = Math.max(0, Math.floor(boundary.start * sampleRate));
       const endSample = Math.min(n, Math.ceil(boundary.end * sampleRate));
-      if (endSample - startSample < sampleRate * 0.5) return;
+      if (endSample - startSample < sampleRate * 0.5) return null;
       const sectionL = L.subarray(startSample, endSample);
       const sectionR = R.subarray(startSample, endSample);
-      const sectionLoudness = analyzeLoudness(sectionL, sectionR, sampleRate);
+      return {
+        boundary,
+        sectionL,
+        sectionR,
+        sectionLoudness: analyzeLoudness(sectionL, sectionR, sampleRate),
+      };
+    });
+    const labels = labelSections(boundaries.map((boundary, index) => ({
+      ...boundary,
+      lufs: measuredBoundaries[index]?.sectionLoudness.integratedLufs ?? -Infinity,
+    })));
+    measuredBoundaries.forEach((measured, index) => {
+      if (!measured) return;
+      const { boundary, sectionL, sectionR, sectionLoudness } = measured;
+      const sectionDuration = sectionL.length / sampleRate;
       const sectionStereo = analyzeStereo(sectionL, sectionR, sampleRate);
       const sectionAccum = createSpectrumAccum(sampleRate);
       accumulateSpectrum(sectionAccum, sectionL, sectionR);
       const sectionSpectrum = finalizeSpectrum(sectionAccum);
+      // Structural section detection is already complete. Reuse the rhythm
+      // feature engine without running another self-similarity segmentation.
+      const sectionRhythm = sectionDuration >= 2
+        ? analyzeRhythm(sectionL, sectionR, sampleRate, { includeSections: false })
+        : null;
+      const sectionTempo = sectionDuration >= 8 && sectionRhythm?.tempoBpm
+        ? sectionRhythm.tempoBpm
+        : null;
       sections.push({
         index,
         label: labels[index] ?? 'section',
         start: boundary.start,
         end: boundary.end,
         lufs: sectionLoudness.integratedLufs,
+        truePeakDb: sectionLoudness.truePeakDb,
+        samplePeakDb: sectionLoudness.samplePeakDb,
+        rmsDb: sectionLoudness.rmsDb,
         crestDb: sectionLoudness.crestDb,
+        plrDb: sectionLoudness.plrDb,
+        // Below ten seconds, the small short-term sample distribution is
+        // too sparse for a dependable section LRA. Keep this explicitly null.
+        lra: sectionDuration >= 10 ? sectionLoudness.lra : null,
+        dynamicRangeDb: sectionLoudness.dynamicRangeDb,
+        momentaryMaxLufs: sectionLoudness.momentaryMaxLufs,
+        shortTermMaxLufs: sectionLoudness.shortTermMaxLufs,
         widthDb: sectionStereo.widthDb,
         correlation: sectionStereo.correlation,
+        monoCompatibility: sectionStereo.monoCompatibility,
+        lowSideRatioDb: sectionStereo.lowSideRatioDb,
+        midEnergyDb: sectionStereo.midEnergyDb,
+        sideEnergyDb: sectionStereo.sideEnergyDb,
+        balanceDb: sectionStereo.balanceDb,
         bands: sectionSpectrum.bands,
-        punchScore: 0,
+        centroidHz: sectionSpectrum.centroidHz,
+        rolloffHz: sectionSpectrum.rolloffHz,
+        tiltDbPerOct: sectionSpectrum.tiltDbPerOct,
+        flatness: sectionSpectrum.flatness,
+        lowEnergyDb: sectionSpectrum.lowEnergyDb,
+        highEnergyDb: sectionSpectrum.highEnergyDb,
+        resonances: sectionSpectrum.resonances,
+        maxBuildupDb: sectionSpectrum.maxBuildupDb,
+        buildupBands: sectionSpectrum.buildupBands,
+        tempoBpm: sectionTempo,
+        beatConfidence: sectionTempo !== null && sectionRhythm ? sectionRhythm.beatConfidence : null,
+        attackDensity: sectionRhythm?.onsetDensity ?? null,
+        attackSharpness: sectionRhythm?.attackSharpness ?? null,
+        punchScore: sectionRhythm?.punchScore ?? null,
       });
       progress('Measuring sections', 0.85 + ((index + 1) / boundaries.length) * 0.15);
     });
@@ -127,11 +206,37 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
       start: 0,
       end: duration,
       lufs: loudness.integratedLufs,
+      truePeakDb: loudness.truePeakDb,
+      samplePeakDb: loudness.samplePeakDb,
+      rmsDb: loudness.rmsDb,
       crestDb: loudness.crestDb,
+      plrDb: loudness.plrDb,
+      lra: duration >= 10 ? loudness.lra : null,
+      dynamicRangeDb: loudness.dynamicRangeDb,
+      momentaryMaxLufs: loudness.momentaryMaxLufs,
+      shortTermMaxLufs: loudness.shortTermMaxLufs,
       widthDb: stereo.widthDb,
       correlation: stereo.correlation,
+      monoCompatibility: stereo.monoCompatibility,
+      lowSideRatioDb: stereo.lowSideRatioDb,
+      midEnergyDb: stereo.midEnergyDb,
+      sideEnergyDb: stereo.sideEnergyDb,
+      balanceDb: stereo.balanceDb,
       bands: spectrum.bands,
-      punchScore: rhythm.punchScore,
+      centroidHz: spectrum.centroidHz,
+      rolloffHz: spectrum.rolloffHz,
+      tiltDbPerOct: spectrum.tiltDbPerOct,
+      flatness: spectrum.flatness,
+      lowEnergyDb: spectrum.lowEnergyDb,
+      highEnergyDb: spectrum.highEnergyDb,
+      resonances: spectrum.resonances,
+      maxBuildupDb: spectrum.maxBuildupDb,
+      buildupBands: spectrum.buildupBands,
+      tempoBpm: duration >= 8 && rhythm.tempoBpm ? rhythm.tempoBpm : null,
+      beatConfidence: duration >= 8 ? rhythm.beatConfidence : null,
+      attackDensity: duration >= 2 ? rhythm.onsetDensity : null,
+      attackSharpness: duration >= 2 ? rhythm.attackSharpness : null,
+      punchScore: duration >= 2 ? rhythm.punchScore : null,
     });
   }
 
@@ -144,6 +249,7 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
   progress('Done', 1);
   return {
     version: 1,
+    sectionMetricsVersion: 2,
     createdAt: Date.now(),
     sampleRate,
     channels: 2,
@@ -163,13 +269,6 @@ export function analyzeAudio(input: AnalysisInput, options: AnalyzeOptions = {})
     resonances: spectrum.resonances,
     warnings,
   };
-}
-
-function quickLufs(L: Float32Array, R: Float32Array, sr: number, start: number, end: number): number {
-  const s = Math.max(0, Math.floor(start * sr));
-  const e = Math.min(L.length, Math.ceil(end * sr));
-  if (e - s < sr * 0.3) return -Infinity;
-  return analyzeLoudness(L.subarray(s, e), R.subarray(s, e), sr).integratedLufs;
 }
 
 export function bandsRelativeMap(bands: BandLevel[]): Map<number, number> {

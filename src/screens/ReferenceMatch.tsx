@@ -72,8 +72,12 @@ export default function ReferenceMatch() {
   const primaryReference = references.find((reference) => reference.report) ?? references[0];
   const primaryReferenceMeta = primaryReference?.meta;
   const primaryReferencePeaks = primaryReference ? assetBuffers[primaryReference.id]?.peaks ?? null : null;
-  const readyReports = Number(Boolean(targetReport)) + Number(Boolean(referenceReport));
+  const sectionAnalysisCurrent = (report: AnalysisReport | undefined) => report?.sectionMetricsVersion === 2;
+  const readyReports = Number(sectionAnalysisCurrent(targetReport)) + Number(sectionAnalysisCurrent(referenceReport));
   const analysisReadiness = Math.round((readyReports / 2) * 100);
+  const hasStaleSectionReports =
+    Boolean(targetReport && !sectionAnalysisCurrent(targetReport)) ||
+    analysedRefs.some((reference) => !sectionAnalysisCurrent(reference.report));
 
   useEffect(() => {
     if (matchPlan) setExcluded(new Set());
@@ -86,7 +90,9 @@ export default function ReferenceMatch() {
   }
 
   const setMatch = (patch: Partial<MatchSettings>) => updateMatchSettings(patch);
-  const ready = Boolean(targetReport) && analysedRefs.length > 0;
+  const ready = sectionAnalysisCurrent(targetReport) &&
+    analysedRefs.length > 0 &&
+    analysedRefs.every((entry) => sectionAnalysisCurrent(entry.report));
 
   const referenceInputs = analysedRefs.map((entry) => ({
     assetId: entry.id,
@@ -95,7 +101,7 @@ export default function ReferenceMatch() {
     sectionIndex: project.match.referenceSectionIndices?.[entry.id],
   }));
   const resolveForComparison = (category: keyof CategorySource) =>
-    resolveReferenceMetrics(project.match.categorySource?.[category] ?? -1, referenceInputs, project.match.referenceSection).metrics;
+    resolveReferenceMetrics(project.match.categorySource?.[category] ?? -1, referenceInputs, project.match.referenceSection);
   const loudnessReference = referenceInputs.length ? resolveForComparison('loudness') : null;
   const dynamicsReference = referenceInputs.length ? resolveForComparison('dynamics') : null;
   const stereoReference = referenceInputs.length ? resolveForComparison('stereoWidth') : null;
@@ -104,18 +110,28 @@ export default function ReferenceMatch() {
     : null;
   const targetSectionMetrics = targetReport ? {
     lufs: targetComparisonSection?.lufs ?? targetReport.loudness.integratedLufs,
+    truePeakDb: targetComparisonSection?.truePeakDb ?? targetReport.loudness.truePeakDb,
     crestDb: targetComparisonSection?.crestDb ?? targetReport.loudness.crestDb,
+    lra: targetComparisonSection?.lra ?? targetReport.loudness.lra,
+    plrDb: targetComparisonSection?.plrDb ?? targetReport.loudness.plrDb,
     widthDb: targetComparisonSection?.widthDb ?? targetReport.stereo.widthDb,
     correlation: targetComparisonSection?.correlation ?? targetReport.stereo.correlation,
+    monoCompatibility: targetComparisonSection?.monoCompatibility ?? targetReport.stereo.monoCompatibility,
+    lowSideRatioDb: targetComparisonSection?.lowSideRatioDb ?? targetReport.stereo.lowSideRatioDb,
   } : null;
+  const targetLraFallback = Boolean(targetComparisonSection && !Number.isFinite(targetComparisonSection.lra));
+  const referenceLraFallback = Boolean(dynamicsReference?.metricFallbacks.includes('LRA'));
   const comparison = targetReport && targetSectionMetrics && loudnessReference && dynamicsReference && stereoReference
     ? [
-        { label: 'Integrated loudness', target: `${targetSectionMetrics.lufs.toFixed(1)} LUFS`, ref: `${loudnessReference.lufs.toFixed(1)} LUFS`, delta: loudnessReference.lufs - targetSectionMetrics.lufs, unit: 'LU' },
-        { label: 'True peak · full track', target: `${targetReport.loudness.truePeakDb.toFixed(1)} dBTP`, ref: `${loudnessReference.truePeakDb.toFixed(1)} dBTP`, delta: loudnessReference.truePeakDb - targetReport.loudness.truePeakDb, unit: 'dB' },
-        { label: 'Loudness range · full track', target: `${targetReport.loudness.lra.toFixed(1)} LU`, ref: `${dynamicsReference.lra.toFixed(1)} LU`, delta: dynamicsReference.lra - targetReport.loudness.lra, unit: 'LU' },
-        { label: 'Crest factor', target: `${targetSectionMetrics.crestDb.toFixed(1)} dB`, ref: `${dynamicsReference.crestDb.toFixed(1)} dB`, delta: dynamicsReference.crestDb - targetSectionMetrics.crestDb, unit: 'dB' },
-        { label: 'Stereo width', target: `${targetSectionMetrics.widthDb.toFixed(1)} dB`, ref: `${stereoReference.widthDb.toFixed(1)} dB`, delta: stereoReference.widthDb - targetSectionMetrics.widthDb, unit: 'dB' },
-        { label: 'Correlation', target: targetSectionMetrics.correlation.toFixed(2), ref: stereoReference.correlation.toFixed(2), delta: stereoReference.correlation - targetSectionMetrics.correlation, unit: '' },
+        { label: 'Integrated loudness', target: `${targetSectionMetrics.lufs.toFixed(1)} LUFS`, ref: `${loudnessReference.metrics.lufs.toFixed(1)} LUFS`, delta: loudnessReference.metrics.lufs - targetSectionMetrics.lufs, unit: 'LU' },
+        { label: 'True peak', target: `${targetSectionMetrics.truePeakDb.toFixed(1)} dBTP`, ref: `${loudnessReference.metrics.truePeakDb.toFixed(1)} dBTP`, delta: loudnessReference.metrics.truePeakDb - targetSectionMetrics.truePeakDb, unit: 'dB' },
+        { label: targetLraFallback || referenceLraFallback ? 'LRA · full-track fallback' : 'Loudness range', target: `${targetSectionMetrics.lra.toFixed(1)} LU`, ref: `${dynamicsReference.metrics.lra.toFixed(1)} LU`, delta: dynamicsReference.metrics.lra - targetSectionMetrics.lra, unit: 'LU' },
+        { label: 'Peak-to-loudness ratio', target: `${targetSectionMetrics.plrDb.toFixed(1)} dB`, ref: `${dynamicsReference.metrics.plrDb.toFixed(1)} dB`, delta: dynamicsReference.metrics.plrDb - targetSectionMetrics.plrDb, unit: 'dB' },
+        { label: 'Crest factor', target: `${targetSectionMetrics.crestDb.toFixed(1)} dB`, ref: `${dynamicsReference.metrics.crestDb.toFixed(1)} dB`, delta: dynamicsReference.metrics.crestDb - targetSectionMetrics.crestDb, unit: 'dB' },
+        { label: 'Stereo width', target: `${targetSectionMetrics.widthDb.toFixed(1)} dB`, ref: `${stereoReference.metrics.widthDb.toFixed(1)} dB`, delta: stereoReference.metrics.widthDb - targetSectionMetrics.widthDb, unit: 'dB' },
+        { label: 'Correlation', target: targetSectionMetrics.correlation.toFixed(2), ref: stereoReference.metrics.correlation.toFixed(2), delta: stereoReference.metrics.correlation - targetSectionMetrics.correlation, unit: '' },
+        { label: 'Mono compatibility', target: `${targetSectionMetrics.monoCompatibility.toFixed(1)}%`, ref: `${stereoReference.metrics.monoCompatibility.toFixed(1)}%`, delta: stereoReference.metrics.monoCompatibility - targetSectionMetrics.monoCompatibility, unit: '%' },
+        { label: 'Low-end side ratio', target: `${targetSectionMetrics.lowSideRatioDb.toFixed(1)} dB`, ref: `${stereoReference.metrics.lowSideDb.toFixed(1)} dB`, delta: stereoReference.metrics.lowSideDb - targetSectionMetrics.lowSideRatioDb, unit: 'dB' },
       ]
     : [];
 
@@ -136,8 +152,8 @@ export default function ReferenceMatch() {
           <Button size="md" variant="secondary" onClick={() => picker.open(AUDIO_ACCEPT, true, (files) => void importFiles(files, 'reference'))}>
             <Icon name="upload" size={14} /> Upload reference
           </Button>
-          <Button size="sm" onClick={() => void analyzeProjectAssets()} disabled={!targetId && referenceIds.length === 0}>
-            Analyse all
+          <Button size="sm" onClick={() => void analyzeProjectAssets()} disabled={(!targetId && referenceIds.length === 0) || Boolean(busy)}>
+            {hasStaleSectionReports ? 'Update analyses' : 'Analyse all'}
           </Button>
           <Button size="sm" variant="primary" onClick={() => void generateMatch()} disabled={!ready || Boolean(busy)}>
             <Icon name="sparkles" size={14} /> Generate chain
@@ -146,6 +162,20 @@ export default function ReferenceMatch() {
       </header>
 
       <TransportBar />
+
+      {hasStaleSectionReports && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-signal-amber/25 bg-signal-amber/[.06] px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-ink-100">Expanded section measurements are available</p>
+            <p className="mt-1 text-2xs leading-relaxed text-ink-400">
+              Some saved analyses predate the new section metrics. Re-analyse the target and references to unlock section true peak, PLR, stereo compatibility, low-end side energy and transient measurements.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => void analyzeProjectAssets()} disabled={Boolean(busy)}>
+            Re-analyse audio
+          </Button>
+        </div>
+      )}
 
       <section className="grid items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_112px_minmax(0,1fr)]">
         <Panel dataTour="reference-target" title="Your Track" subtitle="The mix you want to improve." right={targetMeta && <Badge tone={targetReport ? 'accent' : 'warn'}>{targetReport ? 'Analysed' : 'Analysis pending'}</Badge>}>
@@ -197,7 +227,7 @@ export default function ReferenceMatch() {
             <p className="mt-1 text-[9px] text-ink-500">{readyReports}/2 reports</p>
           </div>
           <span className={`mt-1 rounded-full border px-2 py-0.5 text-[9px] ${ready ? 'border-signal-green/25 bg-signal-green/10 text-signal-green' : 'border-white/[.08] text-ink-500'}`}>
-            {ready ? 'Ready to compare' : 'Awaiting analysis'}
+            {ready ? 'Ready to compare' : hasStaleSectionReports ? 'Analysis update needed' : 'Awaiting analysis'}
           </span>
         </div>
 
@@ -260,7 +290,7 @@ export default function ReferenceMatch() {
       </section>
 
       {comparison.length > 0 && (
-        <Panel title="Measured differences" subtitle="Selected reference set minus target. Segment values are used where available; true peak and LRA remain full-track." right={<HelpTip title="How to read these measurements">The values are measured from your uploaded audio. A positive difference means the reference has a higher measured value than your target. A difference is not automatically a problem: use your ears and the arrangement as context.</HelpTip>}>
+        <Panel title="Measured differences" subtitle="Selected reference set minus target. Values are section-based unless an indicator is too short to measure reliably." right={<HelpTip title="How to read these measurements">The values are measured from your uploaded audio. A positive difference means the reference has a higher measured value than your target. A difference is not automatically a problem: use your ears and the arrangement as context.</HelpTip>}>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {comparison.map((row) => (
               <div key={row.label} className="rounded-xl border border-white/[.07] bg-[#0D0D1B]/70 p-3">
@@ -444,15 +474,17 @@ export default function ReferenceMatch() {
                 </div>
               </div>
               <div className="mt-2 space-y-1">
-                {(targetReport!.spectrum.resonances.length > 0 || targetReport!.spectrum.buildupBands.length > 0) && (
+                {(targetComparisonSection?.resonances ?? targetReport!.spectrum.resonances).length > 0 && (
                   <p className="text-2xs leading-relaxed text-ink-400">
-                    Target resonances:{' '}
-                    {targetReport!.spectrum.resonances.map((r) => `${r.frequency} Hz (+${r.excessDb.toFixed(1)} dB)`).join(', ') || 'none detected above 4 dB'}.
+                    Selected-segment resonances:{' '}
+                    {(targetComparisonSection?.resonances ?? targetReport!.spectrum.resonances).map((r) => `${r.frequency} Hz (+${r.excessDb.toFixed(1)} dB)`).join(', ')}.
                   </p>
                 )}
                 <p className="text-2xs leading-relaxed text-ink-500">
-                  Estimated tempo: {targetReport!.rhythm.tempoBpm || '—'} BPM (confidence{' '}
-                  {Math.round(targetReport!.rhythm.beatConfidence * 100)}%). Detected segments: {targetReport!.sections.map((s) => `${s.label} ${formatTime(s.start)}–${formatTime(s.end)}`).join(' · ')}.
+                  Selected-segment tempo: {targetComparisonSection?.tempoBpm ?? (targetReport!.rhythm.tempoBpm || '—')} BPM
+                  {targetComparisonSection?.beatConfidence !== null && targetComparisonSection?.beatConfidence !== undefined
+                    ? ` (confidence ${Math.round(targetComparisonSection.beatConfidence * 100)}%)`
+                    : ''}. Detected segments: {targetReport!.sections.map((s) => `${s.label} ${formatTime(s.start)}–${formatTime(s.end)}`).join(' · ')}.
                 </p>
               </div>
             </>

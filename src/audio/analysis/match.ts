@@ -150,6 +150,7 @@ interface Metrics {
   tempoBpm: number;
   bands: BandLevel[];
   sectionFallback: boolean;
+  metricFallbacks: string[];
   duration: number;
 }
 
@@ -159,6 +160,7 @@ export interface ResolvedReferenceMetrics {
   metrics: Metrics;
   assetIds: string[];
   fallbackAssetIds: string[];
+  metricFallbacks: string[];
   name: string;
   agreement: CategorySource;
   quality: number;
@@ -167,27 +169,33 @@ export interface ResolvedReferenceMetrics {
 function metricsFrom(report: AnalysisReport, section: 'full' | 'chorus' | 'verse', exactIndex?: number): Metrics {
   const sec = selectAnalysisSection(report, section, exactIndex);
   const exactRequested = Number.isInteger(exactIndex) && (exactIndex as number) >= 0;
+  const metricFallbacks: string[] = [];
+  const sectionValue = (value: number | null | undefined, fallback: number, label: string): number => {
+    if (!sec) return fallback;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    metricFallbacks.push(label);
+    return fallback;
+  };
   return {
     lufs: sec ? sec.lufs : report.loudness.integratedLufs,
-    // The current section analysis does not calculate Annex 2 true peak, LRA,
-    // PLR, mono compatibility or low-band side ratio. Those stay full-track.
-    truePeakDb: report.loudness.truePeakDb,
+    truePeakDb: sectionValue(sec?.truePeakDb, report.loudness.truePeakDb, 'true peak'),
     crestDb: sec ? sec.crestDb : report.loudness.crestDb,
-    lra: report.loudness.lra,
-    plrDb: report.loudness.plrDb,
+    lra: sectionValue(sec?.lra, report.loudness.lra, 'LRA'),
+    plrDb: sectionValue(sec?.plrDb, report.loudness.plrDb, 'PLR'),
     widthDb: sec ? sec.widthDb : report.stereo.widthDb,
     correlation: sec ? sec.correlation : report.stereo.correlation,
-    monoCompatibility: report.stereo.monoCompatibility,
-    lowSideDb: report.stereo.lowSideRatioDb,
-    punchScore: report.rhythm.punchScore,
-    attackDensity: report.rhythm.onsetDensity,
-    flatness: report.spectrum.flatness,
-    tiltDbPerOct: report.spectrum.tiltDbPerOct,
-    highEnergyDb: report.spectrum.highEnergyDb,
-    lowEnergyDb: report.spectrum.lowEnergyDb,
-    tempoBpm: report.rhythm.tempoBpm,
+    monoCompatibility: sectionValue(sec?.monoCompatibility, report.stereo.monoCompatibility, 'mono compatibility'),
+    lowSideDb: sectionValue(sec?.lowSideRatioDb, report.stereo.lowSideRatioDb, 'low-frequency side ratio'),
+    punchScore: sectionValue(sec?.punchScore, report.rhythm.punchScore, 'punch score'),
+    attackDensity: sectionValue(sec?.attackDensity, report.rhythm.onsetDensity, 'transient density'),
+    flatness: sec ? sec.flatness : report.spectrum.flatness,
+    tiltDbPerOct: sec ? sec.tiltDbPerOct : report.spectrum.tiltDbPerOct,
+    highEnergyDb: sec ? sec.highEnergyDb : report.spectrum.highEnergyDb,
+    lowEnergyDb: sec ? sec.lowEnergyDb : report.spectrum.lowEnergyDb,
+    tempoBpm: sectionValue(sec?.tempoBpm, report.rhythm.tempoBpm, 'tempo'),
     bands: sec ? sec.bands : report.spectrum.bands,
     sectionFallback: (!sec && (exactRequested || section !== 'full')),
+    metricFallbacks,
     duration: sec ? sec.end - sec.start : report.duration,
   };
 }
@@ -248,7 +256,7 @@ export function resolveReferenceMetrics(
   weights = weights.map((weight) => weight / sum);
 
   const first = selectedMetrics[0];
-  const numericKeys: (keyof Omit<Metrics, 'bands' | 'sectionFallback' | 'duration' | 'lufs' | 'truePeakDb'>)[] = [
+  const numericKeys: (keyof Omit<Metrics, 'bands' | 'sectionFallback' | 'metricFallbacks' | 'duration' | 'lufs' | 'truePeakDb'>)[] = [
     'crestDb', 'lra', 'plrDb', 'widthDb', 'correlation', 'monoCompatibility',
     'lowSideDb', 'punchScore', 'attackDensity', 'flatness', 'tiltDbPerOct',
     'highEnergyDb', 'lowEnergyDb', 'tempoBpm',
@@ -259,6 +267,7 @@ export function resolveReferenceMetrics(
     truePeakDb: weightedDbMean(selectedMetrics.map((value) => value.truePeakDb), weights, 'amplitude'),
     bands: [],
     sectionFallback: selectedMetrics.some((value) => value.sectionFallback),
+    metricFallbacks: [...new Set(selectedMetrics.flatMap((value) => value.metricFallbacks))],
     duration: weightedMean(selectedMetrics.map((value) => value.duration), weights),
   };
   for (const key of numericKeys) {
@@ -318,6 +327,7 @@ export function resolveReferenceMetrics(
     metrics,
     assetIds: selected.map((entry) => entry.assetId),
     fallbackAssetIds,
+    metricFallbacks: metrics.metricFallbacks,
     name: blended ? 'weighted reference blend' : (selected.length === 1 ? 'selected reference' : 'reference'),
     agreement,
     quality: Number.isFinite(quality) ? quality : 0.55,
@@ -483,6 +493,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
   const diagnostics: MetricDiff[] = [];
 
   const sectionFallbackWarnings = new Set<string>();
+  const measurementFallbackWarnings = new Set<string>();
   if (tgt.sectionFallback) {
     const targetChoice = settings.targetSectionIndex !== undefined
       ? `selected target segment #${settings.targetSectionIndex + 1}`
@@ -490,6 +501,12 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
     warnings.push({
       kind: 'limitation',
       message: `The ${targetChoice} was not found. Full-track measurements are being used for the target.`,
+    });
+  }
+  if (tgt.metricFallbacks.length) {
+    warnings.push({
+      kind: 'limitation',
+      message: `The selected target segment cannot provide reliable ${tgt.metricFallbacks.join(', ')} measurements. Those values use the full-track analysis.`,
     });
   }
   const refFor = (category: keyof CategorySource) => {
@@ -506,6 +523,14 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
         message: exactSelection
           ? `A selected reference segment was not found in ${newlyMissingSections.length} selected reference(s). Full-track measurements are used for those files.`
           : `The requested reference section (“${settings.referenceSection}”) was not detected in ${newlyMissingSections.length} selected reference(s). Full-track measurements are used for those files.`,
+      });
+    }
+    const metricFallbackKey = resolved.metricFallbacks.join('|');
+    if (metricFallbackKey && !measurementFallbackWarnings.has(metricFallbackKey)) {
+      measurementFallbackWarnings.add(metricFallbackKey);
+      warnings.push({
+        kind: 'limitation',
+        message: `One or more selected reference segments cannot provide reliable ${resolved.metricFallbacks.join(', ')} measurements. Those values use full-track analysis.`,
       });
     }
     return resolved;

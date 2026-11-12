@@ -84,9 +84,20 @@ Reference weights are relative influence values. Zero excludes a reference from 
 
 The Reference Match controls can use the automatic full-track / chorus / verse choice or select an exact detected segment occurrence independently for the target and each reference file. An exact occurrence overrides the automatic label choice; automatic chorus/verse mode chooses the longest detected occurrence with that label. If a stored exact segment index is unavailable after re-analysis, the matcher falls back to full-track measurements and adds a visible limitation warning. It does not silently label full-track measurements as section-specific.
 
-Segment-level measurements currently include integrated LUFS, crest factor, stereo width, stereo correlation and spectral bands. The current analysis report does not calculate per-segment Annex 2 true peak, LRA, PLR, mono compatibility, low-band side ratio or a reliable per-segment transient score; those values remain full-track measurements. The tonal comparison chart follows the same exact target and per-reference segment choices as the matcher. The before/after A/B audition still plays the complete project timeline: section choices affect the analysis and generated processing proposals, not playback cropping or export range.
+Segment-level measurements currently include integrated LUFS, crest factor, stereo width, stereo correlation and spectral bands. Per-segment Annex 2 true peak, PLR, mono compatibility, low-band side ratio, spectral descriptors and onset/punch descriptors are now measured from the selected segment. LRA is used segment-wise only when the segment lasts at least 10 seconds; otherwise it remains a clearly identified full-track fallback. Tempo is segment-wise only when a section is at least 8 seconds and the detector returns a usable estimate. The tonal comparison chart and measured-difference panel follow the same exact target and per-reference segment choices as the matcher. The before/after A/B audition still plays the complete project timeline: section choices affect the analysis and generated processing proposals, not playback cropping or export range.
 
 Proposal confidence is a heuristic guidance score, not a calibrated probability; it is reduced when references disagree on the relevant characteristic or when source analysis quality is weak. The final output must still be rendered, listened to and measured.
+
+### Section analysis payload
+
+Each detected section stores measurements calculated from that section's exact PCM range using the same DSP implementations as the full-track analysis:
+- BS.1770-5 integrated loudness, Annex 2 true peak, sample peak, RMS, crest factor and PLR.
+- EBU-style LRA when the selected section is at least 10 seconds long. Shorter segments expose LRA as unavailable; Reference Match visibly uses the full-track LRA instead.
+- Stereo width, correlation, mono compatibility, channel balance, mid/side energy and low-frequency side ratio.
+- Spectral bands, centroid, rolloff, tilt, flatness, low/high energy, resonances and buildup.
+- Onset density, attack sharpness and punch score from the rhythm feature engine. A section tempo is exposed only when the segment is at least 8 seconds and the detector returns a usable estimate; shorter or inconclusive excerpts fall back to the full-track tempo and identify this limitation.
+
+Section rhythm analysis skips nested structural segmentation; the parent track's section boundaries remain authoritative. Section loudness is measured once and reused for both automatic section labelling and the stored report. Existing saved analyses without sectionMetricsVersion 2 are considered stale for complete section matching. The Analyse all / Update analyses action re-runs those reports; chain generation is blocked until the target and selected references have current section metrics.
 
 ## Reference Match before/after audition
 

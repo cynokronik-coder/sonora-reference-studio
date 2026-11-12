@@ -736,7 +736,10 @@ export const useApp = create<AppState>((set, get) => ({
   analyzeProjectAssets: async () => {
     const ids = allAssetIds(get().project ?? emptyProject());
     for (const id of ids) {
-      if (!get().analyses[id]) await get().analyzeAsset(id);
+      const report = get().analyses[id];
+      // Re-run older cached reports once so the new per-section metric payload
+      // is available without discarding the user's projects or imported PCM.
+      if (!report || report.sectionMetricsVersion !== 2) await get().analyzeAsset(id);
     }
   },
 
@@ -1091,6 +1094,17 @@ export const useApp = create<AppState>((set, get) => ({
     const targetId = project.targetAssetIds[0];
     if (!targetId || !analyses[targetId]) {
       set({ toast: 'Analyse a target song first.' });
+      return;
+    }
+    if (analyses[targetId].sectionMetricsVersion !== 2) {
+      set({ toast: 'Update the analyses to enable the complete section-level measurements.' });
+      return;
+    }
+    const outdatedReferences = project.referenceAssetIds.filter(
+      (id) => analyses[id] && analyses[id].sectionMetricsVersion !== 2,
+    );
+    if (outdatedReferences.length) {
+      set({ toast: 'Update all reference analyses before generating a section-accurate match.' });
       return;
     }
     const references = project.referenceAssetIds

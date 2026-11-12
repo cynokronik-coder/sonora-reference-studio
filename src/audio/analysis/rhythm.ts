@@ -15,6 +15,11 @@ export interface RhythmReport {
   sections: SectionBoundary[];
 }
 
+export interface AnalyzeRhythmOptions {
+  /** Skip nested structural segmentation when measuring an already-selected section. */
+  includeSections?: boolean;
+}
+
 interface FeatureFrame {
   time: number;
   energy: number;
@@ -29,11 +34,23 @@ interface FeatureFrame {
  * novelty curve over 0.5 s feature frames (band energy + loudness) and are
  * deliberately labelled as estimates in the UI.
  */
-export function analyzeRhythm(L: Float32Array, R: Float32Array, sampleRate: number): RhythmReport {
+export function analyzeRhythm(
+  L: Float32Array,
+  R: Float32Array,
+  sampleRate: number,
+  options: AnalyzeRhythmOptions = {},
+): RhythmReport {
   const n = Math.min(L.length, R.length);
   const duration = n / sampleRate;
   if (n < sampleRate) {
-    return { tempoBpm: 0, beatConfidence: 0, onsetDensity: 0, punchScore: 0, attackSharpness: 0, sections: [{ start: 0, end: duration }] };
+    return {
+      tempoBpm: 0,
+      beatConfidence: 0,
+      onsetDensity: 0,
+      punchScore: 0,
+      attackSharpness: 0,
+      sections: options.includeSections === false ? [] : [{ start: 0, end: duration }],
+    };
   }
 
   const fftSize = 1024;
@@ -90,7 +107,7 @@ export function analyzeRhythm(L: Float32Array, R: Float32Array, sampleRate: numb
     1,
   );
 
-  const segments = estimateSections(L, R, sampleRate, duration);
+  const segments = options.includeSections === false ? [] : estimateSections(L, R, sampleRate, duration);
   return {
     tempoBpm,
     beatConfidence: confidence,
