@@ -73,4 +73,48 @@ describe('ProjectRenderer external sidechain routing', () => {
     expect(linkedReduction).toBeGreaterThan(3);
     expect(internalReduction).toBeLessThan(1);
   });
+  it('routes a raw track key into the master Dynamic EQ chain', () => {
+    const sampleRate = 48000;
+    const blockSize = 128;
+    const assetLength = 32768;
+    const targetAsset = sineAsset('master-target', 0.02, sampleRate, assetLength);
+    const keyAsset = sineAsset('master-key', 0.8, sampleRate, assetLength);
+    const project = createProject('Master Dynamic EQ sidechain test', sampleRate);
+    const target = createTrack('audio', 'Target', 0);
+    const key = createTrack('audio', 'Key', 1);
+
+    target.clips.push(createClip(targetAsset.id, assetLength / sampleRate));
+    key.volumeDb = -120;
+    key.clips.push(createClip(keyAsset.id, assetLength / sampleRate));
+
+    const dynamicEq = createProcessorNode('dynamicEq', {
+      b0_on: 1,
+      b0_freq: 1000,
+      b0_q: 1.4,
+      b0_threshold: -24,
+      b0_range: 12,
+      b0_attack: 0.1,
+      b0_release: 10,
+      b0_ratio: 4,
+      b0_knee: 0,
+      b0_link: 100,
+      b0_mode: 0,
+      b0_rmsWindow: 10,
+    });
+    dynamicEq.sidechainFrom = key.id;
+    project.tracks = [target, key];
+    project.master.processors.push(dynamicEq);
+
+    const renderer = new ProjectRenderer();
+    renderer.configure(project, [targetAsset, keyAsset], sampleRate, blockSize);
+    const outL = new Float32Array(blockSize);
+    const outR = new Float32Array(blockSize);
+    for (let block = 0; block < 64; block++) {
+      renderer.renderBlock(block * blockSize, blockSize, outL, outR);
+    }
+
+    const reduction = renderer.meterSnapshot().master?.[dynamicEq.id]?.reduction ?? 0;
+    expect(reduction).toBeGreaterThan(4);
+  });
+
 });

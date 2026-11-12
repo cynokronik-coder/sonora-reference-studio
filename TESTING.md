@@ -13,7 +13,9 @@ The suite uses synthetic signals only — no fixtures with unknown provenance.
 | FFT | forward/inverse round-trip error < 1e-8 |
 | Biquad | +6 dB bell has ~6 dB gain at centre and near unity an octave away; low/high shelf slope clamped to RBJ monotonic range and tested for finite coefficients |
 | Parametric EQ | bell gain and high-pass DC removal; RBJ shelf coefficients stay finite across ±18 dB, multiple sample rates and hostile Q inputs; Mid/Side-only routing isolation; separate M/S response curves; linear-phase 513-tap impulse peak aligns to reported 256-sample latency; factory preset ranges |
+| Dynamic EQ | band-filtered peak/RMS detection; active-band response vs off-band rejection; smooth knee/ratio/range/attack/release; stereo link at 0% and 100%; external-key frequency selectivity and clearing; per-band meters and preset parameter ranges |
 | Compressor | a signal over threshold is reduced and reports real gain reduction |
+| Dynamic EQ | band-specific signed detector filtering, peak/RMS mode, independent stereo detection, full-link common attenuation, ratio/knee/range envelope, frequency-matched external key, internal fallback, per-band meters and valid presets |
 | Limiter | output stays under a -1 dBTP ceiling with lookahead, and GR is reported |
 | Saturation | output remains finite and differs from input (harmonics added) |
 | Multiband | neutral three-band response stays within ±0.15 dB from 50 Hz–12 kHz at 44.1/48/96 kHz; band solo/bypass, frequency-matched external sidechain response, detector reset and preset parameter ranges |
@@ -25,6 +27,7 @@ The suite uses synthetic signals only — no fixtures with unknown provenance.
 | AIFF | 24-bit header parses back with the correct 80-bit sample rate |
 | Presets | every built-in preset references a registered processor and valid parameter keys/ranges |
 | Matching | perceptual intensity curve and category disable behaviour |
+| Renderer sidechains | raw track key reaches track, bus and master dynamics chains; clearing the key returns to internal detector operation |
 | Automation | linear and exponential interpolation |
 
 Run `npm run build` for a typecheck of the entire app plus production bundling. The build emits separate chunks for the

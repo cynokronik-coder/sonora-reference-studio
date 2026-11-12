@@ -20,8 +20,11 @@ loudness correction stage in generated chains.
 - Factory starting points include Low-end cleanup, Vocal presence, High-frequency air, Warm tonal balance, Low-mid clarity and Mid-side openness. All bands and routing values remain editable.
 
 ### Dynamic EQ
-Four bell bands whose gain is driven by a bandpass detector. Threshold, maximum cut, attack and release per band. Gain
-reduction is reported for the rack meter and is genuinely level-dependent.
+- Four independently tunable bell bands. Each band has its own signed band-pass detector filters for left and right, and the detector is taken from the programme signal before any of the four dynamic bands are applied.
+- Peak or RMS detection can be selected per band. RMS uses an adjustable averaging window. Threshold, ratio, soft knee, maximum cut, attack and release determine the amount and timing of downward dynamic gain.
+- Stereo link runs from 0% dual mono (independent left/right envelopes) to 100% common gain reduction based on the stronger detector, with intermediate values available.
+- Optional external sidechain keys are filtered at each band's own centre frequency before detection. This allows an external track to trigger the dynamic EQ without changing the source signal being equalized.
+- Per-band gain-reduction meters show the actual detector-driven attenuation. Factory starting points: Vocal harshness, Low-frequency control, Resonance control, Smooth high frequencies, and Dynamic mix density. All values remain editable.
 
 ### Resonance Suppressor
 Three high-Q dynamic notches (Q 1–30) with sensitivity and maximum cut. Frequencies can be set from the analysis engine's
