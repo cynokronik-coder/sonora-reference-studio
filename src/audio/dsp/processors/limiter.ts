@@ -1,4 +1,4 @@
-import { TruePeakMeter } from '../oversample';
+import { TruePeakMeter, Oversampler } from '../oversample';
 import type { AudioProcessor, ParamValues, ProcessorDefinition, ProcessorMeter } from '../types';
 import { clamp, dbToGain, gainToDb } from '../util';
 
@@ -179,75 +179,272 @@ export const limiterDefinition: ProcessorDefinition = {
 
 export const CLIPPER_MODES = ['Soft', 'Hard', 'Tanh'] as const;
 
-/** Clipper: deliberate waveform shaping before the limiter, with oversampling. */
+/**
+ * Oversampled peak clipper with independent stereo processing and a matched
+ * IIR dry reference for parallel blending. The soft curve is an odd cubic
+ * that has unity slope at zero, reaches the ceiling and has zero slope at the
+ * transition. The hard mode clamps exactly; tanh approaches the ceiling
+ * asymptotically. Output trim is post clip and can therefore raise the output
+ * above the internal clipping ceiling.
+ */
 export class Clipper implements AudioProcessor {
   readonly type = 'clipper';
   readonly latency = 0;
   private sr = 48000;
+  private maxBlock = 512;
   private values: ParamValues = {};
+  private osFactor: 1 | 2 | 4 = 1;
+  private osPreparedBlock = 0;
+  private osPreparedSampleRate = 0;
+  private os: Oversampler | null = null;
+  private dryOs: Oversampler | null = null;
+  private dryL = new Float32Array(512);
+  private dryR = new Float32Array(512);
+  private wetL = new Float32Array(512);
+  private wetR = new Float32Array(512);
+  private alignedDryL = new Float32Array(512);
+  private alignedDryR = new Float32Array(512);
+  private drive = 1;
+  private driveTarget = 1;
+  private driveStep = 0;
+  private ceiling = dbToGain(-0.3);
+  private ceilingTarget = dbToGain(-0.3);
+  private ceilingStep = 0;
+  private nonlinearRemaining = 0;
+  private modeFrom = 0;
+  private modeTo = 0;
+  private modeBlend = 1;
+  private modeStep = 0;
+  private modeRemaining = 0;
+  private mix = 1;
+  private mixTarget = 1;
+  private mixStep = 0;
+  private mixRemaining = 0;
+  private output = 1;
+  private outputTarget = 1;
+  private outputStep = 0;
+  private outputRemaining = 0;
   private meterReduction = 0;
-  private peak = 0;
+  private reductionL = 0;
+  private reductionR = 0;
+  private peakL = 0;
+  private peakR = 0;
 
-  prepare(sampleRate: number): void {
+  prepare(sampleRate: number, maxBlock: number): void {
     this.sr = sampleRate;
+    this.maxBlock = Math.max(1, maxBlock);
+    this.dryL = new Float32Array(this.maxBlock);
+    this.dryR = new Float32Array(this.maxBlock);
+    this.wetL = new Float32Array(this.maxBlock);
+    this.wetR = new Float32Array(this.maxBlock);
+    this.alignedDryL = new Float32Array(this.maxBlock);
+    this.alignedDryR = new Float32Array(this.maxBlock);
+    this.buildOversampler();
+    this.reset();
+  }
+
+  private oversamplingChoice(): 1 | 2 | 4 {
+    const choice = clamp(Math.round(this.values.oversample ?? 2), 0, 2);
+    return choice === 0 ? 1 : choice === 1 ? 2 : 4;
+  }
+
+  private buildOversampler(): void {
+    const chosen = this.oversamplingChoice();
+    if (chosen === this.osFactor && this.os
+      && this.osPreparedBlock === this.maxBlock && this.osPreparedSampleRate === this.sr) return;
+    this.osFactor = chosen;
+    this.osPreparedBlock = this.maxBlock;
+    this.osPreparedSampleRate = this.sr;
+    this.os = new Oversampler(chosen, 2, this.maxBlock);
+    this.dryOs = chosen > 1 ? new Oversampler(chosen, 2, this.maxBlock) : null;
+    this.os.prepare(this.sr);
+    this.dryOs?.prepare(this.sr);
   }
 
   setValues(values: ParamValues): void {
     this.values = values;
+    const nextDrive = dbToGain(clamp(values.drive ?? 3, 0, 18));
+    const nextCeiling = dbToGain(clamp(values.ceiling ?? -0.3, -12, 0));
+    if (nextDrive !== this.driveTarget || nextCeiling !== this.ceilingTarget) {
+      this.driveTarget = nextDrive;
+      this.ceilingTarget = nextCeiling;
+      this.nonlinearRemaining = Math.max(1, Math.round(this.sr * 0.02 * this.osFactor));
+      this.driveStep = (nextDrive - this.drive) / this.nonlinearRemaining;
+      this.ceilingStep = (nextCeiling - this.ceiling) / this.nonlinearRemaining;
+    }
+
+    const nextMode = clamp(Math.round(values.mode ?? 0), 0, CLIPPER_MODES.length - 1);
+    if (nextMode !== this.modeTo) {
+      this.modeFrom = this.modeTo;
+      this.modeTo = nextMode;
+      this.modeBlend = 0;
+      this.modeRemaining = Math.max(1, Math.round(this.sr * 0.01 * this.osFactor));
+      this.modeStep = 1 / this.modeRemaining;
+    }
+
+    const nextMix = clamp((values.mix ?? 100) / 100, 0, 1);
+    if (nextMix !== this.mixTarget) {
+      this.mixTarget = nextMix;
+      this.mixRemaining = Math.max(1, Math.round(this.sr * 0.02));
+      this.mixStep = (nextMix - this.mix) / this.mixRemaining;
+    }
+
+    const nextOutput = dbToGain(clamp(values.output ?? 0, -12, 12));
+    if (nextOutput !== this.outputTarget) {
+      this.outputTarget = nextOutput;
+      this.outputRemaining = Math.max(1, Math.round(this.sr * 0.02));
+      this.outputStep = (nextOutput - this.output) / this.outputRemaining;
+    }
+
+    this.buildOversampler();
+  }
+
+  private advanceControls(): void {
+    if (this.nonlinearRemaining > 0) {
+      this.drive += this.driveStep;
+      this.ceiling += this.ceilingStep;
+      this.nonlinearRemaining--;
+      if (this.nonlinearRemaining === 0) {
+        this.drive = this.driveTarget;
+        this.ceiling = this.ceilingTarget;
+      }
+    }
+    if (this.modeRemaining > 0) {
+      this.modeBlend = Math.min(1, this.modeBlend + this.modeStep);
+      this.modeRemaining--;
+      if (this.modeRemaining === 0) this.modeBlend = 1;
+    }
+  }
+
+  private shape(sample: number, mode: number, ceiling: number): number {
+    const normalized = sample / Math.max(ceiling, 1e-8);
+    switch (mode) {
+      case 1:
+        return clamp(normalized, -1, 1) * ceiling;
+      case 2:
+        return Math.tanh(normalized) * ceiling;
+      default: {
+        const magnitude = Math.min(1, Math.abs(normalized));
+        const soft = magnitude + magnitude * magnitude - magnitude * magnitude * magnitude;
+        return Math.sign(normalized) * soft * ceiling;
+      }
+    }
+  }
+
+  private shapePair(L: Float32Array, R: Float32Array, count: number): void {
+    for (let i = 0; i < count; i++) {
+      this.advanceControls();
+      const inputL = L[i] * this.drive;
+      const inputR = R[i] * this.drive;
+      const oldL = this.shape(inputL, this.modeFrom, this.ceiling);
+      const oldR = this.shape(inputR, this.modeFrom, this.ceiling);
+      const newL = this.shape(inputL, this.modeTo, this.ceiling);
+      const newR = this.shape(inputR, this.modeTo, this.ceiling);
+      L[i] = oldL + (newL - oldL) * this.modeBlend;
+      R[i] = oldR + (newR - oldR) * this.modeBlend;
+    }
   }
 
   process(L: Float32Array, R: Float32Array, n: number): void {
-    const drive = dbToGain(this.values.drive ?? 3);
-    const ceilingDb = clamp(this.values.ceiling ?? -0.3, -12, 0);
-    const ceiling = dbToGain(ceilingDb);
-    const mode = Math.round(this.values.mode ?? 0);
-    const mix = clamp((this.values.mix ?? 100) / 100, 0, 1);
-    const out = dbToGain(this.values.output ?? 0);
-    let reduction = 0;
-    let peak = 0;
+    if (n > this.maxBlock) {
+      throw new RangeError(`Clipper block size ${n} exceeds prepared capacity ${this.maxBlock}`);
+    }
+    this.dryL.set(L.subarray(0, n));
+    this.dryR.set(R.subarray(0, n));
 
+    if (this.osFactor > 1 && this.os && this.dryOs) {
+      const wetUpL = this.os.upsample(this.dryL, n, 0);
+      const wetUpR = this.os.upsample(this.dryR, n, 1);
+      this.shapePair(wetUpL, wetUpR, n * this.osFactor);
+      this.os.downsample(wetUpL, n, this.wetL, 0);
+      this.os.downsample(wetUpR, n, this.wetR, 1);
+
+      // Keep the parallel reference at the exact same IIR phase/filter history.
+      const dryUpL = this.dryOs.upsample(this.dryL, n, 0);
+      const dryUpR = this.dryOs.upsample(this.dryR, n, 1);
+      this.dryOs.downsample(dryUpL, n, this.alignedDryL, 0);
+      this.dryOs.downsample(dryUpR, n, this.alignedDryR, 1);
+    } else {
+      this.wetL.set(this.dryL.subarray(0, n));
+      this.wetR.set(this.dryR.subarray(0, n));
+      this.shapePair(this.wetL, this.wetR, n);
+      this.alignedDryL.set(this.dryL.subarray(0, n));
+      this.alignedDryR.set(this.dryR.subarray(0, n));
+    }
+
+    let maxReductionL = 0;
+    let maxReductionR = 0;
+    let peakL = 0;
+    let peakR = 0;
     for (let i = 0; i < n; i++) {
-      const dl = L[i] * drive;
-      const dr = R[i] * drive;
-      let cl = dl;
-      let cr = dr;
-      if (mode === 1) {
-        cl = clamp(dl, -ceiling, ceiling);
-        cr = clamp(dr, -ceiling, ceiling);
-      } else if (mode === 2) {
-        cl = Math.tanh(dl / ceiling) * ceiling;
-        cr = Math.tanh(dr / ceiling) * ceiling;
-      } else {
-        // Soft cubic knee with a hard stop at the ceiling.
-        const shape = (x: number) => {
-          const t = x / ceiling;
-          const y = Math.abs(t) < 1 ? t - (t * t * t) / 3 : (2 / 3) * Math.sign(t);
-          return y * ceiling;
-        };
-        cl = clamp(shape(dl), -ceiling, ceiling);
-        cr = clamp(shape(dr), -ceiling, ceiling);
+      if (this.mixRemaining > 0) {
+        this.mix += this.mixStep;
+        this.mixRemaining--;
+        if (this.mixRemaining === 0) this.mix = this.mixTarget;
       }
-      const outL = (L[i] * (1 - mix) + cl * mix) * out;
-      const outR = (R[i] * (1 - mix) + cr * mix) * out;
-      if (Math.abs(dl) + Math.abs(dr) > 1e-9) {
-        const diff = Math.max(Math.abs(dl - cl), Math.abs(dr - cr));
-        if (diff > 1e-9) reduction = Math.max(reduction, 20 * Math.log10((Math.abs(dl) + 1e-9) / (Math.abs(cl) + 1e-9)));
+      if (this.outputRemaining > 0) {
+        this.output += this.outputStep;
+        this.outputRemaining--;
+        if (this.outputRemaining === 0) this.output = this.outputTarget;
       }
+
+      const dryL = this.mix <= 0 ? this.dryL[i] : this.osFactor > 1 ? this.alignedDryL[i] : this.dryL[i];
+      const dryR = this.mix <= 0 ? this.dryR[i] : this.osFactor > 1 ? this.alignedDryR[i] : this.dryR[i];
+      const wetL = this.wetL[i];
+      const wetR = this.wetR[i];
+      const outL = (dryL * (1 - this.mix) + wetL * this.mix) * this.output;
+      const outR = (dryR * (1 - this.mix) + wetR * this.mix) * this.output;
+
+      const referenceL = this.osFactor > 1 ? this.alignedDryL[i] : this.dryL[i];
+      const referenceR = this.osFactor > 1 ? this.alignedDryR[i] : this.dryR[i];
+      const reductionL = Math.abs(referenceL) > 1e-9 && Math.abs(wetL) > 1e-9
+        ? Math.max(0, 20 * Math.log10(Math.abs(referenceL * this.driveTarget) / Math.abs(wetL)))
+        : 0;
+      const reductionR = Math.abs(referenceR) > 1e-9 && Math.abs(wetR) > 1e-9
+        ? Math.max(0, 20 * Math.log10(Math.abs(referenceR * this.driveTarget) / Math.abs(wetR)))
+        : 0;
+      maxReductionL = Math.max(maxReductionL, reductionL);
+      maxReductionR = Math.max(maxReductionR, reductionR);
+      peakL = Math.max(peakL, Math.abs(outL));
+      peakR = Math.max(peakR, Math.abs(outR));
       L[i] = outL;
       R[i] = outR;
-      peak = Math.max(peak, Math.abs(outL), Math.abs(outR));
     }
-    this.meterReduction = reduction;
-    this.peak = peak;
+
+    this.reductionL = maxReductionL;
+    this.reductionR = maxReductionR;
+    this.meterReduction = Math.max(maxReductionL, maxReductionR);
+    this.peakL = Math.max(peakL, this.peakL * 0.97);
+    this.peakR = Math.max(peakR, this.peakR * 0.97);
   }
 
   reset(): void {
+    this.os?.reset();
+    this.dryOs?.reset();
+    this.drive = this.driveTarget;
+    this.ceiling = this.ceilingTarget;
+    this.nonlinearRemaining = 0;
+    this.modeFrom = this.modeTo;
+    this.modeBlend = 1;
+    this.modeRemaining = 0;
+    this.mix = this.mixTarget;
+    this.mixRemaining = 0;
+    this.output = this.outputTarget;
+    this.outputRemaining = 0;
     this.meterReduction = 0;
-    this.peak = 0;
+    this.reductionL = 0;
+    this.reductionR = 0;
+    this.peakL = 0;
+    this.peakR = 0;
   }
 
   meter(): ProcessorMeter {
-    return { reduction: this.meterReduction, peakL: this.peak, peakR: this.peak };
+    return {
+      reduction: this.meterReduction,
+      peakL: this.peakL,
+      peakR: this.peakR,
+      bands: [-this.reductionL, -this.reductionR],
+    };
   }
 }
 
@@ -256,14 +453,47 @@ export const clipperDefinition: ProcessorDefinition = {
   name: 'Clipper',
   shortName: 'CLIP',
   category: 'mastering',
-  description: 'Soft, hard or tanh clipping with ceiling and dry/wet. Placed before the limiter to shave peaks musically.',
-  purpose: 'Recovers loudness from isolated peaks with less pumping than a limiter alone, at the cost of added harmonics.',
+  description: 'Soft, hard or tanh clip curves with adjustable internal ceiling, stereo metering and 1x/2x/4x oversampling.',
+  purpose: 'Shaves transient peaks and adds harmonics before the limiter. Output trim is post clip and can raise the final level above the internal clipping ceiling.',
   params: [
     { key: 'mode', label: 'Mode', kind: 'enum', options: [...CLIPPER_MODES], default: 0 },
     { key: 'drive', label: 'Drive', kind: 'float', min: 0, max: 18, step: 0.1, default: 3, unit: 'dB' },
-    { key: 'ceiling', label: 'Ceiling', kind: 'float', min: -12, max: 0, step: 0.1, default: -0.3, unit: 'dB' },
+    { key: 'ceiling', label: 'Clip ceiling', kind: 'float', min: -12, max: 0, step: 0.1, default: -0.3, unit: 'dBFS' },
     { key: 'mix', label: 'Dry/wet', kind: 'float', min: 0, max: 100, step: 1, default: 100, unit: '%' },
     { key: 'output', label: 'Output', kind: 'float', min: -12, max: 12, step: 0.1, default: 0, unit: 'dB' },
+    { key: 'oversample', label: 'Oversampling', kind: 'enum', options: ['Off', '2x', '4x'], default: 2, advanced: true },
   ],
   create: () => new Clipper(),
 };
+
+export interface ClipperPreset {
+  id: string;
+  name: string;
+  description: string;
+  values: ParamValues;
+}
+
+function clipperPreset(id: string, name: string, description: string, overrides: ParamValues): ClipperPreset {
+  const values: ParamValues = {};
+  for (const param of clipperDefinition.params) values[param.key] = param.default;
+  return { id, name, description, values: { ...values, ...overrides } };
+}
+
+/** Editable peak-shaping starting points; always level-match against bypass. */
+export const CLIPPER_PRESETS: ClipperPreset[] = [
+  clipperPreset('soft-peak-rounding', 'Soft peak rounding', 'A restrained soft curve for shaving transient edges before final limiting.', {
+    mode: 0, drive: 4, ceiling: -0.5, mix: 65, output: -0.5, oversample: 2,
+  }),
+  clipperPreset('drum-impact', 'Drum impact', 'A firmer clipper setting for drum transients; listen for added grit and cymbal distortion.', {
+    mode: 1, drive: 7, ceiling: -1, mix: 60, output: -1.5, oversample: 2,
+  }),
+  clipperPreset('tanh-smoothness', 'Tanh smoothness', 'A rounded nonlinear curve for softer peak shaping and harmonic density.', {
+    mode: 2, drive: 6, ceiling: -1, mix: 55, output: -1.2, oversample: 2,
+  }),
+  clipperPreset('mastering-peak-shave', 'Mastering peak shave', 'A low-drive parallel starting point for catching occasional peaks before the limiter.', {
+    mode: 0, drive: 2.5, ceiling: -0.8, mix: 30, output: -0.3, oversample: 2,
+  }),
+  clipperPreset('hard-creative-clip', 'Hard creative clip', 'An assertive hard clip for deliberate sound design rather than transparent mastering.', {
+    mode: 1, drive: 12, ceiling: -1.5, mix: 100, output: -3, oversample: 2,
+  }),
+];

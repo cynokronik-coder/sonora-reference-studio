@@ -24,3 +24,9 @@ These sources are design references used to explain the engineering decisions in
 - The dry path advances through a matching oversampler when a partial wet blend is active. Exact 0% wet returns the original dry samples.
 - The test suite checks stereo-state independence, the dry path, finite output during control changes, factory parameter validity and a folded-harmonic alias component.
 - Passing a synthetic alias regression test does not replace listening tests on varied programme material or independent spectral measurements.
+
+
+## Clipping and peak shaping
+- JUCE `juce::dsp::Oversampling` reference: https://docs.juce.com/develop/classjuce_1_1dsp_1_1Oversampling.html — staged oversampling around nonlinear processors, and the IIR versus FIR phase/latency trade-off.
+- Faust 101 aliasing workshop: https://faustdoc.grame.fr/workshops/2020-04-10-faust-101/ — harmonic folding above Nyquist and why nonlinear stages benefit from oversampling.
+- Clipper regression cases compare 1x and 4x energy at a folded third-harmonic frequency. This is a targeted synthetic measurement, not a guarantee that aliasing is eliminated for all audio material.
