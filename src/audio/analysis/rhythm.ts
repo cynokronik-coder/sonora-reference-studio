@@ -9,6 +9,10 @@ export interface SectionBoundary {
 export interface RhythmReport {
   tempoBpm: number;
   beatConfidence: number;
+  /** Alternative metrical interpretations when the pulse has a strong half/double-time alias. */
+  tempoCandidatesBpm?: number[];
+  /** Robust range of local tempo estimates when the track contains measurable tempo changes. */
+  tempoRangeBpm?: { min: number; max: number } | null;
   onsetDensity: number;
   punchScore: number;
   attackSharpness: number;
@@ -49,6 +53,8 @@ export function analyzeRhythm(
     return {
       tempoBpm: 0,
       beatConfidence: 0,
+      tempoCandidatesBpm: [],
+      tempoRangeBpm: null,
       onsetDensity: 0,
       punchScore: 0,
       attackSharpness: 0,
@@ -103,11 +109,12 @@ export function analyzeRhythm(
 
   const frameRate = sampleRate / hop;
   options.onProgress?.('Estimating tempo', 0.6);
-  const { tempoBpm, confidence } = estimateTempo(
+  const tempo = estimateTempo(
     onset,
     frameRate,
     (fraction) => options.onProgress?.('Estimating tempo', 0.6 + fraction * 0.22),
   );
+  const { tempoBpm, confidence } = tempo;
   options.onProgress?.('Scoring attacks', 0.83);
   const onsetThreshold = Math.max(0.35, median(onset.filter((v) => v > 0.05)) * 1.6);
   let onsetCount = 0;
@@ -134,6 +141,8 @@ export function analyzeRhythm(
   return {
     tempoBpm,
     beatConfidence: confidence,
+    tempoCandidatesBpm: tempo.candidatesBpm,
+    tempoRangeBpm: tempo.rangeBpm,
     onsetDensity,
     punchScore: clamp(attackSharpness * 0.7 + clamp(onsetDensity / 3, 0, 1) * 0.3, 0, 1),
     attackSharpness,
@@ -141,45 +150,182 @@ export function analyzeRhythm(
   };
 }
 
-function estimateTempo(
+interface TempoWindowEstimate {
+  tempoBpm: number;
+  confidence: number;
+  candidatesBpm: number[];
+}
+
+/**
+ * Estimate a track-level pulse while retaining plausible half/double-time
+ * interpretations. For tracks long enough to support it, also measure
+ * non-overlapping local windows and report their robust tempo range.
+ */
+export function estimateTempo(
   onset: number[],
   frameRate: number,
   onProgress?: (fraction: number) => void,
-): { tempoBpm: number; confidence: number } {
+): {
+  tempoBpm: number;
+  confidence: number;
+  candidatesBpm: number[];
+  rangeBpm: { min: number; max: number } | null;
+} {
+  const global = estimateTempoWindow(onset, frameRate, (fraction) => onProgress?.(fraction * 0.55));
+  if (!global.tempoBpm || onset.length < Math.round(frameRate * 16)) {
+    onProgress?.(1);
+    return {
+      ...global,
+      rangeBpm: null,
+    };
+  }
+
+  // Eight-second windows provide enough beat cycles to distinguish common
+  // tempos while still following arrangement-level tempo changes.
+  const windowFrames = Math.max(1, Math.round(frameRate * 8));
+  const starts: number[] = [];
+  for (let start = 0; start + windowFrames <= onset.length; start += windowFrames) {
+    starts.push(start);
+  }
+  const finalStart = onset.length - windowFrames;
+  if (
+    starts.length &&
+    finalStart - starts[starts.length - 1] >= Math.round(windowFrames * 0.5)
+  ) {
+    starts.push(finalStart);
+  }
+
+  const local: TempoWindowEstimate[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const estimate = estimateTempoWindow(
+      onset.slice(starts[i], starts[i] + windowFrames),
+      frameRate,
+    );
+    // Very weak windows are often breakdowns, fades, or sparse material.
+    // Excluding them prevents silence from pulling the reported tempo down.
+    if (estimate.tempoBpm > 0 && estimate.confidence >= 0.08) local.push(estimate);
+    onProgress?.(0.55 + 0.4 * ((i + 1) / Math.max(1, starts.length)));
+  }
+
+  if (local.length < 2) {
+    onProgress?.(1);
+    return { ...global, rangeBpm: null };
+  }
+
+  const localTempos = local.map((item) => item.tempoBpm).sort((a, b) => a - b);
+  const localConfidences = local.map((item) => item.confidence);
+  const localMedian = median(localTempos);
+  const minTempo = localTempos[0];
+  const maxTempo = localTempos[localTempos.length - 1];
+  const spread = maxTempo - minTempo;
+  const rangeBpm = spread >= 5
+    ? { min: roundTempo(minTempo), max: roundTempo(maxTempo) }
+    : null;
+
+  // A median is less sensitive than a whole-song autocorrelation peak to a
+  // dominant section masking a meaningful tempo change elsewhere in the song.
+  const dispersion = median(localTempos.map((value) => Math.abs(value - localMedian)));
+  const stability = clamp(1 - dispersion / Math.max(1, localMedian * 0.12), 0, 1);
+  const confidence = clamp(
+    median(localConfidences) * (0.75 + stability * 0.25),
+    0,
+    1,
+  );
+
+  onProgress?.(1);
+  return {
+    tempoBpm: roundTempo(localMedian),
+    confidence,
+    candidatesBpm: global.candidatesBpm,
+    rangeBpm,
+  };
+}
+
+function estimateTempoWindow(
+  onset: number[],
+  frameRate: number,
+  onProgress?: (fraction: number) => void,
+): TempoWindowEstimate {
   let mean = 0;
-  for (const v of onset) mean += v;
+  for (const value of onset) mean += value;
   mean /= Math.max(1, onset.length);
-  const centered = onset.map((v) => v - mean);
+
+  const centered = new Float64Array(onset.length);
+  for (let i = 0; i < onset.length; i++) centered[i] = onset[i] - mean;
+
+  const minBpm = 40;
+  const maxBpm = 210;
+  const minLag = Math.max(2, Math.round((60 / maxBpm) * frameRate));
+  const maxLag = Math.min(centered.length - 1, Math.round((60 / minBpm) * frameRate));
+  if (maxLag < minLag) {
+    onProgress?.(1);
+    return { tempoBpm: 0, confidence: 0, candidatesBpm: [] };
+  }
+
+  const scores = new Float64Array(maxLag + 1);
   let bestLag = 0;
   let bestScore = 0;
   let scoreSum = 0;
   let scoreCount = 0;
-  const minBpm = 60;
-  const maxBpm = 200;
-  const minLag = Math.max(2, Math.round((60 / maxBpm) * frameRate));
-  const maxLag = Math.min(centered.length - 1, Math.round((60 / minBpm) * frameRate));
   const lagCount = Math.max(1, maxLag - minLag + 1);
+
   for (let lag = minLag; lag <= maxLag; lag++) {
     let sum = 0;
-    for (let i = 0; i + lag < centered.length; i++) sum += centered[i] * centered[i + lag];
-    const score = sum / Math.max(1, centered.length - lag);
+    let energyA = 0;
+    let energyB = 0;
+    for (let i = 0; i + lag < centered.length; i++) {
+      const a = centered[i];
+      const b = centered[i + lag];
+      sum += a * b;
+      energyA += a * a;
+      energyB += b * b;
+    }
+    const denominator = Math.sqrt(energyA * energyB);
+    const score = denominator > 1e-18 ? sum / denominator : 0;
+    scores[lag] = score;
     scoreSum += Math.abs(score);
     scoreCount++;
     if (score > bestScore) {
       bestScore = score;
       bestLag = lag;
     }
-    if (((lag - minLag) & 0x07) === 0 || lag === maxLag) {
-      onProgress?.((lag - minLag + 1) / lagCount);
+    if (onProgress && (((lag - minLag) & 0x07) === 0 || lag === maxLag)) {
+      onProgress((lag - minLag + 1) / lagCount);
     }
   }
+
   const average = scoreCount ? scoreSum / scoreCount : 0;
-  const confidence = average > 0 ? clamp(bestScore / (average * 4), 0, 1) : 0;
-  if (!bestLag) return { tempoBpm: 0, confidence };
-  let bpm = (60 * frameRate) / bestLag;
-  while (bpm < 70) bpm *= 2;
-  while (bpm > 180) bpm /= 2;
-  return { tempoBpm: Math.round(bpm * 10) / 10, confidence };
+  let confidence = average > 0 ? clamp(bestScore / (average * 4), 0, 1) : 0;
+  if (!bestLag || bestScore <= 0) {
+    return { tempoBpm: 0, confidence, candidatesBpm: [] };
+  }
+
+  const rawBpm = (60 * frameRate) / bestLag;
+  // Preserve the measured pulse even below 70 BPM; low-tempo music should
+  // not be silently relabelled as double-time without supporting evidence.
+  const tempoBpm = roundTempo(rawBpm);
+  const candidatesBpm = [tempoBpm];
+  // The autocorrelation at one beat interval and at two beat intervals can
+  // both be strong. Keep the second interpretation only when its own peak
+  // has substantial support; do not present every mathematical subdivision.
+  for (const candidate of [rawBpm / 2, rawBpm * 2]) {
+    if (candidate < minBpm || candidate > maxBpm) continue;
+    const lag = Math.round((60 * frameRate) / candidate);
+    if (lag < minLag || lag > maxLag) continue;
+    if (scores[lag] < bestScore * 0.68) continue;
+    const rounded = roundTempo(candidate);
+    if (!candidatesBpm.some((value) => Math.abs(value - rounded) < 1)) {
+      candidatesBpm.push(rounded);
+    }
+  }
+  if (candidatesBpm.length > 1) confidence *= 0.82;
+
+  return { tempoBpm, confidence, candidatesBpm };
+}
+
+
+function roundTempo(value: number): number {
+  return Math.round(value * 10) / 10;
 }
 
 function estimateSections(

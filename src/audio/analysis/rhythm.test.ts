@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeRhythm } from './rhythm';
+import { analyzeRhythm, estimateTempo } from './rhythm';
 
 const SAMPLE_RATE = 48_000;
 
@@ -93,6 +93,74 @@ describe('section FFT scratch-buffer reuse', () => {
       expect(section.start).toBeGreaterThanOrEqual(0);
       expect(section.end).toBeGreaterThan(section.start);
       expect(section.end).toBeLessThanOrEqual(frames / SAMPLE_RATE);
+    }
+  });
+});
+
+
+describe('robust tempo estimation', () => {
+  it('keeps a supported half/double-time interpretation instead of hiding it', () => {
+    const frameRate = 100;
+    const onset = new Array(frameRate * 30).fill(0);
+    for (let beat = 0; beat < 60; beat++) {
+      onset[Math.round(beat * frameRate * 0.5)] = beat % 2 === 0 ? 1 : 0.75;
+    }
+
+    const result = estimateTempo(onset, frameRate);
+
+    expect([60, 120]).toContain(result.tempoBpm);
+    expect(result.candidatesBpm).toContain(120);
+    expect(result.candidatesBpm).toContain(60);
+    expect(result.rangeBpm).toBeNull();
+    expect(result.confidence).toBeGreaterThan(0);
+  });
+
+  it('does not force a clearly measured 60 BPM pulse into double-time', () => {
+    const frameRate = 100;
+    const onset = new Array(frameRate * 32).fill(0);
+    for (let beat = 0; beat < 32; beat++) onset[beat * frameRate] = 1;
+
+    const result = estimateTempo(onset, frameRate);
+
+    expect(result.tempoBpm).toBeCloseTo(60, 0);
+    expect(result.candidatesBpm).toContain(60);
+    expect(result.candidatesBpm).not.toContain(120);
+  });
+
+  it('reports local tempo movement instead of relying only on one whole-track peak', () => {
+    const frameRate = 100;
+    const duration = 24;
+    const onset = new Array(frameRate * duration).fill(0);
+    let time = 0;
+    while (time < duration) {
+      onset[Math.round(time * frameRate)] = 1;
+      time += 60 / (time < 12 ? 100 : 140);
+    }
+
+    const result = estimateTempo(onset, frameRate);
+
+    expect(result.tempoBpm).toBeGreaterThanOrEqual(95);
+    expect(result.tempoBpm).toBeLessThanOrEqual(145);
+    expect(result.rangeBpm).not.toBeNull();
+    expect(result.rangeBpm!.min).toBeLessThanOrEqual(105);
+    expect(result.rangeBpm!.max).toBeGreaterThanOrEqual(135);
+  });
+
+  it('keeps tempo progress monotonic across global and local analysis passes', () => {
+    const frameRate = 100;
+    const onset = new Array(frameRate * 24).fill(0);
+    for (let beat = 0; beat < 40; beat++) {
+      const time = beat < 20 ? beat * 0.6 : 12 + (beat - 20) * (60 / 140);
+      const frame = Math.round(time * frameRate);
+      if (frame < onset.length) onset[frame] = 1;
+    }
+    const progress: number[] = [];
+
+    estimateTempo(onset, frameRate, (fraction) => progress.push(fraction));
+
+    expect(progress[progress.length - 1]).toBe(1);
+    for (let i = 1; i < progress.length; i++) {
+      expect(progress[i]).toBeGreaterThanOrEqual(progress[i - 1]);
     }
   });
 });
