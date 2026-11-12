@@ -88,7 +88,9 @@ only for parameters that actually have lanes. Structural parameter sync happens 
 
 The linear-phase EQ's 512-tap FIR has 256 samples of group delay. `ProjectRenderer` computes the maximum track/bus
 latency and inserts integer delays on the other paths, including the intermediate bus stage. Offline export renders
-`totalLatency` extra frames and discards the head. All paths therefore remain sample-aligned.
+`totalLatency` extra frames and discards the head. All paths therefore remain sample-aligned. The compressor reports
+its configured lookahead delay as `round(lookaheadMs * sampleRate / 1000)` samples, which is included in this
+compensation.
 
 ## Adding a processor
 
