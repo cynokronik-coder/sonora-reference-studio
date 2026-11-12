@@ -8,6 +8,7 @@ import type {
   TrackState,
 } from './types';
 import { createDefaultParams } from '../dsp/registry';
+import { currentProcessorStateVersion } from './migrations';
 
 export const TRACK_COLORS = [
   '#c8f169',
@@ -139,7 +140,7 @@ export function createProcessorNode(type: string, params?: Record<string, number
   return {
     id: uid('proc'),
     type,
-    version: 1,
+    version: currentProcessorStateVersion(type),
     enabled: true,
     params: { ...createDefaultParams(type), ...(params ?? {}) },
   };

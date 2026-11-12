@@ -45,11 +45,19 @@ LR4 split above a tunable frequency; the high band is detected and dynamically r
 reduction to the whole signal. Per-block gain reduction is metered.
 
 ### Transient Shaper
-Fast vs slow envelope comparison: transient energy drives attack gain, sustained energy drives sustain gain. Sensitivity,
-mix and output are adjustable.
+Independent left/right fast (0.4 ms attack / 30 ms release) and slow (25 ms / 180 ms) envelope followers estimate
+transient difference and sustained body. Attack and sustain controls apply bounded dB changes (up to ±12 dB and ±6 dB,
+respectively, with a combined ±18 dB limit) to avoid negative linear gain. Stereo Link blends each channel's envelope
+features towards the stronger side; 100% preserves the previous shared-detector behavior. Gain, output and dry/wet
+transitions are smoothed.
 
 ### Gate / Expander
-Downward expander with threshold, ratio, range, attack, hold and release.
+Independent left/right detectors feed separate gain-reduction envelopes. Stereo Link blends each detector towards the
+stronger channel; at 100%, both channels share one detector level. The hard-knee expansion slope below threshold is
+(ratio − 1) dB per dB, capped by Range; an optional quadratic soft knee smooths the threshold transition. Attack, hold,
+release, ratio, knee, link, dry/wet and output are adjustable, with smoothed gain and mix changes. Legacy saved gates
+are migrated to retain their prior attenuation curve and shared-detector behavior, including ratio automation; new
+gates use the standard expansion curve, and the advanced curve selector can switch existing gates to it.
 
 ### Clipper
 Soft cubic, hard or tanh clipping with drive, ceiling, mix and output. Intended before the limiter to shave isolated

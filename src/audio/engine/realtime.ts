@@ -1,11 +1,12 @@
 import workletUrl from './engine.worklet.ts?worker&url';
 import type { EngineAsset } from './renderer';
 import type { ProjectState } from '../model/types';
+import type { ProcessorMeterSnapshot } from '../dsp/types';
 
 export interface RealtimeMeters {
   peakL: number;
   peakR: number;
-  gr: Record<string, Record<string, { reduction?: number }>>;
+  gr: ProcessorMeterSnapshot;
   peaks: Record<string, { L: number; R: number }>;
 }
 
@@ -34,7 +35,7 @@ export class RealtimeHost {
   private pendingProject: ProjectState | null = null;
   private pendingAssets: EngineAsset[] = [];
   lastError: string | null = null;
-  lastMeters: Record<string, Record<string, { reduction?: number }>> = {};
+  lastMeters: ProcessorMeterSnapshot = {};
   lastPayload: RealtimeMeters = { peakL: -120, peakR: -120, gr: {}, peaks: {} };
   playing = false;
   position = 0;

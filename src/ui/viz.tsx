@@ -156,7 +156,7 @@ export function LevelMeter({ db, height = 96, width = 8, peakDb }: { db: number;
 }
 
 export function GainReductionMeter({ reductionDb, height = 96 }: { reductionDb: number; height?: number }) {
-  const amount = clamp(-reductionDb / 20, 0, 1);
+  const amount = clamp(reductionDb / 20, 0, 1);
   return (
     <div className="relative overflow-hidden rounded-sm bg-ink-900 ring-1 ring-inset ring-ink-700" style={{ height, width: 6 }}>
       <div

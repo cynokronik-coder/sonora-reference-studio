@@ -5,6 +5,7 @@ import { ParametricEq } from '../dsp/processors/eq';
 import { clamp } from '../dsp/util';
 import type { MatchSettings, ProcessorNodeState } from '../model/types';
 import { uid } from '../model/defaults';
+import { currentProcessorStateVersion } from '../model/migrations';
 
 export interface MatchCategory {
   key: keyof CategorySource;
@@ -745,7 +746,7 @@ export function planToNodes(plan: MatchPlan): ProcessorNodeState[] {
   return plan.proposals.map((proposal) => ({
     id: uid('proc'),
     type: proposal.processorType,
-    version: 1,
+    version: currentProcessorStateVersion(proposal.processorType),
     enabled: true,
     params: { ...proposal.params },
     note: proposal.reason,

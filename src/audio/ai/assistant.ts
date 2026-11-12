@@ -3,6 +3,7 @@ import type { ParamValues } from '../dsp/types';
 import { clamp } from '../dsp/util';
 import type { ProcessorNodeState, TrackState } from '../model/types';
 import { uid } from '../model/defaults';
+import { currentProcessorStateVersion } from '../model/migrations';
 
 export type AssistantOperationKind = 'add' | 'update' | 'remove' | 'bypass' | 'enable' | 'reference-match';
 
@@ -84,7 +85,7 @@ function ensureProcessor(
   const created: ProcessorNodeState = {
     id: uid('proc'),
     type,
-    version: 1,
+    version: currentProcessorStateVersion(type),
     enabled: true,
     params: createDefaultParams(type),
   };
