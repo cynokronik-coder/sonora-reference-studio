@@ -312,7 +312,7 @@ function syncEngine(project: ProjectState, buffers: Record<string, AssetBuffer>)
   if (engineTimer) clearTimeout(engineTimer);
   engineTimer = setTimeout(() => {
     try {
-      realtimeHost.loadAssets(engineAssets(project, buffers));
+      realtimeHost.syncAssets(engineAssets(project, buffers));
       realtimeHost.pushProject(project);
     } catch (error) {
       useApp.setState({ engineError: error instanceof Error ? error.message : String(error) });
@@ -467,9 +467,11 @@ export const useApp = create<AppState>((set, get) => ({
       set({ storageError: describeStorageError(error), toast: 'Could not create the project: this browser is blocking local storage.' });
       return;
     }
+    realtimeHost.stop();
     realtimeHost.setComparisonGain(0);
     realtimeHost.setMatchAudition(false);
     realtimeHost.clearMatchAuditionBuffers();
+    realtimeHost.syncAssets([]);
     set({
       project,
       assets: [],
@@ -497,6 +499,14 @@ export const useApp = create<AppState>((set, get) => ({
 
   openProject: async (id) => {
     set({ busy: { kind: 'load', label: 'Opening project', progress: 0 } });
+    if (get().project?.id !== id) {
+      // Drop the previous project's worklet PCM before decoding a new session.
+      realtimeHost.stop();
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.clearMatchAuditionBuffers();
+      realtimeHost.syncAssets([]);
+      set((state) => ({ transport: { ...state.transport, playing: false } }));
+    }
     try {
       await realtimeHost.initialise().catch((error) => {
         set({ engineError: error instanceof Error ? error.message : String(error) });
@@ -587,6 +597,8 @@ export const useApp = create<AppState>((set, get) => ({
     realtimeHost.setComparisonGain(0);
     realtimeHost.setMatchAudition(false);
     realtimeHost.clearMatchAuditionBuffers();
+    // Release the worklet's transferred PCM as well as the main-thread buffers.
+    realtimeHost.syncAssets([]);
     set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, matchPreview: null, matchAudition: null, abSlots: [], activeSlot: null, workingMix: null, loudnessMatch: false, comparisonDb: 0, screen: 'projects' });
   },
 
@@ -797,11 +809,20 @@ export const useApp = create<AppState>((set, get) => ({
       project.referenceAssetIds = project.referenceAssetIds.filter((id) => id !== assetId);
       project.tracks = project.tracks.filter((t) => !(t.kind === 'reference' && t.clips.some((c) => c.assetId === assetId)));
     });
+    const stillUsed = Boolean(get().project && allAssetIds(get().project!).includes(assetId));
     set((state) => {
       const analyses = { ...state.analyses };
-      delete analyses[assetId];
-      return { analyses, matchPlan: null, matchPreview: null };
+      if (!stillUsed) delete analyses[assetId];
+      const assets = stillUsed ? state.assets : state.assets.filter((asset) => asset.id !== assetId);
+      const assetBuffers = { ...state.assetBuffers };
+      if (!stillUsed) delete assetBuffers[assetId];
+      return { analyses, assets, assetBuffers, matchPlan: null, matchPreview: null };
     });
+    if (!stillUsed) {
+      void db.deleteAsset(assetId).catch((error) => {
+        useApp.setState({ toast: `Could not release removed reference audio: ${error instanceof Error ? error.message : String(error)}` });
+      });
+    }
   },
 
   mutate: (mutator, options) => {
@@ -1094,7 +1115,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (!project) return;
     try {
       await realtimeHost.initialise();
-      realtimeHost.loadAssets(engineAssets(project, assetBuffers));
+      realtimeHost.syncAssets(engineAssets(project, assetBuffers));
       realtimeHost.pushProject(project);
       realtimeHost.setMonitorGain(get().monitorDb);
       realtimeHost.setComparisonGain(get().matchAudition?.comparisonDb ?? get().comparisonDb);
@@ -1262,7 +1283,7 @@ export const useApp = create<AppState>((set, get) => ({
         throw new Error('The original and matched renders do not share the same sample timeline.');
       }
 
-      realtimeHost.loadAssets(engineAssets(current.project, current.assetBuffers));
+      realtimeHost.syncAssets(engineAssets(current.project, current.assetBuffers));
       realtimeHost.pushProject(current.project);
       realtimeHost.setMatchAuditionProjects({ before: beforeProject, after: afterProject });
       const comparisonDb = loudnessMatchedMonitorGain([
@@ -1976,6 +1997,7 @@ export const useApp = create<AppState>((set, get) => ({
     realtimeHost.setComparisonGain(0);
     realtimeHost.setMatchAudition(false);
     realtimeHost.clearMatchAuditionBuffers();
+    realtimeHost.syncAssets([]);
     projectSaveQueue.cancelAll();
     await projectSaveQueue.drain();
     await db.clearAllData();

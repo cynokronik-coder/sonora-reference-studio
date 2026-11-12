@@ -9,6 +9,21 @@ export interface AuditionPerformance {
   utilizationPercent: number;
 }
 
+export interface AssetSyncPlan {
+  releaseIds: string[];
+  loadIds: string[];
+}
+
+/** Asset delta used to keep AudioWorklet memory aligned with the open project. */
+export function planAssetSync(loadedIds: Iterable<string>, requestedIds: Iterable<string>): AssetSyncPlan {
+  const loaded = new Set(loadedIds);
+  const requested = new Set(requestedIds);
+  return {
+    releaseIds: [...loaded].filter((id) => !requested.has(id)),
+    loadIds: [...requested].filter((id) => !loaded.has(id)),
+  };
+}
+
 export interface RealtimeMeters {
   peakL: number;
   peakR: number;
@@ -200,9 +215,15 @@ export class RealtimeHost {
       this.pendingAssets = assets;
       return;
     }
-    const { payload, transfer } = this.transferableAssets(assets);
-    this.node.port.postMessage({ type: 'assets', assets: payload }, transfer);
-    for (const asset of assets) this.loadedAssets.add(asset.id);
+    // Copy and transfer a small batch at a time. A single postMessage carrying
+    // every stem would temporarily duplicate the entire session PCM in memory.
+    const batchSize = 2;
+    for (let start = 0; start < assets.length; start += batchSize) {
+      const batch = assets.slice(start, start + batchSize);
+      const { payload, transfer } = this.transferableAssets(batch);
+      this.node.port.postMessage({ type: 'assets', assets: payload }, transfer);
+      for (const asset of batch) this.loadedAssets.add(asset.id);
+    }
   }
 
   /** Load only assets the worklet has not already received. */
@@ -210,10 +231,34 @@ export class RealtimeHost {
     const fresh = assets.filter((a) => !this.loadedAssets.has(a.id));
     if (!fresh.length) return;
     if (!this.ready) {
-      this.pendingAssets.push(...fresh);
+      const pending = new Map(this.pendingAssets.map((asset) => [asset.id, asset]));
+      for (const asset of fresh) pending.set(asset.id, asset);
+      this.pendingAssets = [...pending.values()];
       return;
     }
     this.pushAssets(fresh);
+  }
+
+  /**
+   * Synchronize AudioWorklet PCM residency with the assets reachable from the
+   * open project. Assets removed from the project are explicitly released.
+   */
+  syncAssets(assets: EngineAsset[]): void {
+    if (!this.ready || !this.node) {
+      this.pendingAssets = [...assets];
+      this.loadedAssets.clear();
+      return;
+    }
+
+    const plan = planAssetSync(this.loadedAssets, assets.map((asset) => asset.id));
+    if (plan.releaseIds.length) {
+      this.node.port.postMessage({ type: 'release-assets', ids: plan.releaseIds });
+      for (const id of plan.releaseIds) this.loadedAssets.delete(id);
+    }
+    if (plan.loadIds.length) {
+      const loadSet = new Set(plan.loadIds);
+      this.pushAssets(assets.filter((asset) => loadSet.has(asset.id)));
+    }
   }
 
   pushProject(project: ProjectState): void {
@@ -308,8 +353,10 @@ export class RealtimeHost {
 
   async close(): Promise<void> {
     this.ready = false;
+    this.node?.port.postMessage({ type: 'release-assets', ids: [...this.loadedAssets] });
     this.node?.disconnect();
     this.node = null;
+    this.pendingAssets = [];
     this.monitor?.disconnect();
     this.comparison?.disconnect();
     this.monitor = null;

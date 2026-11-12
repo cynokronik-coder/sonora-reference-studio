@@ -125,6 +125,14 @@ When the document becomes hidden or receives `pagehide`, Sonora immediately subm
 
 Audio playback can recover from a closed or suspended AudioContext through the normal Play action. If an AudioWorklet processor throws and the browser emits `processorerror`, Sonora disconnects the failed node, reports the interruption, and allows Play to build a fresh node. The store still owns decoded source buffers; the next Play action re-transfers assets, restores the latest project graph and resumes from the most recently reported playhead. A/B audition state is cleared after a processor failure and can be prepared again.
 
+## Project PCM memory and asset lifecycle
+
+The Studio header reports an estimate of the active project's decoded audio working set. It counts the main-thread stereo Float32 PCM buffers, waveform peak arrays, and an equal-size playback copy expected in the AudioWorklet. It does not represent total browser RAM: decoder internals, compressed source Blobs, analysis and export scratch buffers, application state and browser overhead are excluded.
+
+The RealtimeHost synchronizes AudioWorklet asset residency against the complete set of asset ids reachable from the active project. Assets removed from that set are sent through `release-assets`; the worklet drops them from its own asset list and replaces the asset maps held by the main renderer and any active comparison renderers. Closing or creating a project releases previous-session PCM. Opening another project releases the previous AudioWorklet copy before decoding the new session. Removing a reference also drops its decoded main-thread buffers and IndexedDB Blob when no other target, reference or clip still uses that asset id.
+
+New PCM is copied and transferred to the AudioWorklet in batches of two assets rather than constructing one large duplicate payload for every stem at once. This limits the transient transfer copy; it does not reduce the steady-state memory required by the main-thread buffers plus the active playback copy. Very large individual files still require a large contiguous PCM allocation in this architecture.
+
 ## Automation
 
 Lanes are stored per track: `volume`, `pan`, or a processor parameter keyed by processor id. `valueAtTime` interpolates
