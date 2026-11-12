@@ -33,25 +33,34 @@ export default function Export() {
 
   const verify = async (id: string) => {
     setVerifyingId(id);
+    const record = exports.find((item) => item.id === id);
+    let blob: Blob | null = null;
     try {
-      const blob = await db.getExportBlob(id);
+      blob = await db.getExportBlob(id);
       if (!blob) throw new Error('Export file not found.');
       const result = await verifyEncodedBlob(blob);
-      const record = exports.find((item) => item.id === id);
       if (record) {
         // Replace the earlier PCM estimate with measurements from the decoded
-        // file bytes so export history reflects the actual delivered encoding.
+        // file bytes and keep the verified figures separately for auditability.
+        const { verificationNote: _previousNote, ...recordWithoutNote } = record;
         await db.saveExport({
-          ...record,
+          ...recordWithoutNote,
           duration: result.duration,
           lufs: result.lufs,
           truePeak: result.truePeakDb,
+          verifiedLufs: result.lufs,
+          verifiedTruePeakDb: result.truePeakDb,
         }, blob);
         await refreshExports();
       }
       useApp.getState().setToast(`Verified decoded file: ${result.lufs.toFixed(1)} LUFS · ${result.truePeakDb.toFixed(1)} dBTP.`);
     } catch (error) {
-      useApp.getState().setToast(`Verification failed: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      if (record && blob) {
+        await db.saveExport({ ...record, verificationNote: message }, blob);
+        await refreshExports();
+      }
+      useApp.getState().setToast(`Verification unavailable: ${message}`);
     } finally {
       setVerifyingId(null);
     }
@@ -232,6 +241,13 @@ export default function Export() {
               <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[.07] bg-[#0D0D1B]/65 px-3 py-3">
                 <div>
                   <div className="text-xs text-ink-100">{record.name}</div>
+                  {record.verificationNote ? (
+                    <p className="mt-1 max-w-2xl text-2xs leading-relaxed text-signal-amber/90">
+                      Verification deferred or unavailable: {record.verificationNote}
+                    </p>
+                  ) : record.verifiedLufs !== undefined && record.verifiedLufs !== null ? (
+                    <p className="mt-1 text-2xs text-signal-green/80">Encoded file verified</p>
+                  ) : null}
                   <div className="font-mono text-2xs text-ink-500">
                     {record.format} · {record.sampleRate} Hz · {record.bitDepth}-bit · {formatBytes(record.sizeBytes)} ·{' '}
                     {new Date(record.createdAt).toLocaleString()}
