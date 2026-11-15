@@ -13,7 +13,8 @@ The suite uses synthetic signals only — no fixtures with unknown provenance.
 | FFT | multiple-size forward/inverse round trips; separate transforms remain correct with a shared immutable plan |
 | Biquad | +6 dB bell response; stable coefficient interpolation and bounded RBJ shelf slope |
 | Parametric EQ | sample-rate/filter-type stability, hostile imported values, Mid/Side response, 20 ms trim ramp, dry bypass, symmetric 513-tap FIR magnitude and exact 256-sample impulse latency |
-| Compressor | a signal over threshold is reduced and reports real gain reduction |
+| Compressor | over-threshold reduction, independent/linked stereo detection, external sidechain channels, smoothed output controls, finite extreme parameters, and exact lookahead latency across sample rates |
+| Renderer latency | dry and lookahead-compressed tracks remain sample-aligned |
 | Limiter | output stays under a -1 dBTP ceiling with lookahead, and GR is reported |
 | Saturation | output remains finite and differs from input (harmonics added) |
 | Multiband | summed bands remain audible and finite |
