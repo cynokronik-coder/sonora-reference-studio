@@ -25,17 +25,15 @@ const finiteOr = (value: number | undefined, fallback: number): number =>
   value !== undefined && Number.isFinite(value) ? value : fallback;
 
 /**
- * Feed-forward compressor with a soft knee, program-style behaviours, an
- * optional sidechain key and a true dry/wet mix.
+ * Feed-forward compressor with independent left/right detection, configurable
+ * stereo linking, an optional sidechain key, lookahead and a true dry/wet mix.
  *
- * Detection runs on the (optionally filtered or external) key signal, while the
- * audio is delayed by the lookahead amount so transients are caught before they
- * pass. Gain reduction is applied in dB, which is what makes the ratio behave
- * like a real compressor rather than a soft clipper.
+ * At 0% stereo link each channel has its own detector and gain-reduction
+ * envelope. At 100%, both channels follow the stronger detector, preserving
+ * the stereo image through common gain reduction.
  */
 export class Compressor implements AudioProcessor {
   readonly type = 'compressor';
-  readonly latency = 0;
   private sr = 48000;
   private values: ParamValues = {};
   private ballisticsL = new DbBallistics(48000, 10, 100);
@@ -58,6 +56,9 @@ export class Compressor implements AudioProcessor {
   private readonly makeupSmooth = new SmoothedValue(1, 10, 48000);
   private readonly mixSmooth = new SmoothedValue(1, 10, 48000);
 
+  get latency(): number {
+    return this.delaySamples;
+  }
   get gainReductionDb(): number {
     return this.grDb;
   }
@@ -195,6 +196,8 @@ export class Compressor implements AudioProcessor {
     this.grDb = 0;
     this.rmsStateL = 0;
     this.rmsStateR = 0;
+    this.peakL = 0;
+    this.peakR = 0;
   }
 
   meter(): ProcessorMeter {
@@ -207,7 +210,7 @@ export const compressorDefinition: ProcessorDefinition = {
   name: 'Compressor',
   shortName: 'COMP',
   category: 'dynamics',
-  description: 'Feed-forward compressor with soft knee, five behaviour styles, sidechain filter, lookahead and dry/wet mix.',
+  description: 'Feed-forward compressor with soft knee, five behaviour styles, independent L/R detection, adjustable stereo linking, sidechain filter, lookahead and dry/wet mix.',
   purpose: 'Controls dynamic range, tightens levels and adds density. Reference Match uses it when crest factor or LRA differs from the reference.',
   params: [
     { key: 'threshold', label: 'Threshold', kind: 'float', min: -60, max: 0, step: 0.1, default: -18, unit: 'dB', group: 'Dynamics' },

@@ -86,9 +86,11 @@ only for parameters that actually have lanes. Structural parameter sync happens 
 
 ## Latency compensation
 
-The linear-phase EQ's 512-tap FIR has 256 samples of group delay. `ProjectRenderer` computes the maximum track/bus
+The linear-phase EQ uses a 513-tap symmetric FIR with exactly 256 samples of group delay. `ProjectRenderer` computes the maximum track/bus
 latency and inserts integer delays on the other paths, including the intermediate bus stage. Offline export renders
-`totalLatency` extra frames and discards the head. All paths therefore remain sample-aligned.
+`totalLatency` extra frames and discards the head. All paths therefore remain sample-aligned. The compressor reports
+its configured lookahead delay as `round(lookaheadMs * sampleRate / 1000)` samples, which is included in this
+compensation.
 
 The multiband processor uses separate LR4 crossover state for programme and external-key paths. Crossover histories
 are reset when the engine is prepared at a new sample rate; frequency and band-mode changes are smoothed in the
