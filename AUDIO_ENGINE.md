@@ -73,6 +73,16 @@ at the selected oversampling factor, subtracts a phase-matched linear reference,
 harmonic delta to the untouched original programme. This keeps the low-frequency programme out of the nonlinear
 stage. The Exciter uses prepared buffers and smoothed drive, style, amount and output controls.
 
+### Clipper render path
+
+The Clipper copies left/right input into prepared dry buffers, upsamples both channels through independent IIR filter
+banks at 2x/4x, shapes samples with the selected soft/hard/tanh transfer curve, then downsamples into prepared wet
+buffers. A second matching IIR oversampler advances continuously on the untouched dry input so partial wet blends use
+the same phase/filter history. Drive and internal ceiling are interpolated per oversampled sample; style crossfades and
+mix/output trims ramp to avoid abrupt parameter steps. The internal clipping ceiling is before output trim and is not a
+final true-peak guarantee. Use the downstream limiter for a delivered dBTP ceiling. The IIR oversampler reduces aliasing
+but has frequency-dependent phase shift, not linear phase.
+
 ## True peak
 
 - `TruePeakMeter` applies a 4x oversampled low-pass chain and tracks the maximum absolute interpolated sample.
