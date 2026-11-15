@@ -1,12 +1,13 @@
 import { Biquad } from './biquad';
 
 /**
- * Zero-latency oversampler built from cascaded Butterworth biquads.
+ * Low-latency IIR oversampler built from cascaded Butterworth biquads.
  *
- * Nonlinear stages (saturation, clipping, limiting) use this so generated
- * harmonics do not fold back into the audible band. An IIR rather than FIR
- * design keeps the realtime path free of extra latency, which matters because
- * an oversampled limiter must not shift its output relative to the chain.
+ * Nonlinear stages use this to attenuate images during interpolation and
+ * reduce generated harmonics that would otherwise fold back during decimation.
+ * The IIR filters have frequency-dependent phase shift/group delay; this is
+ * not a zero-latency or linear-phase oversampler. Wet/dry parallel paths that
+ * use this class should share matching filter histories to reduce combing.
  */
 export class Oversampler {
   readonly factor: 1 | 2 | 4;

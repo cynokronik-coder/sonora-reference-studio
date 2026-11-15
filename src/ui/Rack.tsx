@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ProcessorNodeState } from '../audio/model/types';
 import { PROCESSOR_DEFINITIONS, getDefinition, formatParam } from '../audio/dsp/registry';
 import type { ParamSpec, ProcessorCategory } from '../audio/dsp/types';
@@ -7,6 +7,8 @@ import type { ChainScope } from '../audio/model/project';
 import { Badge, Button, HelpTip, IconButton, Modal, ParamSlider, Select, Toggle } from './Primitives';
 import { EQCurve, GainReductionMeter } from './viz';
 import { clamp } from '../audio/dsp/util';
+import { SATURATION_PRESETS } from '../audio/dsp/processors/saturation';
+import { EXCITER_PRESETS } from '../audio/dsp/processors/exciter';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -291,6 +293,12 @@ function ProcessorParams({
   node: ProcessorNodeState;
   advanced: boolean;
 }) {
+  const [saturationPreset, setSaturationPreset] = useState('');
+  const [exciterPreset, setExciterPreset] = useState('');
+  useEffect(() => {
+    setSaturationPreset('');
+    setExciterPreset('');
+  }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -301,10 +309,54 @@ function ProcessorParams({
     groups.get(group)!.push(spec);
   }
   const update = (key: string, value: number) => {
+    if (node.type === 'saturation') setSaturationPreset('');
+    if (node.type === 'exciter') setExciterPreset('');
     useApp.getState().updateProcessorParams(scope, trackId, node.id, { [key]: value });
+  };
+  const applySaturationPreset = (presetId: string) => {
+    const preset = SATURATION_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setSaturationPreset(preset.id);
+  };
+  const applyExciterPreset = (presetId: string) => {
+    const preset = EXCITER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setExciterPreset(preset.id);
   };
   return (
     <div className="space-y-2">
+      {node.type === 'saturation' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Saturation starting point"
+            value={saturationPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...SATURATION_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applySaturationPreset}
+          />
+          {saturationPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {SATURATION_PRESETS.find((preset) => preset.id === saturationPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
+      {node.type === 'exciter' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Exciter starting point"
+            value={exciterPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...EXCITER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyExciterPreset}
+          />
+          {exciterPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {EXCITER_PRESETS.find((preset) => preset.id === exciterPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
       {[...groups.entries()].map(([group, specs], index) => (
         <details key={group} open={index === 0} className="group rounded border border-ink-700/70 bg-ink-900/40">
           <summary className="cursor-pointer list-none px-2 py-1.5 text-2xs uppercase tracking-wider text-ink-400 hover:text-ink-200">

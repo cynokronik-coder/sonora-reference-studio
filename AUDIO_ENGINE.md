@@ -54,9 +54,24 @@ This keeps the UI and the engine from drifting apart.
 
 ## Oversampling
 
-`Oversampler` performs 2x/4x zero-stuffing plus 8th-order Butterworth IIR anti-image/anti-alias filtering. It is used
-around nonlinear stages (saturation, exciter, clipper, saturation modes). IIR was chosen over FIR to avoid extra latency
-in the realtime path.
+`Oversampler` uses cascaded Butterworth IIR filters for 1x, 2x or 4x nonlinear processing. Its filters have
+frequency-dependent phase shift: low latency does not mean zero latency or linear phase. Oversampling attenuates
+interpolation images and reduces aliasing from generated harmonics, but does not eliminate it. Parallel dry/wet
+processors must account for matching filter history; Saturation and Exciter use paired IIR paths.
+
+### Saturation render path
+
+The Saturator keeps prepared dry, wet and phase-alignment buffers. Independent left/right pre-emphasis, post-tone and
+DC-blocker filters feed a paired nonlinear stage. Drive, compensation, style, output and mix changes are smoothed.
+For partial wet blends, the dry branch advances through a matching IIR oversampling topology; at 0% wet with output at
+0 dB, the settled result is sample-identical to the dry input. The IIR paths have frequency-dependent phase shift.
+
+### Exciter render path
+
+The Exciter isolates only the selected upper band with independent fourth-order high-pass filters. It shapes that band
+at the selected oversampling factor, subtracts a phase-matched linear reference, removes generated DC and adds the
+harmonic delta to the untouched original programme. This keeps the low-frequency programme out of the nonlinear
+stage. The Exciter uses prepared buffers and smoothed drive, style, amount and output controls.
 
 ## True peak
 

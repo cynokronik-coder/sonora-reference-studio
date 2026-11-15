@@ -68,13 +68,22 @@ inter-sample peaks. Reports gain reduction and output peak.
 ## Saturation
 
 ### Saturation
-Six transfer functions: tape (asymmetric soft bias), tube (second-harmonic asymmetry), console (cubic), soft clip, hard
-clip and wavefold. Drive, tone, dry/wet, output and 2x/4x oversampling. The interface labels these as styles, not
-hardware models.
+Six nonlinear transfer functions: Tape (asymmetric soft saturation), Tube (asymmetric even-harmonic character), Console
+(cubic soft knee), Soft clip (tanh), Hard clip and Wavefold. Controls include drive, pre-emphasis, post-tone shelf,
+output trim, dry/wet and 1x/2x/4x oversampling. Left/right pre-filter, post-tone, DC-blocker and oversampler state are
+independent. The audio callback uses prepared scratch buffers; drive/compensation, style, tone, output and mix changes
+are smoothed rather than stepped. The IIR oversampler has frequency-dependent phase shift, is not linear-phase, and
+reduces rather than eliminates aliasing. The dry branch uses matching IIR filter history for partial wet blends.
+Factory starting points: Tape warmth, Tube density, Console glue, Soft peak rounding, Hard edge, Wavefold colour and
+Subtle mastering density. These are editable starting points, not hardware emulations; level-match when comparing.
 
 ### Exciter
-High-band harmonic generation above a tunable crossover, with drive, style, amount and output. Never distorts the low
-end.
+A fourth-order high-pass isolates the selected upper band before nonlinear processing. The Exciter adds the difference
+between the shaped high band and a phase-matched linear reference back to the untouched programme, preserving the
+original low-frequency path. It has a tunable crossover, drive, five styles, amount, output and 1x/2x/4x oversampling.
+Prepared buffers, independent stereo filter state, DC blocking and smoothed controls protect the render path.
+Factory starting points: Vocal air, High-end sparkle, Drum and cymbal detail, Synth presence and Subtle mastering air.
+These presets remain editable; check for added sibilance and hiss on bright sources.
 
 ## Stereo
 
