@@ -74,3 +74,46 @@ describe('ProjectRenderer external sidechain routing', () => {
     expect(internalReduction).toBeLessThan(1);
   });
 });
+
+describe('ProjectRenderer compressor latency compensation', () => {
+  it('aligns a dry track with a compressor using lookahead', () => {
+    const sampleRate = 48_000;
+    const assetLength = 512;
+    const impulseL = new Float32Array(assetLength);
+    const impulseR = new Float32Array(assetLength);
+    impulseL[0] = impulseR[0] = 1;
+    const asset: EngineAsset = {
+      id: 'impulse',
+      length: assetLength,
+      sampleRate,
+      L: impulseL,
+      R: impulseR,
+    };
+
+    const compressed = createTrack('audio', 'Lookahead', 0);
+    compressed.clips.push(createClip(asset.id, assetLength / sampleRate));
+    compressed.processors.push(createProcessorNode('compressor', {
+      threshold: -60,
+      ratio: 1,
+      lookahead: 4,
+    }));
+    const dry = createTrack('audio', 'Dry', 1);
+    dry.clips.push(createClip(asset.id, assetLength / sampleRate));
+
+    const project = createProject('Compressor latency compensation', sampleRate);
+    project.tracks = [compressed, dry];
+    const renderer = new ProjectRenderer();
+    renderer.configure(project, [asset], sampleRate, 128);
+    expect(renderer.totalLatency).toBe(192);
+
+    const renderedL = new Float32Array(512);
+    const renderedR = new Float32Array(512);
+    for (let offset = 0; offset < renderedL.length; offset += 128) {
+      renderer.renderBlock(offset, 128, renderedL.subarray(offset, offset + 128), renderedR.subarray(offset, offset + 128));
+    }
+
+    expect(renderedL[192]).toBeCloseTo(2, 6);
+    expect(renderedR[192]).toBeCloseTo(2, 6);
+    expect(renderedL.slice(0, 192).every((sample) => sample === 0)).toBe(true);
+  });
+});
