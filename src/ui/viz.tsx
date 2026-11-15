@@ -353,7 +353,17 @@ export function LoudnessChart({
   );
 }
 
-export function EQCurve({ params, height = 150, color = '#8957FF' }: { params: ParamValues; height?: number; color?: string }) {
+export function EQCurve({
+  params,
+  height = 150,
+  color = '#8957FF',
+  sampleRate = 48000,
+}: {
+  params: ParamValues;
+  height?: number;
+  color?: string;
+  sampleRate?: number;
+}) {
   const [width, setWidth] = useState(500);
   const containerRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -365,18 +375,32 @@ export function EQCurve({ params, height = 150, color = '#8957FF' }: { params: P
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-  const freqs = new Float32Array(240);
-  for (let i = 0; i < 240; i++) freqs[i] = 20 * Math.pow(1000, i / 239);
-  const response = ParametricEq.response(params, 48000, freqs);
-  const path = Array.from(response)
-    .map((db, i) => {
-      const x = (Math.log2(freqs[i] / 20) / Math.log2(1000)) * width;
+  const maxFrequency = Math.min(20_000, sampleRate * 0.5);
+  const frequencies = new Float32Array(240);
+  for (let i = 0; i < frequencies.length; i++) {
+    frequencies[i] = 20 * Math.pow(maxFrequency / 20, i / (frequencies.length - 1));
+  }
+  const midResponse = ParametricEq.response(params, sampleRate, frequencies, 'mid');
+  const sideResponse = ParametricEq.response(params, sampleRate, frequencies, 'side');
+  const hasDifferentMidSide = midResponse.some((value, index) => Math.abs(value - sideResponse[index]) > 0.05);
+  const buildPath = (response: Float32Array) => Array.from(response)
+    .map((db, index) => {
+      const x = (Math.log2(frequencies[index] / 20) / Math.log2(maxFrequency / 20)) * width;
       const y = height / 2 - (clamp(db, -18, 18) / 18) * (height / 2 - 4);
-      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+      return `${index === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
     })
     .join(' ');
+  const midPath = buildPath(midResponse);
+  const sidePath = hasDifferentMidSide ? buildPath(sideResponse) : null;
   return (
     <div ref={containerRef} className="w-full overflow-hidden rounded border border-ink-700 bg-ink-950">
+      {hasDifferentMidSide && (
+        <div className="flex items-center gap-3 border-b border-white/[.06] px-2 py-1 text-[9px]">
+          <span className="flex items-center gap-1 text-ink-400"><span className="h-0.5 w-3 rounded bg-[#A78BFA]" /> Mid</span>
+          <span className="flex items-center gap-1 text-ink-400"><span className="h-0.5 w-3 rounded border-t border-dashed border-[#38BDF8]" /> Side</span>
+          <span className="ml-auto text-ink-600">{Math.round(sampleRate).toLocaleString()} Hz</span>
+        </div>
+      )}
       <svg width={width} height={height} className="block">
         {[-12, -6, 0, 6, 12].map((db) => (
           <g key={db}>
@@ -392,17 +416,18 @@ export function EQCurve({ params, height = 150, color = '#8957FF' }: { params: P
             </text>
           </g>
         ))}
-        {[50, 100, 500, 1000, 5000, 10000].map((f) => (
+        {[50, 100, 500, 1000, 5000, 10000].filter((frequency) => frequency < maxFrequency).map((frequency) => (
           <line
-            key={f}
-            x1={(Math.log2(f / 20) / Math.log2(1000)) * width}
-            x2={(Math.log2(f / 20) / Math.log2(1000)) * width}
+            key={frequency}
+            x1={(Math.log2(frequency / 20) / Math.log2(maxFrequency / 20)) * width}
+            x2={(Math.log2(frequency / 20) / Math.log2(maxFrequency / 20)) * width}
             y1={0}
             y2={height}
             stroke="rgba(255,255,255,0.05)"
           />
         ))}
-        <path d={path} fill="none" stroke={color} strokeWidth={1.6} />
+        <path d={midPath} fill="none" stroke={hasDifferentMidSide ? '#A78BFA' : color} strokeWidth={1.7} />
+        {sidePath && <path d={sidePath} fill="none" stroke="#38BDF8" strokeWidth={1.5} strokeDasharray="4 3" />}
       </svg>
     </div>
   );
