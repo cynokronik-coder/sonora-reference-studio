@@ -85,7 +85,6 @@ the same phase/filter history. Drive and internal ceiling are interpolated per o
 mix/output trims ramp to avoid abrupt parameter steps. The internal clipping ceiling is before output trim and is not a
 final true-peak guarantee. Use the downstream limiter for a delivered dBTP ceiling. The IIR oversampler reduces aliasing
 but has frequency-dependent phase shift, not linear phase.
-
 ## True peak
 
 - `TruePeakMeter` applies a 4x oversampled low-pass chain and tracks the maximum absolute interpolated sample.
