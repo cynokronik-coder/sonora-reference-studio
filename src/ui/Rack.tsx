@@ -13,6 +13,7 @@ import { DEESSER_PRESETS } from '../audio/dsp/processors/deesser';
 import { RESONANCE_PRESETS } from '../audio/dsp/processors/resonance';
 import { SATURATION_PRESETS } from '../audio/dsp/processors/saturation';
 import { EXCITER_PRESETS } from '../audio/dsp/processors/exciter';
+import { CLIPPER_PRESETS } from '../audio/dsp/processors/limiter';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -427,9 +428,11 @@ function ProcessorParams({
   }, [node.id]);
   const [saturationPreset, setSaturationPreset] = useState('');
   const [exciterPreset, setExciterPreset] = useState('');
+  const [clipperPreset, setClipperPreset] = useState('');
   useEffect(() => {
     setSaturationPreset('');
     setExciterPreset('');
+    setClipperPreset('');
   }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
@@ -447,6 +450,7 @@ function ProcessorParams({
     if (node.type === 'deesser') setDeEsserPreset('');
     if (node.type === 'saturation') setSaturationPreset('');
     if (node.type === 'exciter') setExciterPreset('');
+    if (node.type === 'clipper') setClipperPreset('');
     const patch: Record<string, number> = { [key]: value };
     if (node.type === 'multibandComp' && key === 'xLow') {
       patch.xHigh = Math.max(node.params.xHigh ?? 4000, value + 20);
@@ -491,6 +495,12 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setExciterPreset(preset.id);
   };
+  const applyClipperPreset = (presetId: string) => {
+    const preset = CLIPPER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setClipperPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
       {node.type === 'dynamicEq' && (
@@ -519,6 +529,19 @@ function ProcessorParams({
           options={[{ value: '', label: 'Choose a starting point…' }, ...DEESSER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
           onChange={applyDeEsserPreset}
         />
+      )}
+      {node.type === 'clipper' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select label="Clipper starting point" value={clipperPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...CLIPPER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyClipperPreset}
+          />
+          {clipperPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {CLIPPER_PRESETS.find((preset) => preset.id === clipperPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
       )}
       {node.type === 'saturation' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
