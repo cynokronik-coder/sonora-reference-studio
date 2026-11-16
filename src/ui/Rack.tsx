@@ -13,7 +13,6 @@ import { DEESSER_PRESETS } from '../audio/dsp/processors/deesser';
 import { RESONANCE_PRESETS } from '../audio/dsp/processors/resonance';
 import { SATURATION_PRESETS } from '../audio/dsp/processors/saturation';
 import { EXCITER_PRESETS } from '../audio/dsp/processors/exciter';
-import { CLIPPER_PRESETS } from '../audio/dsp/processors/limiter';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -108,8 +107,7 @@ export function Rack({
         {visibleProcessors.map(({ node, index, definition: def }) => {
           if (!def) return null;
           const isSelected = node.id === selectedId;
-          const meter = meters?.[node.id];
-          const processorMeter = meter;
+          const processorMeter = meters?.[node.id];
           const reduction = processorMeter?.reduction ?? 0;
           return (
             <div
@@ -209,6 +207,7 @@ export function Rack({
                             </div>
                             <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
                               <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }} />
+                            </div>
                           </div>
                         );
                       })}
@@ -217,10 +216,10 @@ export function Rack({
 
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
-                  {node.type === 'clipper' && meter?.bands && (
+                  {node.type === 'clipper' && processorMeter?.bands && (
                     <div className="mb-3 grid grid-cols-2 gap-2">
                       {(['Left', 'Right'] as const).map((label, channelIndex) => {
-                        const reductionDb = Math.abs(meter.bands?.[channelIndex] ?? 0);
+                        const reductionDb = Math.abs(processorMeter.bands?.[channelIndex] ?? 0);
                         return (
                           <div key={label} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
                             <div className="mb-1 flex items-center justify-between gap-1">
@@ -428,11 +427,9 @@ function ProcessorParams({
   }, [node.id]);
   const [saturationPreset, setSaturationPreset] = useState('');
   const [exciterPreset, setExciterPreset] = useState('');
-  const [clipperPreset, setClipperPreset] = useState('');
   useEffect(() => {
     setSaturationPreset('');
     setExciterPreset('');
-    setClipperPreset('');
   }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
@@ -450,7 +447,6 @@ function ProcessorParams({
     if (node.type === 'deesser') setDeEsserPreset('');
     if (node.type === 'saturation') setSaturationPreset('');
     if (node.type === 'exciter') setExciterPreset('');
-    if (node.type === 'clipper') setClipperPreset('');
     const patch: Record<string, number> = { [key]: value };
     if (node.type === 'multibandComp' && key === 'xLow') {
       patch.xHigh = Math.max(node.params.xHigh ?? 4000, value + 20);
@@ -479,7 +475,10 @@ function ProcessorParams({
   };
   const applyDeEsserPreset = (presetId: string) => {
     const preset = DEESSER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setDeEsserPreset(preset.id);
+  };
   const applySaturationPreset = (presetId: string) => {
     const preset = SATURATION_PRESETS.find((item) => item.id === presetId);
     if (!preset) return;
@@ -491,12 +490,6 @@ function ProcessorParams({
     if (!preset) return;
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setExciterPreset(preset.id);
-  };
-  const applyClipperPreset = (presetId: string) => {
-    const preset = CLIPPER_PRESETS.find((item) => item.id === presetId);
-    if (!preset) return;
-    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
-    setClipperPreset(preset.id);
   };
   return (
     <div className="space-y-2">
@@ -525,6 +518,8 @@ function ProcessorParams({
         <Select label="De-esser starting point" value={deEsserPreset}
           options={[{ value: '', label: 'Choose a starting point…' }, ...DEESSER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
           onChange={applyDeEsserPreset}
+        />
+      )}
       {node.type === 'saturation' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
           <Select label="Saturation starting point" value={saturationPreset}
@@ -534,19 +529,6 @@ function ProcessorParams({
           {saturationPreset && (
             <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
               {SATURATION_PRESETS.find((preset) => preset.id === saturationPreset)?.description} All controls remain editable.
-            </p>
-          )}
-        </div>
-      )}
-      {node.type === 'clipper' && (
-        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
-          <Select label="Clipper starting point" value={clipperPreset}
-            options={[{ value: '', label: 'Choose a starting point…' }, ...CLIPPER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
-            onChange={applyClipperPreset}
-          />
-          {clipperPreset && (
-            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
-              {CLIPPER_PRESETS.find((preset) => preset.id === clipperPreset)?.description} All controls remain editable.
             </p>
           )}
         </div>
