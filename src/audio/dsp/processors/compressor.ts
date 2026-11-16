@@ -59,6 +59,9 @@ export class Compressor implements AudioProcessor {
   get latency(): number {
     return this.delaySamples;
   }
+  get gainReductionDb(): number {
+    return this.grDb;
+  }
 
   prepare(sampleRate: number, maxBlock: number): void {
     this.sr = sampleRate;
@@ -99,6 +102,10 @@ export class Compressor implements AudioProcessor {
   }
 
   setSidechain(L: Float32Array | null, R: Float32Array | null): void {
+    if (L !== this.sidechainL || R !== this.sidechainR) {
+      this.scFilterL.reset();
+      this.scFilterR.reset();
+    }
     this.sidechainL = L;
     this.sidechainR = R;
   }
@@ -130,8 +137,11 @@ export class Compressor implements AudioProcessor {
       const filteredL = this.scFilterL.process(scL);
       const filteredR = this.scFilterR.process(scR);
 
-      let detectL = Math.abs(filteredL);
-      let detectR = Math.abs(filteredR);
+      const peakL = Math.abs(filteredL);
+      const peakR = Math.abs(filteredR);
+      let detectL = peakL;
+      let detectR = peakR;
+      let linkedDetector = Math.max(peakL, peakR);
       if (rmsMix > 0) {
         this.rmsStateL += (filteredL * filteredL - this.rmsStateL) * rmsCoeff;
         this.rmsStateR += (filteredR * filteredR - this.rmsStateR) * rmsCoeff;
@@ -139,13 +149,13 @@ export class Compressor implements AudioProcessor {
         const rmsR = Math.sqrt(Math.max(0, this.rmsStateR));
         detectL = detectL * (1 - rmsMix) + rmsL * rmsMix;
         detectR = detectR * (1 - rmsMix) + rmsR * rmsMix;
+        const linkedRms = Math.sqrt(Math.max(0, (this.rmsStateL + this.rmsStateR) * 0.5));
+        linkedDetector = linkedDetector * (1 - rmsMix) + linkedRms * rmsMix;
       }
 
       const link = this.linkSmooth.next();
-      const linkedDetector = Math.max(detectL, detectR);
       detectL += (linkedDetector - detectL) * link;
       detectR += (linkedDetector - detectR) * link;
-
       const grL = this.ballisticsL.process(this.targetReduction(detectL, threshold, ratio, knee));
       const grR = this.ballisticsR.process(this.targetReduction(detectR, threshold, ratio, knee));
       this.grDb = Math.max(grL, grR);

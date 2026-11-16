@@ -1,6 +1,6 @@
 import { ProcessorChain } from '../dsp/chain';
 import { valueAtTime, findLane } from '../dsp/automation';
-import type { ParamValues } from '../dsp/types';
+import type { ParamValues, ProcessorMeter } from '../dsp/types';
 import { dbToGain, clamp } from '../dsp/util';
 import type { BusState, ProcessorNodeState, ProjectState, TrackState } from '../model/types';
 
@@ -80,7 +80,7 @@ export class ProjectRenderer {
   private maxLatency = 0;
   private masterLatency = 0;
   private trackConfigSignature = '';
-  private meterRefs: Record<string, Record<string, { reduction?: number }>> = {};
+  private meterRefs: Record<string, Record<string, ProcessorMeter>> = {};
   private channelPeaks = new Map<string, { L: number; R: number }>();
 
   configure(project: ProjectState, assets: EngineAsset[], sampleRate: number, blockSize: number): void {
@@ -520,8 +520,8 @@ export class ProjectRenderer {
     };
   }
 
-  meterSnapshot(): Record<string, Record<string, { reduction?: number }>> {
-    const out: Record<string, Record<string, { reduction?: number }>> = {};
+  meterSnapshot(): Record<string, Record<string, ProcessorMeter>> {
+    const out: Record<string, Record<string, ProcessorMeter>> = {};
     for (const [id, path] of this.trackPaths) out[id] = path.chain.meters();
     for (const [id, path] of this.busPaths) out[id] = path.chain.meters();
     if (this.masterChain) out.master = this.masterChain.meters();
@@ -539,7 +539,7 @@ export class ProjectRenderer {
     return end;
   }
 
-  get lastMeters(): Record<string, Record<string, { reduction?: number }>> {
+  get lastMeters(): Record<string, Record<string, ProcessorMeter>> {
     return this.meterRefs;
   }
 
