@@ -2,6 +2,23 @@ import { describe, expect, it } from 'vitest';
 import { Biquad, designBiquad } from './biquad';
 
 describe('Biquad coefficient transitions', () => {
+  it('supports smoothed configuration without replacing its scratch coefficient object', () => {
+    const filter = new Biquad();
+    const first = designBiquad('bandpass', 3000, 0, 8, 48000);
+    const second = designBiquad('bandpass', 8000, 0, 12, 48000);
+
+    filter.configureSmoothed('bandpass', 3000, 0, 8, 48000, 64);
+    for (let i = 0; i < 64; i++) filter.process(0.25);
+    const reached = [filter.b0, filter.b1, filter.b2, filter.a1, filter.a2];
+    expect(reached).toEqual([first.b0, first.b1, first.b2, first.a1, first.a2]);
+
+    filter.configureSmoothed('bandpass', 8000, 0, 12, 48000, 64);
+    for (let i = 0; i < 64; i++) filter.process(0.25);
+    expect([filter.b0, filter.b1, filter.b2, filter.a1, filter.a2]).toEqual([
+      second.b0, second.b1, second.b2, second.a1, second.a2,
+    ]);
+  });
+
   it('reaches the target coefficients after the requested sample count', () => {
     const filter = new Biquad();
     const initial = designBiquad('lowpass', 800, 0, 0.707, 48_000);
