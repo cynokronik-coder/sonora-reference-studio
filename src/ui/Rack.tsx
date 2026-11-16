@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ProcessorNodeState } from '../audio/model/types';
 import { PROCESSOR_DEFINITIONS, getDefinition, formatParam } from '../audio/dsp/registry';
 import type { ParamSpec, ProcessorCategory, ProcessorMeter } from '../audio/dsp/types';
@@ -9,6 +9,8 @@ import { EQCurve, GainReductionMeter } from './viz';
 import { clamp } from '../audio/dsp/util';
 import { MULTIBAND_PRESETS } from '../audio/dsp/processors/multiband';
 import { DYNAMIC_EQ_PRESETS } from '../audio/dsp/processors/dynamicEq';
+import { SATURATION_PRESETS } from '../audio/dsp/processors/saturation';
+import { EXCITER_PRESETS } from '../audio/dsp/processors/exciter';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -365,6 +367,12 @@ function ProcessorParams({
 }) {
   const [multibandPreset, setMultibandPreset] = useState('');
   const [dynamicEqPreset, setDynamicEqPreset] = useState('');
+  const [saturationPreset, setSaturationPreset] = useState('');
+  const [exciterPreset, setExciterPreset] = useState('');
+  useEffect(() => {
+    setSaturationPreset('');
+    setExciterPreset('');
+  }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -377,6 +385,8 @@ function ProcessorParams({
   const update = (key: string, value: number) => {
     if (node.type === 'multibandComp') setMultibandPreset('');
     if (node.type === 'dynamicEq') setDynamicEqPreset('');
+    if (node.type === 'saturation') setSaturationPreset('');
+    if (node.type === 'exciter') setExciterPreset('');
     const patch: Record<string, number> = { [key]: value };
     if (node.type === 'multibandComp' && key === 'xLow') {
       patch.xHigh = Math.max(node.params.xHigh ?? 4000, value + 20);
@@ -397,6 +407,18 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setDynamicEqPreset(preset.id);
   };
+  const applySaturationPreset = (presetId: string) => {
+    const preset = SATURATION_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setSaturationPreset(preset.id);
+  };
+  const applyExciterPreset = (presetId: string) => {
+    const preset = EXCITER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setExciterPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
       {node.type === 'dynamicEq' && (
@@ -410,6 +432,32 @@ function ProcessorParams({
           {dynamicEqPreset && (
             <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
               {DYNAMIC_EQ_PRESETS.find((preset) => preset.id === dynamicEqPreset)?.description} Detector and band controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
+      {node.type === 'saturation' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select label="Saturation starting point" value={saturationPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...SATURATION_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applySaturationPreset}
+          />
+          {saturationPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {SATURATION_PRESETS.find((preset) => preset.id === saturationPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
+      {node.type === 'exciter' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select label="Exciter starting point" value={exciterPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...EXCITER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyExciterPreset}
+          />
+          {exciterPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {EXCITER_PRESETS.find((preset) => preset.id === exciterPreset)?.description} All controls remain editable.
             </p>
           )}
         </div>
