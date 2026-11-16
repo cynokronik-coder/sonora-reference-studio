@@ -28,8 +28,10 @@ smoothed. Added controls default to the prior fixed-ratio, hard-knee, Peak, full
 Overall and per-band gain reduction are reported to the rack.
 
 ### Resonance Suppressor
-Three high-Q dynamic notches (Q 1–30) with sensitivity and maximum cut. Frequencies can be set from the analysis engine's
-resonance report.
+Three high-Q dynamic notches (Q 1–30) with independent left/right detection, adjustable stereo linking, attack/release,
+sensitivity and maximum cut. Notch frequency, Q and attenuation changes are smoothed. Dry/wet is a true parallel blend,
+with output gain applied after the blend. New controls default to the prior 2 ms attack, 60 ms release and fully linked
+behavior so older parameter maps retain their response.
 
 ## Dynamics
 
@@ -53,8 +55,11 @@ settings. Crossover, solo, compression-bypass and output changes are smoothed to
 projects without the newer per-band solo or link values use the defaults (not soloed, fully linked).
 
 ### De-esser
-LR4 split above a tunable frequency; the high band is detected and dynamically reduced. Wideband mode applies the same
-reduction to the whole signal. Per-block gain reduction is metered.
+Fourth-order Linkwitz–Riley split above a tunable frequency; the high band is detected per channel and dynamically
+reduced. Adjustable ratio and stereo linking support dual-mono through linked detection. Wideband mode applies the
+same reduction to the recombined signal. Frequency, mode, dry/wet and output changes are smoothed; mix is a true
+parallel blend. Added controls default to the previous 5:1 detector response and fully linked behavior for older
+parameter maps.
 
 ### Transient Shaper
 Fast vs slow envelope comparison: transient energy drives attack gain, sustained energy drives sustain gain. Sensitivity,
