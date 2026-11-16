@@ -10,8 +10,9 @@ import { buildAssistantContext } from '../audio/ai/context';
 import { createValidatedAiProposal } from '../audio/ai/proposals';
 import { realtimeHost } from '../audio/engine/realtime';
 import type { EngineAsset } from '../audio/engine/renderer';
-import type { ProcessorMeter } from '../audio/dsp/types';
+import type { ProcessorMeterSnapshot } from '../audio/dsp/types';
 import { createProcessorNode, createProject as newProject, createTrack, createClip, createBus, defaultMatchSettings, uid } from '../audio/model/defaults';
+import { migrateLegacyGateParams, migrateProjectProcessorNodes } from '../audio/model/migrations';
 import type {
   AudioAssetMeta,
   BusState,
@@ -424,6 +425,7 @@ export const useApp = create<AppState>((set, get) => ({
       const rate = realtimeHost.sampleRate;
       const project = await db.getProject(id);
       if (!project) throw new Error('Project not found');
+      migrateProjectProcessorNodes(project);
       const assets = await db.listAssets(id);
       const analyses = await db.loadAnalyses(assets.map((a) => a.id));
       const exports = await db.listExports(id);
@@ -807,6 +809,7 @@ export const useApp = create<AppState>((set, get) => ({
       if (!node) return;
       const fresh = createProcessorNode(node.type);
       node.params = fresh.params;
+      node.version = fresh.version;
     });
   },
 
@@ -1295,7 +1298,14 @@ export const useApp = create<AppState>((set, get) => ({
     get().mutate((project) => {
       const chain = chainFor(project, scope, trackId ?? null);
       if (!chain) return;
-      chain.splice(0, chain.length, ...preset.processors.map((p) => createProcessorNode(p.type, p.params)));
+      const legacyPreset = !preset.builtIn && (preset.version ?? 1) < 2;
+      chain.splice(
+        0,
+        chain.length,
+        ...preset.processors.map((p) =>
+          createProcessorNode(p.type, legacyPreset && p.type === 'gate' ? migrateLegacyGateParams(p.params) : p.params),
+        ),
+      );
     });
     set({ toast: `Preset "${preset.name}" loaded. All parameters remain editable.` });
   },
@@ -1505,7 +1515,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 }));
 
-export let latestMeters: Record<string, Record<string, ProcessorMeter>> = {};
+export let latestMeters: ProcessorMeterSnapshot = {};
 
 function timelineDuration(project: ProjectState): number {
   let end = 0;

@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import type { ProcessorNodeState } from '../audio/model/types';
 import { PROCESSOR_DEFINITIONS, getDefinition, formatParam } from '../audio/dsp/registry';
-import type { ParamSpec, ProcessorCategory, ProcessorMeter } from '../audio/dsp/types';
+import type { ParamSpec, ProcessorCategory, ProcessorMeterSnapshot } from '../audio/dsp/types';
 import { useApp } from '../state/store';
 import type { ChainScope } from '../audio/model/project';
 import { Badge, Button, HelpTip, IconButton, Modal, ParamSlider, Select, Toggle } from './Primitives';
@@ -37,7 +37,7 @@ export function Rack({
   processors: ProcessorNodeState[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  meters?: Record<string, ProcessorMeter>;
+  meters?: ProcessorMeterSnapshot[string];
   emptyHint?: string;
   filterCategory?: ProcessorCategory | 'effects' | null;
 }) {
@@ -190,7 +190,7 @@ export function Rack({
 
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
-                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'deesser' || node.type === 'limiter') && (
+                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'deesser' || node.type === 'gate' || node.type === 'limiter') && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-2xs text-ink-500">Gain reduction</span>
                       <GainReductionMeter reductionDb={reduction} height={8} />
@@ -212,6 +212,12 @@ export function Rack({
                           </div>
                         );
                       })}
+                    </div>
+                  )}
+
+                  {node.type === 'gate' && (
+                    <div className="mt-1 text-right font-mono text-2xs text-ink-500">
+                      L -{(meters?.[node.id]?.reductionL ?? 0).toFixed(1)} dB · R -{(meters?.[node.id]?.reductionR ?? 0).toFixed(1)} dB
                     </div>
                   )}
 
