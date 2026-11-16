@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { ProcessorNodeState } from '../audio/model/types';
 import { PROCESSOR_DEFINITIONS, getDefinition, formatParam } from '../audio/dsp/registry';
 import type { ParamSpec, ProcessorCategory, ProcessorMeterSnapshot } from '../audio/dsp/types';
@@ -9,6 +9,8 @@ import { EQCurve, GainReductionMeter } from './viz';
 import { clamp } from '../audio/dsp/util';
 import { MULTIBAND_PRESETS } from '../audio/dsp/processors/multiband';
 import { DYNAMIC_EQ_PRESETS } from '../audio/dsp/processors/dynamicEq';
+import { DEESSER_PRESETS } from '../audio/dsp/processors/deesser';
+import { RESONANCE_PRESETS } from '../audio/dsp/processors/resonance';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -103,7 +105,8 @@ export function Rack({
         {visibleProcessors.map(({ node, index, definition: def }) => {
           if (!def) return null;
           const isSelected = node.id === selectedId;
-          const reduction = meters?.[node.id]?.reduction ?? 0;
+          const processorMeter = meters?.[node.id];
+          const reduction = processorMeter?.reduction ?? 0;
           return (
             <div
               key={node.id}
@@ -188,9 +191,30 @@ export function Rack({
 
                   {node.type === 'multibandComp' && <MultibandCrossoverView params={node.params} />}
 
+                  {node.type === 'resonance' && processorMeter?.bands && (
+                    <div className="mb-3 grid grid-cols-3 gap-2">
+                      {processorMeter.bands.map((value, bandIndex) => {
+                        const reductionDb = Math.abs(value);
+                        return (
+                          <div key={bandIndex} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">Notch {bandIndex + 1}</span>
+                              <span className="font-mono text-[10px] text-signal-amber">
+                                {reductionDb > 0.05 ? `-${reductionDb.toFixed(1)}` : '0.0'} dB
+                              </span>
+                            </div>
+                            <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
+                              <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
-                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'deesser' || node.type === 'gate' || node.type === 'limiter') && (
+                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'resonance' || node.type === 'deesser' || node.type === 'gate' || node.type === 'limiter') && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-2xs text-ink-500">Gain reduction</span>
                       <GainReductionMeter reductionDb={reduction} height={8} />
@@ -371,6 +395,13 @@ function ProcessorParams({
 }) {
   const [multibandPreset, setMultibandPreset] = useState('');
   const [dynamicEqPreset, setDynamicEqPreset] = useState('');
+  const [resonancePreset, setResonancePreset] = useState('');
+  const [deEsserPreset, setDeEsserPreset] = useState('');
+  useEffect(() => {
+    setDynamicEqPreset('');
+    setResonancePreset('');
+    setDeEsserPreset('');
+  }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
   const groups = new Map<string, ParamSpec[]>();
@@ -383,6 +414,8 @@ function ProcessorParams({
   const update = (key: string, value: number) => {
     if (node.type === 'multibandComp') setMultibandPreset('');
     if (node.type === 'dynamicEq') setDynamicEqPreset('');
+    if (node.type === 'resonance') setResonancePreset('');
+    if (node.type === 'deesser') setDeEsserPreset('');
     const patch: Record<string, number> = { [key]: value };
     if (node.type === 'multibandComp' && key === 'xLow') {
       patch.xHigh = Math.max(node.params.xHigh ?? 4000, value + 20);
@@ -403,6 +436,18 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setDynamicEqPreset(preset.id);
   };
+  const applyResonancePreset = (presetId: string) => {
+    const preset = RESONANCE_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setResonancePreset(preset.id);
+  };
+  const applyDeEsserPreset = (presetId: string) => {
+    const preset = DEESSER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setDeEsserPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
       {node.type === 'dynamicEq' && (
@@ -419,6 +464,18 @@ function ProcessorParams({
             </p>
           )}
         </div>
+      )}
+      {node.type === 'resonance' && (
+        <Select label="Resonance starting point" value={resonancePreset}
+          options={[{ value: '', label: 'Choose a starting point…' }, ...RESONANCE_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+          onChange={applyResonancePreset}
+        />
+      )}
+      {node.type === 'deesser' && (
+        <Select label="De-esser starting point" value={deEsserPreset}
+          options={[{ value: '', label: 'Choose a starting point…' }, ...DEESSER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+          onChange={applyDeEsserPreset}
+        />
       )}
       {node.type === 'multibandComp' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
