@@ -211,6 +211,17 @@ export class Biquad {
     this.set(designBiquad(type, freq, gainDb, q, sampleRate, this.coeffScratch));
   }
 
+  configureSmoothed(
+    type: FilterType,
+    freq: number,
+    gainDb: number,
+    q: number,
+    sampleRate: number,
+    sampleCount: number,
+  ): void {
+    this.setSmoothed(designBiquad(type, freq, gainDb, q, sampleRate, this.coeffScratch), sampleCount);
+  }
+
   reset(): void {
     this.x1 = this.x2 = this.y1 = this.y2 = 0;
     this.smoothingRemaining = 0;
