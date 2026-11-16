@@ -269,10 +269,11 @@ describe('ProjectRenderer compressor latency compensation', () => {
 describe('ProjectRenderer limiter latency compensation', () => {
   it('aligns a dry track with limiter look-ahead and reports the current engine latency', () => {
     const sampleRate = 48_000;
-    const assetLength = 512;
+    const assetLength = 2_048;
     const impulseL = new Float32Array(assetLength);
     const impulseR = new Float32Array(assetLength);
-    impulseL[0] = impulseR[0] = 1;
+    const impulseAt = 1_200;
+    impulseL[impulseAt] = impulseR[impulseAt] = 1;
     const asset: EngineAsset = {
       id: 'limiter-impulse',
       length: assetLength,
@@ -305,10 +306,12 @@ describe('ProjectRenderer limiter latency compensation', () => {
         renderedR.subarray(offset, offset + 128),
       );
     }
-    expect(renderedL.slice(0, 192).every((sample) => sample === 0)).toBe(true);
-    expect(renderedR.slice(0, 192).every((sample) => sample === 0)).toBe(true);
-    expect(renderedL[192]).toBeCloseTo(2, 6);
-    expect(renderedR[192]).toBeCloseTo(2, 6);
+    const alignedImpulseAt = impulseAt + 192;
+    expect(renderedL.slice(0, alignedImpulseAt).every((sample) => sample === 0)).toBe(true);
+    expect(renderedR.slice(0, alignedImpulseAt).every((sample) => sample === 0)).toBe(true);
+    // The limiter's 20 ms ceiling ramp has settled before this later impulse.
+    expect(renderedL[alignedImpulseAt]).toBeCloseTo(2, 6);
+    expect(renderedR[alignedImpulseAt]).toBeCloseTo(2, 6);
 
     limiter.params.lookahead = 0;
     renderer.setProject(project);
