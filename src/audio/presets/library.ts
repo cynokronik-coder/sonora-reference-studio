@@ -15,6 +15,8 @@ export interface PresetDefinition {
   category: PresetCategory;
   description: string;
   processors: PresetProcessor[];
+  /** Format version for parameter maps whose meaning has changed. */
+  version?: number;
   builtIn: boolean;
   createdAt: number;
 }
@@ -441,6 +443,7 @@ export function createPreset(
     category,
     description,
     processors,
+    version: 2,
     builtIn: false,
     createdAt: Date.now(),
   };
