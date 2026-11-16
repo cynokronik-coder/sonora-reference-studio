@@ -16,7 +16,7 @@ The suite uses synthetic signals only — no fixtures with unknown provenance.
 | Dynamic EQ | Peak/RMS detection, stereo linking, frequency-matched external keys, parameter automation, reset, and smoothed gain changes |
 | Compressor | over-threshold reduction, independent/linked stereo detection, external sidechain channels, smoothed output controls, finite extreme parameters, and exact lookahead latency across sample rates |
 | Renderer latency | dry and lookahead-compressed tracks remain sample-aligned |
-| Limiter | output stays under a -1 dBTP ceiling with lookahead, and GR is reported |
+| Limiter | exact configured look-ahead latency and impulse delay, detector window, sample/estimated-true-peak protection, separate L/R output peaks, smoothed gain/ceiling/trim, transient bursts, reset/bypass, chain and renderer latency compensation, and preset validity |
 | Clipper | soft/hard/tanh transfer curves, internal ceiling, per-channel metering, stereo isolation, 1x vs 4x alias reduction, smooth controls, bounded buffers and factory preset validity |
 | Saturation | output remains finite and differs from input (harmonics added) |
 | Multiband | independent band linking, band-matched external keys, solo/bypass, parameter compatibility, and smooth mode/crossover transitions |
@@ -52,7 +52,7 @@ The development environment used to build this has no browser. Before trusting a
 6. **A/B** — capture slots, recall them, confirm processing changes and that loudness-matched listening compensates level
    only.
 7. **Export** — render WAV 24-bit and 96 kHz, download, reopen in another tool. Verify duration, channel count, sample
-   rate and that it is not silent or clipped. Use Verify inside the app to decode the stored file and re-measure.
+   rate and that it is not silent or clipped. Use Verify inside the app to re-decode the stored file and remeasure the actual export in a separate analysis stage; do not reuse the limiter's realtime estimate as the export measurement.
 8. **Persistence** — reload the page and reopen the project. Chains, parameters, clips, analyses and exports should
    restore. Original files remain downloadable? (assets are re-decoded; exports are re-downloadable).
 9. **Errors** — try an unsupported file, a corrupt file, and a very large file. Failures should surface as messages, not

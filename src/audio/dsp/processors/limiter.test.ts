@@ -89,6 +89,48 @@ describe('Limiter look-ahead and latency contract', () => {
 });
 
 describe('Limiter peak control', () => {
+  it('controls repeated high-level transient bursts without exceeding the sample ceiling', () => {
+    const frames = BLOCK_SIZE * 16;
+    const sourceL = new Float32Array(frames);
+    const sourceR = new Float32Array(frames);
+    for (let index = 0; index < 32; index++) {
+      const position = 40 + index * 230;
+      sourceL[position] = index % 2 === 0 ? 2.2 : -2.2;
+      sourceR[position + 7] = index % 2 === 0 ? -1.8 : 1.8;
+    }
+    const result = render({ ...defaults(), truePeak: 0, lookahead: 4, ceiling: -1 }, sourceL, sourceR);
+    let peakL = 0;
+    let peakR = 0;
+    for (let i = 256; i < frames; i++) {
+      peakL = Math.max(peakL, Math.abs(result.left[i]));
+      peakR = Math.max(peakR, Math.abs(result.right[i]));
+    }
+    expect(peakL).toBeLessThanOrEqual(dbToGain(-1) + 0.003);
+    expect(peakR).toBeLessThanOrEqual(dbToGain(-1) + 0.003);
+  });
+
+  it('ramps output trim over 20 ms instead of stepping the gain', () => {
+    const limiter = new Limiter();
+    limiter.prepare(SAMPLE_RATE, BLOCK_SIZE);
+    const values = { ...defaults(), ceiling: 0, lookahead: 0, truePeak: 0, output: 0 };
+    limiter.setValues(values);
+    const warmL = new Float32Array(BLOCK_SIZE).fill(0.1);
+    const warmR = warmL.slice();
+    limiter.process(warmL, warmR, BLOCK_SIZE);
+
+    limiter.setValues({ ...values, output: -6 });
+    const rampL = new Float32Array(BLOCK_SIZE).fill(0.1);
+    const rampR = rampL.slice();
+    limiter.process(rampL, rampR, BLOCK_SIZE);
+    const nextL = new Float32Array(BLOCK_SIZE).fill(0.1);
+    const nextR = nextL.slice();
+    limiter.process(nextL, nextR, BLOCK_SIZE);
+
+    expect(rampL[0]).toBeGreaterThan(0.099);
+    expect(rampL[BLOCK_SIZE - 1]).toBeLessThan(rampL[0]);
+    expect(nextL[BLOCK_SIZE - 1]).toBeCloseTo(0.1 * dbToGain(-6), 4);
+  });
+
   it('keeps sample peaks below the requested ceiling with look-ahead', () => {
     const source = tone(90, 1.2);
     const result = render({ ...defaults(), truePeak: 0 }, source);
