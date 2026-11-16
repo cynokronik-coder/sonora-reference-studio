@@ -216,7 +216,28 @@ export function Rack({
 
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
-                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'resonance' || node.type === 'deesser' || node.type === 'gate' || node.type === 'limiter') && (
+                  {node.type === 'clipper' && processorMeter?.bands && (
+                    <div className="mb-3 grid grid-cols-2 gap-2">
+                      {(['Left', 'Right'] as const).map((label, channelIndex) => {
+                        const reductionDb = Math.abs(processorMeter.bands?.[channelIndex] ?? 0);
+                        return (
+                          <div key={label} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">{label} clip</span>
+                              <span className="font-mono text-[10px] text-signal-amber">
+                                {reductionDb > 0.05 ? `-${reductionDb.toFixed(1)}` : '0.0'} dB
+                              </span>
+                            </div>
+                            <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
+                              <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'resonance' || node.type === 'deesser' || node.type === 'gate' || node.type === 'clipper' || node.type === 'limiter') && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-2xs text-ink-500">Gain reduction</span>
                       <GainReductionMeter reductionDb={reduction} height={8} />

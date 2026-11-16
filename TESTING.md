@@ -17,6 +17,7 @@ The suite uses synthetic signals only — no fixtures with unknown provenance.
 | Compressor | over-threshold reduction, independent/linked stereo detection, external sidechain channels, smoothed output controls, finite extreme parameters, and exact lookahead latency across sample rates |
 | Renderer latency | dry and lookahead-compressed tracks remain sample-aligned |
 | Limiter | output stays under a -1 dBTP ceiling with lookahead, and GR is reported |
+| Clipper | soft/hard/tanh transfer curves, internal ceiling, per-channel metering, stereo isolation, 1x vs 4x alias reduction, smooth controls, bounded buffers and factory preset validity |
 | Saturation | output remains finite and differs from input (harmonics added) |
 | Multiband | independent band linking, band-matched external keys, solo/bypass, parameter compatibility, and smooth mode/crossover transitions |
 | Crossover | LR4 reconstruction magnitude and continuous phase near both split frequencies across supported sample rates |
