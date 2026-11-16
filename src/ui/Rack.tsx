@@ -11,6 +11,7 @@ import { MULTIBAND_PRESETS } from '../audio/dsp/processors/multiband';
 import { DYNAMIC_EQ_PRESETS } from '../audio/dsp/processors/dynamicEq';
 import { SATURATION_PRESETS } from '../audio/dsp/processors/saturation';
 import { EXCITER_PRESETS } from '../audio/dsp/processors/exciter';
+import { CLIPPER_PRESETS } from '../audio/dsp/processors/limiter';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -105,7 +106,8 @@ export function Rack({
         {visibleProcessors.map(({ node, index, definition: def }) => {
           if (!def) return null;
           const isSelected = node.id === selectedId;
-          const reduction = meters?.[node.id]?.reduction ?? 0;
+          const meter = meters?.[node.id];
+          const reduction = meter?.reduction ?? 0;
           return (
             <div
               key={node.id}
@@ -192,7 +194,28 @@ export function Rack({
 
                   <ProcessorParams scope={scope} trackId={trackId} node={node} advanced={mode === 'advanced'} />
 
-                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'deesser' || node.type === 'limiter') && (
+                  {node.type === 'clipper' && meter?.bands && (
+                    <div className="mb-3 grid grid-cols-2 gap-2">
+                      {(['Left', 'Right'] as const).map((label, channelIndex) => {
+                        const reductionDb = Math.abs(meter.bands?.[channelIndex] ?? 0);
+                        return (
+                          <div key={label} className="rounded-lg border border-white/[.06] bg-black/20 px-2 py-1.5">
+                            <div className="mb-1 flex items-center justify-between gap-1">
+                              <span className="text-[10px] text-ink-500">{label} clip</span>
+                              <span className="font-mono text-[10px] text-signal-amber">
+                                {reductionDb > 0.05 ? `-${reductionDb.toFixed(1)}` : '0.0'} dB
+                              </span>
+                            </div>
+                            <div className="h-1 overflow-hidden rounded-full bg-white/[.06]">
+                              <div className="h-full rounded-full bg-[#A77AFF] transition-[width]" style={{ width: `${clamp((reductionDb / 18) * 100, 0, 100)}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {(node.type === 'compressor' || node.type === 'multibandComp' || node.type === 'dynamicEq' || node.type === 'deesser' || node.type === 'clipper' || node.type === 'limiter') && (
                     <div className="mt-2 flex items-center gap-2">
                       <span className="text-2xs text-ink-500">Gain reduction</span>
                       <GainReductionMeter reductionDb={reduction} height={8} />
@@ -369,9 +392,11 @@ function ProcessorParams({
   const [dynamicEqPreset, setDynamicEqPreset] = useState('');
   const [saturationPreset, setSaturationPreset] = useState('');
   const [exciterPreset, setExciterPreset] = useState('');
+  const [clipperPreset, setClipperPreset] = useState('');
   useEffect(() => {
     setSaturationPreset('');
     setExciterPreset('');
+    setClipperPreset('');
   }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
@@ -387,6 +412,7 @@ function ProcessorParams({
     if (node.type === 'dynamicEq') setDynamicEqPreset('');
     if (node.type === 'saturation') setSaturationPreset('');
     if (node.type === 'exciter') setExciterPreset('');
+    if (node.type === 'clipper') setClipperPreset('');
     const patch: Record<string, number> = { [key]: value };
     if (node.type === 'multibandComp' && key === 'xLow') {
       patch.xHigh = Math.max(node.params.xHigh ?? 4000, value + 20);
@@ -419,6 +445,12 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setExciterPreset(preset.id);
   };
+  const applyClipperPreset = (presetId: string) => {
+    const preset = CLIPPER_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setClipperPreset(preset.id);
+  };
   return (
     <div className="space-y-2">
       {node.type === 'dynamicEq' && (
@@ -445,6 +477,19 @@ function ProcessorParams({
           {saturationPreset && (
             <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
               {SATURATION_PRESETS.find((preset) => preset.id === saturationPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
+      {node.type === 'clipper' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select label="Clipper starting point" value={clipperPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...CLIPPER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyClipperPreset}
+          />
+          {clipperPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {CLIPPER_PRESETS.find((preset) => preset.id === clipperPreset)?.description} All controls remain editable.
             </p>
           )}
         </div>
