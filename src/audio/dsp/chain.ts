@@ -60,6 +60,8 @@ export class ProcessorChain {
         processor.setValues(config.params);
         this.keyConfig.set(config.id, key);
       }
+      const previous = this.nodes.find((node) => node.config.id === config.id);
+      if (previous?.config.enabled && !config.enabled) processor.reset();
       next.push({ config, processor });
     }
     // Dispose removed processors and all per-node routing/configuration state.

@@ -263,3 +263,58 @@ describe('ProjectRenderer compressor latency compensation', () => {
     expect(renderedL.slice(0, 192).every((sample) => sample === 0)).toBe(true);
   });
 });
+
+
+
+describe('ProjectRenderer limiter latency compensation', () => {
+  it('aligns a dry track with limiter look-ahead and reports the current engine latency', () => {
+    const sampleRate = 48_000;
+    const assetLength = 2_048;
+    const impulseL = new Float32Array(assetLength);
+    const impulseR = new Float32Array(assetLength);
+    const impulseAt = 1_200;
+    impulseL[impulseAt] = impulseR[impulseAt] = 1;
+    const asset: EngineAsset = {
+      id: 'limiter-impulse',
+      length: assetLength,
+      sampleRate,
+      L: impulseL,
+      R: impulseR,
+    };
+
+    const limited = createTrack('audio', 'Look-ahead limiter', 0);
+    limited.clips.push(createClip(asset.id, assetLength / sampleRate));
+    const limiter = createProcessorNode('limiter', {
+      input: 0, ceiling: 0, release: 80, lookahead: 4, truePeak: 0, output: 0,
+    });
+    limited.processors.push(limiter);
+    const dry = createTrack('audio', 'Dry', 1);
+    dry.clips.push(createClip(asset.id, assetLength / sampleRate));
+
+    const project = createProject('Limiter latency compensation', sampleRate);
+    project.tracks = [limited, dry];
+    const renderer = new ProjectRenderer();
+    renderer.configure(project, [asset], sampleRate, 128);
+    expect(renderer.totalLatency).toBe(192);
+
+    const renderedL = new Float32Array(assetLength);
+    const renderedR = new Float32Array(assetLength);
+    for (let offset = 0; offset < assetLength; offset += 128) {
+      renderer.renderBlock(
+        offset, 128,
+        renderedL.subarray(offset, offset + 128),
+        renderedR.subarray(offset, offset + 128),
+      );
+    }
+    const alignedImpulseAt = impulseAt + 192;
+    expect(renderedL.slice(0, alignedImpulseAt).every((sample) => sample === 0)).toBe(true);
+    expect(renderedR.slice(0, alignedImpulseAt).every((sample) => sample === 0)).toBe(true);
+    // The limiter's 20 ms ceiling ramp has settled before this later impulse.
+    expect(renderedL[alignedImpulseAt]).toBeCloseTo(2, 6);
+    expect(renderedR[alignedImpulseAt]).toBeCloseTo(2, 6);
+
+    limiter.params.lookahead = 0;
+    renderer.setProject(project);
+    expect(renderer.totalLatency).toBe(0);
+  });
+});

@@ -76,12 +76,21 @@ at the selected oversampling factor, subtracts a phase-matched linear reference,
 harmonic delta to the untouched original programme. This keeps the low-frequency programme out of the nonlinear
 stage. The Exciter uses prepared buffers and smoothed drive, style, amount and output controls.
 
+### Clipper render path
+
+The Clipper copies left/right input into prepared dry buffers, upsamples both channels through independent IIR filter
+banks at 2x/4x, shapes samples with the selected soft/hard/tanh transfer curve, then downsamples into prepared wet
+buffers. A second matching IIR oversampler advances continuously on the untouched dry input so partial wet blends use
+the same phase/filter history. Drive and internal ceiling are interpolated per oversampled sample; style crossfades and
+mix/output trims ramp to avoid abrupt parameter steps. The internal clipping ceiling is before output trim and is not a
+final true-peak guarantee. Use the downstream limiter for a delivered dBTP ceiling. The IIR oversampler reduces aliasing
+but has frequency-dependent phase shift, not linear phase.
 ## True peak
 
-- `TruePeakMeter` applies a 4x oversampled low-pass chain and tracks the maximum absolute interpolated sample.
-- Analysis uses it in 512-frame chunks to measure dBTP over the whole file.
-- The limiter measures each block's oversampled peak and tightens its effective ceiling by the derived
-  inter-sample/sample-peak ratio. That means masters meet a dBTP ceiling rather than only a sample-peak ceiling.
+- `TruePeakMeter` applies a 4x IIR oversampling estimate in analysis and post-export re-decode.
+- The Limiter uses a separate block-based 4x IIR estimate only as a protective detector, with a conservative 0.5 dB guard. This estimate is not a standards-certified true-peak measurement.
+- Export Verify re-decodes the stored encoded file and remeasures the actual export. Treat that post-export result as the authoritative in-app measurement of the delivered file, separate from the Limiter's live detector.
+- For standards-based delivery sign-off, use a meter compliant with ITU-R BS.1770-5 and the applicable EBU guidance.
 
 ## Loudness
 
@@ -105,15 +114,9 @@ than stepping filter coefficients abruptly. Structural parameter sync happens ou
 
 ## Latency compensation
 
-The linear-phase EQ uses a 513-tap symmetric FIR with exactly 256 samples of group delay. `ProjectRenderer` computes the maximum track/bus
-latency and inserts integer delays on the other paths, including the intermediate bus stage. Offline export renders
-`totalLatency` extra frames and discards the head. All paths therefore remain sample-aligned. The compressor reports
-its configured lookahead delay as `round(lookaheadMs * sampleRate / 1000)` samples, which is included in this
-compensation.
+The linear-phase EQ uses a 513-tap symmetric FIR with exactly 256 samples of group delay (about 5.33 ms at 48 kHz). The Limiter reports its configured look-ahead delay (0–10 ms) through the processor latency contract. `ProcessorChain` sums latency from enabled processors, and `ProjectRenderer` recomputes track and bus path compensation when project processor settings change. Minimum-phase biquad coefficient changes are smoothed over 20 ms, with interpolation performed per sample in the audio processing loop.
 
-The multiband processor uses separate LR4 crossover state for programme and external-key paths. Crossover histories
-are reset when the engine is prepared at a new sample rate; frequency and band-mode changes are smoothed in the
-processor without allocating in its block-processing loop.
+`ProjectRenderer` delays track and bus paths to align routes before the master chain. Master-chain latency is included in `totalLatency`; offline export renders that many extra frames and discards the head so the exported programme remains timeline-aligned.
 
 ## Adding a processor
 

@@ -77,13 +77,28 @@ are migrated to retain their prior attenuation curve and shared-detector behavio
 gates use the standard expansion curve, and the advanced curve selector can switch existing gates to it.
 
 ### Clipper
-Soft cubic, hard or tanh clipping with drive, ceiling, mix and output. Intended before the limiter to shave isolated
-peaks; it genuinely adds harmonics.
+Three transfer curves: Soft (odd cubic, unity slope at zero and zero-slope transition at the internal ceiling), Hard
+(exact sample-domain clamp at the internal ceiling) and Tanh (rounded asymptotic curve). Drive and clip ceiling are
+ramped over 20 ms; style crossfades, dry/wet and output changes are smoothed. 1x/2x/4x oversampling is selectable.
+The IIR oversampler reduces aliasing but is not linear-phase and has frequency-dependent phase shift. A matched
+oversampled dry reference is maintained for parallel blends; at settled 0% wet with output at 0 dB the original samples
+are returned exactly. Left/right processing and peak/reduction meters are independent. The clip ceiling applies before
+post-clip output trim, so positive output gain can exceed it; use the downstream limiter for a final dBTP ceiling.
+Factory starting points include Soft peak rounding, Drum impact, Tanh smoothness, Mastering peak shave and Hard
+creative clip.
 
 ### Limiter
-Look-ahead brickwall. A monotonic sliding maximum over the lookahead window computes the required gain before the
-transient arrives. Release is programme-scaled. True-peak mode uses 4x interpolation to tighten the ceiling for
-inter-sample peaks. Reports gain reduction and output peak.
+Stereo-linked look-ahead limiter with a monotonic sliding maximum whose detector window is exactly the configured
+look-ahead length plus the current sample. The processor reports the corresponding delay in samples so the renderer
+can latency-compensate other tracks and buses; the range is 0–10 ms. Attack is immediate after the look-ahead window;
+release is programme-smoothed. Input gain, output trim and ceiling changes ramp over 20 ms. True-peak mode uses a 4x
+IIR interpolation estimate to tighten the internal ceiling, with an additional 0.5 dB safety guard to cover the
+block-based estimate and delayed output alignment. This is an engineering safety margin, not a certified
+standards-compliant true-peak meter; verify final deliverables with an independent meter when broadcast/delivery
+specifications require it. Output trim is after limiting and can raise the final signal above the limiter ceiling, so
+leave it at 0 dB for ceiling compliance. The rack reports gain reduction and separate left/right output peaks.
+Factory starting points include Transparent true-peak, Punch preservation, Loudness push, Safe delivery and
+Low-latency sample peak.
 
 ## Saturation
 
