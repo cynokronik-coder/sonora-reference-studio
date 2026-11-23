@@ -14,6 +14,9 @@ import { RESONANCE_PRESETS } from '../audio/dsp/processors/resonance';
 import { SATURATION_PRESETS } from '../audio/dsp/processors/saturation';
 import { EXCITER_PRESETS } from '../audio/dsp/processors/exciter';
 import { CLIPPER_PRESETS, LIMITER_PRESETS } from '../audio/dsp/processors/limiter';
+import { STEREO_PRESETS } from '../audio/dsp/processors/stereo';
+import { REVERB_PRESETS } from '../audio/dsp/processors/reverb';
+import { DELAY_PRESETS } from '../audio/dsp/processors/delay';
 
 const CATEGORY_ORDER: ProcessorCategory[] = ['eq', 'dynamics', 'saturation', 'stereo', 'time', 'vocal', 'mastering', 'utility'];
 const CATEGORY_LABELS: Record<ProcessorCategory, string> = {
@@ -452,11 +455,17 @@ function ProcessorParams({
   const [exciterPreset, setExciterPreset] = useState('');
   const [clipperPreset, setClipperPreset] = useState('');
   const [limiterPreset, setLimiterPreset] = useState('');
+  const [stereoPreset, setStereoPreset] = useState('');
+  const [reverbPreset, setReverbPreset] = useState('');
+  const [delayPreset, setDelayPreset] = useState('');
   useEffect(() => {
     setSaturationPreset('');
     setExciterPreset('');
     setClipperPreset('');
     setLimiterPreset('');
+    setStereoPreset('');
+    setReverbPreset('');
+    setDelayPreset('');
   }, [node.id]);
   const def = getDefinition(node.type);
   if (!def) return null;
@@ -476,6 +485,9 @@ function ProcessorParams({
     if (node.type === 'exciter') setExciterPreset('');
     if (node.type === 'clipper') setClipperPreset('');
     if (node.type === 'limiter') setLimiterPreset('');
+    if (node.type === 'stereo') setStereoPreset('');
+    if (node.type === 'reverb') setReverbPreset('');
+    if (node.type === 'delay') setDelayPreset('');
     const patch: Record<string, number> = { [key]: value };
     if (node.type === 'multibandComp' && key === 'xLow') {
       patch.xHigh = Math.max(node.params.xHigh ?? 4000, value + 20);
@@ -520,6 +532,24 @@ function ProcessorParams({
     useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
     setExciterPreset(preset.id);
   };
+  const applyStereoPreset = (presetId: string) => {
+    const preset = STEREO_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setStereoPreset(preset.id);
+  };
+  const applyReverbPreset = (presetId: string) => {
+    const preset = REVERB_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setReverbPreset(preset.id);
+  };
+  const applyDelayPreset = (presetId: string) => {
+    const preset = DELAY_PRESETS.find((item) => item.id === presetId);
+    if (!preset) return;
+    useApp.getState().updateProcessorParams(scope, trackId, node.id, preset.values);
+    setDelayPreset(preset.id);
+  };
   const applyClipperPreset = (presetId: string) => {
     const preset = CLIPPER_PRESETS.find((item) => item.id === presetId);
     if (!preset) return;
@@ -560,6 +590,51 @@ function ProcessorParams({
           options={[{ value: '', label: 'Choose a starting point…' }, ...DEESSER_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
           onChange={applyDeEsserPreset}
         />
+      )}
+      {node.type === 'delay' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Delay starting point"
+            value={delayPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...DELAY_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyDelayPreset}
+          />
+          {delayPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {DELAY_PRESETS.find((preset) => preset.id === delayPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
+      {node.type === 'reverb' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Reverb starting point"
+            value={reverbPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...REVERB_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyReverbPreset}
+          />
+          {reverbPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {REVERB_PRESETS.find((preset) => preset.id === reverbPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
+      )}
+      {node.type === 'stereo' && (
+        <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">
+          <Select
+            label="Stereo imaging starting point"
+            value={stereoPreset}
+            options={[{ value: '', label: 'Choose a starting point…' }, ...STEREO_PRESETS.map((preset) => ({ value: preset.id, label: preset.name }))]}
+            onChange={applyStereoPreset}
+          />
+          {stereoPreset && (
+            <p className="mt-1.5 text-[10px] leading-relaxed text-ink-500">
+              {STEREO_PRESETS.find((preset) => preset.id === stereoPreset)?.description} All controls remain editable.
+            </p>
+          )}
+        </div>
       )}
       {node.type === 'limiter' && (
         <div className="rounded border border-[#A77AFF]/15 bg-[#8957FF]/[.045] p-2.5">

@@ -71,7 +71,7 @@ export interface MatchPlan {
 export interface MatchGenerationOptions {
   settings: MatchSettings;
   target: AnalysisReport;
-  references: { assetId: string; report: AnalysisReport; weight?: number }[];
+  references: { assetId: string; report: AnalysisReport; weight?: number; sectionIndex?: number }[];
   targetTruePeakDb?: number;
 }
 
@@ -112,17 +112,24 @@ export function effectiveScales(settings: MatchSettings): CategorySource {
   };
 }
 
-function pickSection(report: AnalysisReport, which: 'full' | 'chorus' | 'verse'): SectionReport | null {
+export function selectAnalysisSection(
+  report: AnalysisReport,
+  which: 'full' | 'chorus' | 'verse',
+  exactIndex?: number,
+): SectionReport | null {
+  if (Number.isInteger(exactIndex) && (exactIndex as number) >= 0) {
+    return report.sections.find((section) => section.index === exactIndex) ?? null;
+  }
   if (which === 'full') return null;
-  const matching = report.sections.filter((s) => s.label === which);
+  const matching = report.sections.filter((section) => section.label === which);
   if (!matching.length) return null;
-  // Choose the most representative (longest) matching section.
+  // Automatic mode uses the longest detected occurrence of the requested class.
   return matching.reduce((a, b) => ((b.end - b.start) > (a.end - a.start) ? b : a));
 }
 
 function bandsFor(report: AnalysisReport, section: 'full' | 'chorus' | 'verse'): BandLevel[] {
-  const s = pickSection(report, section);
-  return s ? s.bands : report.spectrum.bands;
+  const selected = selectAnalysisSection(report, section);
+  return selected ? selected.bands : report.spectrum.bands;
 }
 
 interface Metrics {
@@ -143,29 +150,221 @@ interface Metrics {
   lowEnergyDb: number;
   tempoBpm: number;
   bands: BandLevel[];
+  sectionFallback: boolean;
+  metricFallbacks: string[];
+  duration: number;
 }
 
-function metricsFrom(report: AnalysisReport, section: 'full' | 'chorus' | 'verse'): Metrics {
-  const sec = pickSection(report, section);
+type ReferenceInput = { assetId: string; report: AnalysisReport; weight?: number; sectionIndex?: number };
+
+export interface ResolvedReferenceMetrics {
+  metrics: Metrics;
+  assetIds: string[];
+  fallbackAssetIds: string[];
+  metricFallbacks: string[];
+  name: string;
+  agreement: CategorySource;
+  quality: number;
+}
+
+function metricsFrom(report: AnalysisReport, section: 'full' | 'chorus' | 'verse', exactIndex?: number): Metrics {
+  const sec = selectAnalysisSection(report, section, exactIndex);
+  const exactRequested = Number.isInteger(exactIndex) && (exactIndex as number) >= 0;
+  const metricFallbacks: string[] = [];
+  const sectionValue = (value: number | null | undefined, fallback: number, label: string): number => {
+    if (!sec) return fallback;
+    if (typeof value === 'number' && Number.isFinite(value)) return value;
+    metricFallbacks.push(label);
+    return fallback;
+  };
   return {
     lufs: sec ? sec.lufs : report.loudness.integratedLufs,
-    truePeakDb: report.loudness.truePeakDb,
+    truePeakDb: sectionValue(sec?.truePeakDb, report.loudness.truePeakDb, 'true peak'),
     crestDb: sec ? sec.crestDb : report.loudness.crestDb,
-    lra: report.loudness.lra,
-    plrDb: report.loudness.plrDb,
+    lra: sectionValue(sec?.lra, report.loudness.lra, 'LRA'),
+    plrDb: sectionValue(sec?.plrDb, report.loudness.plrDb, 'PLR'),
     widthDb: sec ? sec.widthDb : report.stereo.widthDb,
     correlation: sec ? sec.correlation : report.stereo.correlation,
-    monoCompatibility: report.stereo.monoCompatibility,
-    lowSideDb: report.stereo.lowSideRatioDb,
-    punchScore: report.rhythm.punchScore,
-    attackDensity: report.rhythm.onsetDensity,
-    flatness: report.spectrum.flatness,
-    tiltDbPerOct: report.spectrum.tiltDbPerOct,
-    highEnergyDb: report.spectrum.highEnergyDb,
-    lowEnergyDb: report.spectrum.lowEnergyDb,
-    tempoBpm: report.rhythm.tempoBpm,
-    bands: bandsFor(report, section),
+    monoCompatibility: sectionValue(sec?.monoCompatibility, report.stereo.monoCompatibility, 'mono compatibility'),
+    lowSideDb: sectionValue(sec?.lowSideRatioDb, report.stereo.lowSideRatioDb, 'low-frequency side ratio'),
+    punchScore: sectionValue(sec?.punchScore, report.rhythm.punchScore, 'punch score'),
+    attackDensity: sectionValue(sec?.attackDensity, report.rhythm.onsetDensity, 'transient density'),
+    flatness: sec ? sec.flatness : report.spectrum.flatness,
+    tiltDbPerOct: sec ? sec.tiltDbPerOct : report.spectrum.tiltDbPerOct,
+    highEnergyDb: sec ? sec.highEnergyDb : report.spectrum.highEnergyDb,
+    lowEnergyDb: sec ? sec.lowEnergyDb : report.spectrum.lowEnergyDb,
+    tempoBpm: sectionValue(sec?.tempoBpm, report.rhythm.tempoBpm, 'tempo'),
+    bands: sec ? sec.bands : report.spectrum.bands,
+    sectionFallback: (!sec && (exactRequested || section !== 'full')),
+    metricFallbacks,
+    duration: sec ? sec.end - sec.start : report.duration,
   };
+}
+
+function weightedMean(values: number[], weights: number[]): number {
+  let sum = 0;
+  let total = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (!Number.isFinite(values[i]) || !(weights[i] > 0)) continue;
+    sum += values[i] * weights[i];
+    total += weights[i];
+  }
+  return total > 0 ? sum / total : -Infinity;
+}
+
+function weightedDbMean(values: number[], weights: number[], reference: 'power' | 'amplitude'): number {
+  const factor = reference === 'power' ? 10 : 20;
+  const linear = values.map((value) => Number.isFinite(value) ? Math.pow(10, value / factor) : Number.NaN);
+  const mean = weightedMean(linear, weights);
+  return mean > 0 ? factor * Math.log10(mean) : -Infinity;
+}
+
+function weightedSpread(values: number[], weights: number[], tolerance: number): number {
+  const mean = weightedMean(values, weights);
+  if (!Number.isFinite(mean)) return 0.2;
+  let variance = 0;
+  let total = 0;
+  for (let i = 0; i < values.length; i++) {
+    if (!Number.isFinite(values[i]) || !(weights[i] > 0)) continue;
+    variance += weights[i] * Math.pow(values[i] - mean, 2);
+    total += weights[i];
+  }
+  return clamp(1 - Math.sqrt(variance / Math.max(1e-12, total)) / tolerance, 0.2, 1);
+}
+
+/**
+ * Resolve either one explicitly selected reference or a weighted consensus.
+ * A negative source index means "blend all references"; zero-weight references
+ * are excluded from that blend. If every weight is zero, equal weights are used
+ * rather than producing an empty or silent reference.
+ */
+export function resolveReferenceMetrics(
+  sourceIndex: number | undefined,
+  references: ReferenceInput[],
+  section: 'full' | 'chorus' | 'verse',
+): ResolvedReferenceMetrics {
+  if (!references.length) throw new Error('At least one analysed reference is required.');
+  const blended = sourceIndex === undefined || Math.round(sourceIndex) < 0;
+  const requested = blended ? references : [references[clamp(Math.round(sourceIndex), 0, references.length - 1)]];
+  const positiveWeightReferences = blended
+    ? requested.filter((entry) => Number.isFinite(entry.weight) && (entry.weight as number) > 0)
+    : requested;
+  const selected = blended && positiveWeightReferences.length ? positiveWeightReferences : requested;
+  const selectedMetrics = selected.map((entry) => metricsFrom(entry.report, section, entry.sectionIndex));
+  let weights = selected.map((entry) => blended && Number.isFinite(entry.weight) ? Math.max(0, entry.weight as number) : 1);
+  if (weights.every((weight) => weight <= 0)) weights = selected.map(() => 1);
+  const sum = weights.reduce((a, b) => a + b, 0);
+  weights = weights.map((weight) => weight / sum);
+
+  const first = selectedMetrics[0];
+  const numericKeys: (keyof Omit<Metrics, 'bands' | 'sectionFallback' | 'metricFallbacks' | 'duration' | 'lufs' | 'truePeakDb'>)[] = [
+    'crestDb', 'lra', 'plrDb', 'widthDb', 'correlation', 'monoCompatibility',
+    'lowSideDb', 'punchScore', 'attackDensity', 'flatness', 'tiltDbPerOct',
+    'highEnergyDb', 'lowEnergyDb', 'tempoBpm',
+  ];
+  const metrics: Metrics = {
+    ...first,
+    lufs: weightedDbMean(selectedMetrics.map((value) => value.lufs), weights, 'power'),
+    truePeakDb: weightedDbMean(selectedMetrics.map((value) => value.truePeakDb), weights, 'amplitude'),
+    bands: [],
+    sectionFallback: selectedMetrics.some((value) => value.sectionFallback),
+    metricFallbacks: [...new Set(selectedMetrics.flatMap((value) => value.metricFallbacks))],
+    duration: weightedMean(selectedMetrics.map((value) => value.duration), weights),
+  };
+  for (const key of numericKeys) {
+    (metrics as unknown as Record<string, number>)[key] = weightedMean(
+      selectedMetrics.map((value) => value[key] as number),
+      weights,
+    );
+  }
+
+  const bandCount = Math.max(...selectedMetrics.map((value) => value.bands.length));
+  metrics.bands = Array.from({ length: bandCount }, (_, index) => {
+    const center = selectedMetrics.find((value) => value.bands[index])?.bands[index]?.center ?? 0;
+    const db = weightedDbMean(
+      selectedMetrics.map((value) => value.bands[index]?.db ?? Number.NaN),
+      weights,
+      'power',
+    );
+    return { center, db, relativeDb: 0 };
+  });
+  const averageDb = metrics.bands.reduce((total, band) => total + band.db, 0) / Math.max(1, metrics.bands.length);
+  metrics.bands.forEach((band) => { band.relativeDb = band.db - averageDb; });
+
+  const relativeByReference = selectedMetrics.map((value) => {
+    const avg = value.bands.reduce((total, band) => total + band.db, 0) / Math.max(1, value.bands.length);
+    return value.bands.map((band) => band.db - avg);
+  });
+  const tonalSpread = Math.sqrt(
+    metrics.bands.reduce((total, band, index) => {
+      const mean = band.relativeDb;
+      const variance = weightedMean(
+        relativeByReference.map((values) => Number.isFinite(values[index]) ? Math.pow(values[index] - mean, 2) : Number.NaN),
+        weights,
+      );
+      return total + (Number.isFinite(variance) ? variance : 0);
+    }, 0) / Math.max(1, metrics.bands.length),
+  );
+  const spread = (key: keyof Metrics, tolerance: number) =>
+    weightedSpread(selectedMetrics.map((value) => value[key] as number), weights, tolerance);
+  const agreement: CategorySource = {
+    frequencyBalance: clamp(1 - tonalSpread / 10, 0.2, 1),
+    loudness: spread('lufs', 6),
+    dynamics: Math.min(spread('crestDb', 6), spread('lra', 5)),
+    stereoWidth: spread('widthDb', 8),
+    punch: spread('punchScore', 0.35),
+    saturation: Math.min(spread('flatness', 0.25), spread('tiltDbPerOct', 4)),
+    character: Math.min(spread('lra', 5), spread('crestDb', 6)),
+  };
+  const quality = weightedMean(selectedMetrics.map((value) => {
+    const loudnessQuality = Number.isFinite(value.lufs) && value.lufs > -60 ? 1 : 0.55;
+    const durationQuality = clamp(Math.log10(Math.max(1, value.duration)) / Math.log10(30), 0.55, 1);
+    const sectionQuality = value.sectionFallback ? 0.9 : 1;
+    return loudnessQuality * durationQuality * sectionQuality;
+  }), weights);
+  const fallbackAssetIds = selected.filter((entry, index) => selectedMetrics[index].sectionFallback).map((entry) => entry.assetId);
+
+  return {
+    metrics,
+    assetIds: selected.map((entry) => entry.assetId),
+    fallbackAssetIds,
+    metricFallbacks: metrics.metricFallbacks,
+    name: blended ? 'weighted reference blend' : (selected.length === 1 ? 'selected reference' : 'reference'),
+    agreement,
+    quality: Number.isFinite(quality) ? quality : 0.55,
+  };
+}
+
+function referenceFor(
+  sources: CategorySource,
+  category: keyof CategorySource,
+  references: ReferenceInput[],
+  section: 'full' | 'chorus' | 'verse',
+): ResolvedReferenceMetrics {
+  return resolveReferenceMetrics(sources[category], references, section);
+}
+
+/** Estimate true peak after a broadband gain change, before dynamics processing. */
+export function estimatePreLimiterTruePeak(sourceTruePeakDb: number, gainChangeDb: number): number {
+  if (!Number.isFinite(sourceTruePeakDb) || !Number.isFinite(gainChangeDb)) {
+    throw new RangeError('True-peak and gain estimates must be finite numbers.');
+  }
+  return sourceTruePeakDb + gainChangeDb;
+}
+
+function confidenceFor(
+  base: number,
+  reference: ResolvedReferenceMetrics,
+  category: keyof CategorySource,
+  target: Metrics,
+): number {
+  // This is a transparent heuristic, not a calibrated probability. Agreement
+  // between references and source-analysis quality reduce overconfident advice.
+  const agreementFactor = 0.65 + 0.35 * reference.agreement[category];
+  const qualityFactor = 0.8 + 0.2 * reference.quality;
+  const targetSectionFactor = target.sectionFallback ? 0.92 : 1;
+  const targetSignalFactor = Number.isFinite(target.lufs) ? 1 : 0.65;
+  return clamp(base * agreementFactor * qualityFactor * targetSectionFactor * targetSignalFactor, 0.1, 0.95);
 }
 
 function fmtDb(v: number, digits = 1): string {
@@ -186,15 +385,6 @@ function severityFor(deltaDb: number): 'low' | 'medium' | 'high' {
   if (a >= 6) return 'high';
   if (a >= 3) return 'medium';
   return 'low';
-}
-
-function referenceFor(
-  sources: CategorySource,
-  category: keyof CategorySource,
-  references: MatchGenerationOptions['references'],
-): MatchGenerationOptions['references'][number] {
-  const index = Math.round(sources[category]) || 0;
-  return references[clamp(index, 0, references.length - 1)];
 }
 
 /**
@@ -288,7 +478,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
   const { settings, target, references } = options;
   const sources = settings.categorySource as CategorySource;
   const scales = effectiveScales(settings);
-  const tgt = metricsFrom(target, settings.targetSection);
+  const tgt = metricsFrom(target, settings.targetSection, settings.targetSectionIndex);
   const warnings: MatchWarning[] = [
     {
       kind: 'info',
@@ -303,9 +493,48 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
   const proposals: MatchProposal[] = [];
   const diagnostics: MetricDiff[] = [];
 
+  const sectionFallbackWarnings = new Set<string>();
+  const measurementFallbackWarnings = new Set<string>();
+  if (tgt.sectionFallback) {
+    const targetChoice = settings.targetSectionIndex !== undefined
+      ? `selected target segment #${settings.targetSectionIndex + 1}`
+      : `requested target section (“${settings.targetSection}”)`;
+    warnings.push({
+      kind: 'limitation',
+      message: `The ${targetChoice} was not found. Full-track measurements are being used for the target.`,
+    });
+  }
+  if (tgt.metricFallbacks.length) {
+    warnings.push({
+      kind: 'limitation',
+      message: `The selected target segment cannot provide reliable ${tgt.metricFallbacks.join(', ')} measurements. Those values use the full-track analysis.`,
+    });
+  }
   const refFor = (category: keyof CategorySource) => {
-    const ref = referenceFor(sources, category, references);
-    return { report: ref.report, assetId: ref.assetId, metrics: metricsFrom(ref.report, settings.referenceSection) };
+    const resolved = referenceFor(sources, category, references, settings.referenceSection);
+    const newlyMissingSections = resolved.fallbackAssetIds.filter((assetId) => !sectionFallbackWarnings.has(assetId));
+    if (newlyMissingSections.length) {
+      newlyMissingSections.forEach((assetId) => sectionFallbackWarnings.add(assetId));
+      const exactSelection = resolved.assetIds.some((assetId) => {
+        const selectedReference = references.find((entry) => entry.assetId === assetId);
+        return Number.isInteger(selectedReference?.sectionIndex) && (selectedReference?.sectionIndex as number) >= 0;
+      });
+      warnings.push({
+        kind: 'limitation',
+        message: exactSelection
+          ? `A selected reference segment was not found in ${newlyMissingSections.length} selected reference(s). Full-track measurements are used for those files.`
+          : `The requested reference section (“${settings.referenceSection}”) was not detected in ${newlyMissingSections.length} selected reference(s). Full-track measurements are used for those files.`,
+      });
+    }
+    const metricFallbackKey = resolved.metricFallbacks.join('|');
+    if (metricFallbackKey && !measurementFallbackWarnings.has(metricFallbackKey)) {
+      measurementFallbackWarnings.add(metricFallbackKey);
+      warnings.push({
+        kind: 'limitation',
+        message: `One or more selected reference segments cannot provide reliable ${resolved.metricFallbacks.join(', ')} measurements. Those values use full-track analysis.`,
+      });
+    }
+    return resolved;
   };
 
   // ---------- Tonal balance ----------
@@ -334,10 +563,10 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
         params: eq.params,
         reason:
           `Tonal balance differs most around ${strongest?.center ?? 0} Hz ` +
-          `(${fmtDb(strongest?.v ?? 0)} vs. ${referenceName(references, sources.frequencyBalance)}). ` +
+          `(${fmtDb(strongest?.v ?? 0)} vs. ${ref.name}). ` +
           `The EQ bands below use the smoothed spectral difference, capped at +${settings.maxEqBoost}/-${settings.maxEqCut} dB.`,
         expected: 'Frequency response moves toward the reference balance while keeping the target arrangement intact.',
-        confidence: clamp(0.55 + (referenceCountForCategory(references, sources.frequencyBalance) - 1) * 0.1, 0.4, 0.9),
+        confidence: confidenceFor(0.55 + (ref.assetIds.length - 1) * 0.1, ref, 'frequencyBalance', tgt),
         before: [
           {
             label: 'Tonal difference',
@@ -410,7 +639,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
           `The target has ${crestDelta.toFixed(1)} dB more crest factor than the reference. ` +
           `A ${ratio.toFixed(1)}:1 compressor with an 8 dB knee reduces the highest peaks and brings average density closer.`,
         expected: `Crest factor moves toward ${predictedCrest.toFixed(1)} dB with transient detail preserved at a ${(55 + 45 * scales.dynamics).toFixed(0)}% wet mix.`,
-        confidence: 0.72,
+        confidence: confidenceFor(0.72, ref, 'dynamics', tgt),
         before: [
           {
             label: 'Crest factor',
@@ -457,7 +686,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
           `Integrated loudness is ${requested.toFixed(1)} LU from the reference. ` +
           `Applying ${allowed >= 0 ? '+' : ''}${allowed.toFixed(1)} dB respects the request and the ±${Math.abs(settings.maxLoudnessChange)} dB matching limit.`,
         expected: `Integrated level approaches ${predictedLoudness.toFixed(1)} LUFS before the limiter.`,
-        confidence: 0.88,
+        confidence: confidenceFor(0.88, ref, 'loudness', tgt),
         before: [
           {
             label: 'Integrated loudness',
@@ -506,7 +735,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
           `The reference has ${delta > 0 ? 'wider' : 'narrower'} side energy by ${Math.abs(delta).toFixed(1)} dB. ` +
           `Width is scaled to ${widthPercent.toFixed(0)}% while keeping everything below 180 Hz mono.`,
         expected: delta > 0 ? 'A wider image with a stable mono low end.' : 'A tighter image more consistent with the reference.',
-        confidence: 0.8,
+        confidence: confidenceFor(0.8, ref, 'stereoWidth', tgt),
         before: [
           {
             label: 'Side / mid ratio',
@@ -558,7 +787,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
           `(${(tgt.punchScore * 100).toFixed(0)}% vs ${(ref.metrics.punchScore * 100).toFixed(0)}%). ` +
           `Transient attack is set to ${attack.toFixed(0)}%.`,
         expected: delta > 0 ? 'Drums and plucks hit harder without a level increase.' : 'Transients are softened to match the reference envelope.',
-        confidence: 0.62,
+        confidence: confidenceFor(0.62, ref, 'punch', tgt),
         before: [
           {
             label: 'Punch score',
@@ -605,7 +834,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
           `The reference has ${harmonicDelta > 0 ? 'more' : 'different'} harmonic density and a ${tonalDelta > 0 ? 'warmer' : 'brighter'} tilt. ` +
           `Saturation drive of ${drive.toFixed(1)} dB is applied at ${(25 + 45 * scales.saturation).toFixed(0)}% wet to add texture without thick distortion.`,
         expected: 'Denser harmonics and a slightly fuller top end. The exact harmonic signature of the reference cannot be cloned from measurement.',
-        confidence: 0.55,
+        confidence: confidenceFor(0.55, ref, 'saturation', tgt),
         before: [
           {
             label: 'Spectral flatness',
@@ -641,7 +870,7 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
         reason:
           'The reference has a wider loudness range with a more glued low end. A gentle low-band bus compression stage adds density without flattening the top.',
         expected: 'More consistent low-frequency energy and a cohesive, denser master character.',
-        confidence: 0.5,
+        confidence: confidenceFor(0.5, ref, 'character', tgt),
         before: [
           {
             label: 'Loudness range',
@@ -658,7 +887,11 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
 
   // ---------- Peak protection / limiter ----------
   const ceiling = clamp(options.targetTruePeakDb ?? -1, -3, -0.1);
-  const needsLimiter = predictedLoudness > ceiling - 1 || tgt.truePeakDb > ceiling;
+  // A gain-stage estimate is useful for deciding whether peak protection is
+  // needed, but it is not a prediction of the limiter's final output. EQ,
+  // compression, saturation and inter-sample reconstruction can all change it.
+  const estimatedPreLimiterTruePeakDb = estimatePreLimiterTruePeak(tgt.truePeakDb, predictedLoudness - tgt.lufs);
+  const needsLimiter = estimatedPreLimiterTruePeakDb > ceiling;
   if (needsLimiter) {
     proposals.push({
       id: uid('prop'),
@@ -675,14 +908,14 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
         output: 0,
       },
       reason: `A ${ceiling.toFixed(1)} dBTP ceiling is required after the loudness change. The limiter uses 4 ms lookahead and true-peak detection.`,
-      expected: 'Output stays under the delivery ceiling with minimal pumping.',
+      expected: 'The limiter is configured to protect the selected ceiling. Render and measure the master to verify the delivered true peak.',
       confidence: 0.85,
       before: [
         {
-          label: 'True peak',
-          target: `${tgt.truePeakDb.toFixed(1)} dBTP`,
+          label: 'Estimated pre-limiter true peak',
+          target: `${estimatedPreLimiterTruePeakDb.toFixed(1)} dBTP`,
           reference: `${refFor('loudness').metrics.truePeakDb.toFixed(1)} dBTP`,
-          delta: fmtDb(tgt.truePeakDb - ceiling),
+          delta: fmtDb(estimatedPreLimiterTruePeakDb - ceiling),
           severity: 'medium',
         },
       ],
@@ -695,11 +928,17 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
     });
   }
 
-  if (predictedLoudness > ceiling) {
+  if (estimatedPreLimiterTruePeakDb > ceiling) {
     warnings.push({
       kind: 'warning',
       message:
-        'The target loudness exceeds the true-peak ceiling. The renderer prioritises clean peaks over loudness, so the measured level may land below the prediction.',
+        'The estimated pre-limiter true peak exceeds the selected ceiling. The limiter is only a protective stage: its actual output and loudness must be confirmed with Render & measure master.',
+    });
+  } else {
+    warnings.push({
+      kind: 'info',
+      message:
+        'The simple gain-based pre-limiter peak estimate is below the selected ceiling. Processing can still change peaks, so verify the rendered master before delivery.',
     });
   }
   if (!references.some((r) => r.report.loudness.integratedLufs > -30)) {
@@ -721,7 +960,9 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
     warnings,
     predicted: {
       integratedLufs: predictedLoudness,
-      truePeakDb: Math.min(ceiling, tgt.truePeakDb + (predictedLoudness - tgt.lufs)),
+      // This is explicitly the estimated pre-limiter peak, not a guaranteed
+      // post-limiter result. The final value comes from the offline render.
+      truePeakDb: estimatedPreLimiterTruePeakDb,
       crestDb: predictedCrest,
       widthDb: predictedWidth,
       toneDeltaDb: eqProposal ? (eqProposal.predicted.bands as number[]) : new Array(BAND_CENTERS.length).fill(0),
@@ -729,16 +970,6 @@ export function generateMatchPlan(options: MatchGenerationOptions): MatchPlan {
     },
     effectiveScale: scales,
   };
-}
-
-function referenceName(refs: MatchGenerationOptions['references'], index: number): string {
-  const i = clamp(Math.round(index), 0, refs.length - 1);
-  return `reference ${i + 1}`;
-}
-
-function referenceCountForCategory(refs: MatchGenerationOptions['references'], index: number): number {
-  void index;
-  return refs.length;
 }
 
 /** Convert a plan into editable processor nodes for a project. */

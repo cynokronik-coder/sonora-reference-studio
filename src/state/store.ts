@@ -1,14 +1,24 @@
 import { create } from 'zustand';
 import type { AnalysisReport } from '../audio/analysis/analyze';
 import { decodeAudioFile, resampleToRate } from '../audio/io/decode';
-import { encodeAiff, encodeWav, type WavBitDepth } from '../audio/io/wav';
-import { analyzeLoudness } from '../audio/analysis/loudness';
+import { parseAiffHeader, parseWavHeader } from '../audio/io/wav';
+import {
+  estimateVerificationWorkingSetBytes,
+  formatMemoryEstimate,
+  MAX_VERIFY_WORKING_SET_BYTES,
+  shouldDeferVerification,
+} from '../audio/io/verification-memory';
+import { encodeAiff, encodeWav, writeAiffToWritable, writeWavToWritable, type SequentialPcmWritable, type WavBitDepth } from '../audio/io/wav';
+import { fillStereoPcm16Block } from '../audio/io/mp3';
+import { analyzeLoudness, analyzeLoudnessAsync, normalizeToTruePeakAsync } from '../audio/analysis/loudness';
+import { startAnalysisWorker } from '../audio/analysis/analysis-worker-client';
 import { generateMatchPlan, planToNodes, type MatchPlan } from '../audio/analysis/match';
 import { interpretCommand, suggestionsFor, type AssistantProposal } from '../audio/ai/assistant';
 import { requestSonoraAi } from '../audio/ai/client';
 import { buildAssistantContext } from '../audio/ai/context';
 import { createValidatedAiProposal } from '../audio/ai/proposals';
-import { realtimeHost } from '../audio/engine/realtime';
+import { realtimeHost, shouldPauseTransport } from '../audio/engine/realtime';
+import type { AuditionMode } from '../audio/engine/audition';
 import type { EngineAsset } from '../audio/engine/renderer';
 import type { ProcessorMeterSnapshot } from '../audio/dsp/types';
 import { createProcessorNode, createProject as newProject, createTrack, createClip, createBus, defaultMatchSettings, uid } from '../audio/model/defaults';
@@ -28,7 +38,9 @@ import { allAssetIds, chainFor, cloneProject, findTrack, type ChainScope } from 
 import { BUILT_IN_PRESETS, createPreset, type PresetCategory, type PresetDefinition } from '../audio/presets/library';
 import { computePeaks } from '../lib/peaks';
 import * as db from '../lib/db';
+import { ProjectSaveQueue } from '../lib/project-save-queue';
 import { computeMatchPreview } from '../audio/analysis/preview';
+import { loudnessMatchedMonitorGain } from '../audio/analysis/ab';
 
 export type Screen =
   | 'dashboard'
@@ -66,9 +78,27 @@ export interface ABSlot {
   label: string;
   processors: ProcessorNodeState[];
   volumeDb: number;
+  /** Integrated loudness measured from an offline render of this snapshot. */
   lufs: number | null;
+  /** Annex 2 true peak measured from the same offline render. */
   truePeakDb: number | null;
+  /** Measurements no longer describe the current track and bus mix. */
+  stale?: boolean;
   createdAt: number;
+}
+
+export interface ABWorkingMix {
+  projectId: string;
+  processors: ProcessorNodeState[];
+  volumeDb: number;
+}
+
+export interface MatchAuditionState {
+  mode: AuditionMode;
+  loudnessMatch: boolean;
+  comparisonDb: number;
+  before: RenderStats;
+  after: RenderStats;
 }
 
 export interface BusyState {
@@ -112,6 +142,7 @@ interface AppState {
   analyses: Record<string, AnalysisReport>;
   matchPlan: MatchPlan | null;
   matchPreview: { before: number[]; after: number[] } | null;
+  matchAudition: MatchAuditionState | null;
   presets: PresetDefinition[];
   exports: ExportRecord[];
   selectedTrackId: string | null;
@@ -133,6 +164,7 @@ interface AppState {
   };
   abSlots: ABSlot[];
   activeSlot: string | null;
+  workingMix: ABWorkingMix | null;
   loudnessMatch: boolean;
   comparisonDb: number;
   monitorDb: number;
@@ -164,7 +196,7 @@ interface AppState {
   setToast: (message: string | null) => void;
   clearBusy: () => void;
 
-  mutate: (mutator: (project: ProjectState) => void, options?: { coalesce?: string }) => void;
+  mutate: (mutator: (project: ProjectState) => void, options?: { coalesce?: string; preserveAb?: boolean; skipPersist?: boolean; skipHistory?: boolean }) => void;
   undo: () => void;
   redo: () => void;
   saveNow: () => Promise<void>;
@@ -197,6 +229,10 @@ interface AppState {
   setMonitorDb: (db: number) => void;
 
   generateMatch: () => Promise<void>;
+  prepareMatchAudition: (proposalIds?: string[]) => Promise<void>;
+  setMatchAuditionMode: (mode: AuditionMode) => void;
+  setMatchAuditionLoudnessMatch: (on: boolean) => void;
+  clearMatchAudition: () => void;
   applyMatchPlan: (proposalIds?: string[]) => void;
   clearMatchPlan: () => void;
   verifyMaster: () => Promise<void>;
@@ -211,9 +247,10 @@ interface AppState {
   savePreset: (name: string, category: PresetCategory, description: string, scope: 'master' | 'track', trackId?: string | null) => Promise<void>;
   deleteUserPreset: (id: string) => Promise<void>;
 
-  captureSlot: (label: string) => void;
+  captureSlot: (label: string) => Promise<void>;
   recallSlot: (id: string) => void;
   deleteSlot: (id: string) => void;
+  restoreWorkingMix: () => void;
   setLoudnessMatch: (on: boolean) => void;
 
   exportMix: (settings: ExportSettings) => Promise<void>;
@@ -224,16 +261,46 @@ interface AppState {
   clearAllData: () => Promise<void>;
 }
 
-let saveTimer: ReturnType<typeof setTimeout> | null = null;
+const projectSaveQueue = new ProjectSaveQueue<ProjectState>((project) => db.saveProject(project), 700);
 let engineTimer: ReturnType<typeof setTimeout> | null = null;
-let engineListenersRegistered = false;
+let persistenceLifecycleAttached = false;
+let realtimeListenersAttached = false;
+
+function reportProjectSaveError(error: unknown): void {
+  const detail = error instanceof Error ? error.message : String(error);
+  useApp.setState({
+    storageError: describeStorageError(error),
+    toast: `Project autosave failed: ${detail}`,
+  });
+}
+
+const projectSaveLifecycle = {
+  onSaved: (snapshot: ProjectState) => {
+    const active = useApp.getState().project;
+    if (active?.id === snapshot.id && active.updatedAt <= snapshot.updatedAt) {
+      useApp.setState({ lastSavedAt: Date.now() });
+    }
+  },
+  onError: (error: unknown) => reportProjectSaveError(error),
+};
 
 function schedulePersist(project: ProjectState): void {
-  if (saveTimer) clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => {
-    if (useApp.getState().project?.autosave === false) return;
-    void db.saveProject(project);
-  }, 700);
+  projectSaveQueue.schedule(project, projectSaveLifecycle);
+}
+
+function flushPendingProjectSaves(): void {
+  void projectSaveQueue.flushAll().catch(reportProjectSaveError);
+}
+
+function attachPersistenceLifecycle(): void {
+  if (persistenceLifecycleAttached || typeof window === 'undefined') return;
+  persistenceLifecycleAttached = true;
+  window.addEventListener('pagehide', flushPendingProjectSaves);
+  if (typeof document !== 'undefined') {
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') flushPendingProjectSaves();
+    });
+  }
 }
 
 function engineAssets(project: ProjectState, buffers: Record<string, AssetBuffer>): EngineAsset[] {
@@ -256,7 +323,7 @@ function syncEngine(project: ProjectState, buffers: Record<string, AssetBuffer>)
   if (engineTimer) clearTimeout(engineTimer);
   engineTimer = setTimeout(() => {
     try {
-      realtimeHost.loadAssets(engineAssets(project, buffers));
+      realtimeHost.syncAssets(engineAssets(project, buffers));
       realtimeHost.pushProject(project);
     } catch (error) {
       useApp.setState({ engineError: error instanceof Error ? error.message : String(error) });
@@ -303,6 +370,7 @@ export const useApp = create<AppState>((set, get) => ({
   analyses: {},
   matchPlan: null,
   matchPreview: null,
+  matchAudition: null,
   presets: [...BUILT_IN_PRESETS],
   exports: [],
   selectedTrackId: null,
@@ -317,6 +385,7 @@ export const useApp = create<AppState>((set, get) => ({
   transport: { playing: false, position: 0, loopEnabled: false, loopStart: 0, loopEnd: 0, duration: 0 },
   abSlots: [],
   activeSlot: null,
+  workingMix: null,
   loudnessMatch: false,
   comparisonDb: 0,
   monitorDb: 0,
@@ -331,6 +400,7 @@ export const useApp = create<AppState>((set, get) => ({
   verifying: false,
 
   init: async () => {
+    attachPersistenceLifecycle();
     let mode: Mode = 'advanced';
     try {
       mode = (localStorage.getItem('sonora:mode') as Mode) ?? 'advanced';
@@ -350,7 +420,7 @@ export const useApp = create<AppState>((set, get) => ({
     } catch (error) {
       set({ mode, storageError: describeStorageError(error) });
     }
-    if (!engineListenersRegistered) {
+    if (!realtimeListenersAttached) {
       realtimeHost.onPosition((position, playing) => {
         set((state) => ({ transport: { ...state.transport, position, playing } }));
       });
@@ -363,11 +433,22 @@ export const useApp = create<AppState>((set, get) => ({
         const meters = realtimeHost.lastMeters;
         if (meters) latestMeters = meters;
       });
-      engineListenersRegistered = true;
+      realtimeHost.onError((message) => {
+        set((state) => ({
+          engineError: message,
+          toast: 'Audio stopped unexpectedly. Your project remains saved; press Play to rebuild the engine.',
+          matchAudition: null,
+          transport: { ...state.transport, playing: false },
+        }));
+      });
+      realtimeListenersAttached = true;
     }
   },
 
-  setScreen: (screen) => set({ screen }),
+  setScreen: (screen) => {
+    if (get().screen === 'reference' && screen !== 'reference') get().clearMatchAudition();
+    set({ screen });
+  },
   setMode: (mode) => {
     try {
       localStorage.setItem('sonora:mode', mode);
@@ -397,6 +478,11 @@ export const useApp = create<AppState>((set, get) => ({
       set({ storageError: describeStorageError(error), toast: 'Could not create the project: this browser is blocking local storage.' });
       return;
     }
+    realtimeHost.stop();
+    realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
+    realtimeHost.syncAssets([]);
     set({
       project,
       assets: [],
@@ -404,9 +490,15 @@ export const useApp = create<AppState>((set, get) => ({
       analyses: {},
       matchPlan: null,
       matchPreview: null,
+      matchAudition: null,
       selectedTrackId: null,
       selectedProcessorId: null,
       exports: [],
+      abSlots: [],
+      activeSlot: null,
+      workingMix: null,
+      loudnessMatch: false,
+      comparisonDb: 0,
       history: [],
       future: [],
       transport: { playing: false, position: 0, loopEnabled: false, loopStart: 0, loopEnd: 0, duration: 0 },
@@ -418,11 +510,22 @@ export const useApp = create<AppState>((set, get) => ({
 
   openProject: async (id) => {
     set({ busy: { kind: 'load', label: 'Opening project', progress: 0 } });
+    if (get().project?.id !== id) {
+      // Drop the previous project's worklet PCM before decoding a new session.
+      realtimeHost.stop();
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.clearMatchAuditionBuffers();
+      realtimeHost.syncAssets([]);
+      set((state) => ({ transport: { ...state.transport, playing: false } }));
+    }
     try {
       await realtimeHost.initialise().catch((error) => {
         set({ engineError: error instanceof Error ? error.message : String(error) });
       });
       const rate = realtimeHost.sampleRate;
+      // Finish a pending autosave before reading the stored copy. This prevents
+      // reopening a project from racing its own delayed, newer edits.
+      await projectSaveQueue.flushPending(id);
       const project = await db.getProject(id);
       if (!project) throw new Error('Project not found');
       migrateProjectProcessorNodes(project);
@@ -448,7 +551,15 @@ export const useApp = create<AppState>((set, get) => ({
           const converted =
             decoded.sampleRate === targetRate
               ? { L: decoded.L, R: decoded.R }
-              : await resampleToRate(decoded.L, decoded.R, decoded.sampleRate, targetRate);
+              : await resampleToRate(decoded.L, decoded.R, decoded.sampleRate, targetRate, {
+                  onProgress: (fraction) => set({
+                    busy: {
+                      kind: 'decode',
+                      label: `Resampling ${meta.name}`,
+                      progress: (count + fraction) / Math.max(1, assets.length),
+                    },
+                  }),
+                });
           buffers[meta.id] = {
             L: converted.L,
             R: converted.R,
@@ -462,11 +573,19 @@ export const useApp = create<AppState>((set, get) => ({
       }
       project.sampleRate = targetRate;
       await db.saveProject(project);
+      realtimeHost.setComparisonGain(0);
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.clearMatchAuditionBuffers();
       set({
         project,
         assets,
         analyses,
         exports,
+        abSlots: [],
+        activeSlot: null,
+        workingMix: null,
+        loudnessMatch: false,
+        comparisonDb: 0,
         assetBuffers: buffers,
         selectedTrackId: project.tracks[0]?.id ?? null,
         selectedProcessorId: null,
@@ -476,6 +595,7 @@ export const useApp = create<AppState>((set, get) => ({
         history: [],
         future: [],
         matchPlan: null,
+        matchAudition: null,
         transport: {
           playing: false,
           position: 0,
@@ -494,10 +614,17 @@ export const useApp = create<AppState>((set, get) => ({
 
   closeProject: () => {
     realtimeHost.stop();
-    set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, screen: 'projects' });
+    realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
+    // Release the worklet's transferred PCM as well as the main-thread buffers.
+    realtimeHost.syncAssets([]);
+    set({ project: null, assets: [], assetBuffers: {}, analyses: {}, matchPlan: null, matchPreview: null, matchAudition: null, abSlots: [], activeSlot: null, workingMix: null, loudnessMatch: false, comparisonDb: 0, screen: 'projects' });
   },
 
   deleteProjectById: async (id) => {
+    projectSaveQueue.cancel(id);
+    await projectSaveQueue.drain();
     await db.deleteProject(id);
     if (get().project?.id === id) get().closeProject();
     await get().init();
@@ -535,7 +662,15 @@ export const useApp = create<AppState>((set, get) => ({
         const converted =
           decoded.sampleRate === targetRate
             ? { L: decoded.L, R: decoded.R }
-            : await resampleToRate(decoded.L, decoded.R, decoded.sampleRate, targetRate);
+            : await resampleToRate(decoded.L, decoded.R, decoded.sampleRate, targetRate, {
+                onProgress: (fraction) => set({
+                  busy: {
+                    kind: 'import',
+                    label: `Resampling ${file.name}`,
+                    progress: (index + fraction) / Math.max(1, files.length),
+                  },
+                }),
+              });
         const id = uid('asset');
         const peaks = computePeaks(converted.L, converted.R);
         const meta: AudioAssetMeta = {
@@ -609,7 +744,8 @@ export const useApp = create<AppState>((set, get) => ({
       set({ busy: null, toast: `${files.length} file${files.length > 1 ? 's' : ''} imported at ${targetRate} Hz.` });
       if (role === 'target' || role === 'reference') {
         for (const meta of createdAssets) {
-          await get().analyzeAsset(meta.id);
+          const report = await get().analyzeAsset(meta.id);
+          if (!report) break;
         }
       }
     } catch (error) {
@@ -623,53 +759,93 @@ export const useApp = create<AppState>((set, get) => ({
       set({ toast: 'Audio is still loading.' });
       return null;
     }
-    set({ busy: { kind: 'analyze', label: 'Measuring audio', progress: 0 } });
-    let worker: Worker | null = null;
+    set({ busy: { kind: 'analyze', label: 'Starting audio analysis', progress: 0 } });
     try {
-      worker = new Worker(new URL('../audio/analysis/analysis.worker.ts', import.meta.url), { type: 'module' });
-      const report = await new Promise<AnalysisReport>((resolve, reject) => {
-        worker!.onmessage = (event: MessageEvent) => {
-          const message = event.data;
-          if (message.type === 'progress') {
-            set({
-              busy: {
-                kind: 'analyze',
-                label: message.stage as string,
-                progress: message.progress as number,
-              },
-            });
-          } else if (message.type === 'done') {
-            resolve(message.report as AnalysisReport);
-          } else if (message.type === 'error') {
-            reject(new Error(message.message as string));
-          }
-        };
-        worker!.onerror = () => reject(new Error('Analysis worker failed'));
-        const L = buffer.L.slice();
-        const R = buffer.R.slice();
-        worker!.postMessage(
-          { type: 'analyze', assetId, L, R, sampleRate: buffer.sampleRate, includeSections: true },
-          [L.buffer, R.buffer],
-        );
+      const worker = new Worker(new URL('../audio/analysis/analysis.worker.ts', import.meta.url), { type: 'module' });
+      const L = buffer.L.slice();
+      const R = buffer.R.slice();
+      let cancelAnalysis = () => {};
+      const task = startAnalysisWorker(
+        worker,
+        { type: 'analyze', assetId, L, R, sampleRate: buffer.sampleRate, includeSections: true },
+        [L.buffer, R.buffer],
+        (stage, progress) => set({
+          busy: {
+            kind: 'analyze',
+            label: stage,
+            progress,
+            cancel: cancelAnalysis,
+          },
+        }),
+      );
+      cancelAnalysis = task.cancel;
+      set({
+        busy: {
+          kind: 'analyze',
+          label: 'Measuring audio',
+          progress: 0,
+          cancel: task.cancel,
+        },
       });
+      const report = await task.promise;
+      set({ busy: { kind: 'analyze', label: 'Saving analysis', progress: 0.98 } });
       const analyses = { ...get().analyses, [assetId]: report };
       await db.saveAnalysis(assetId, report);
+      const current = get();
+      const latestProject = current.project;
+      let updatedProject: ProjectState | null = null;
+      if (latestProject) {
+        const targetSelectionStale =
+          latestProject.targetAssetIds[0] === assetId && latestProject.match.targetSectionIndex !== undefined;
+        const referenceSelectionStale =
+          latestProject.referenceAssetIds.includes(assetId) &&
+          latestProject.match.referenceSectionIndices?.[assetId] !== undefined;
+        if (targetSelectionStale || referenceSelectionStale) {
+          updatedProject = cloneProject(latestProject);
+          if (targetSelectionStale) updatedProject.match.targetSectionIndex = undefined;
+          if (referenceSelectionStale) {
+            const selectedSections = { ...(updatedProject.match.referenceSectionIndices ?? {}) };
+            delete selectedSections[assetId];
+            updatedProject.match.referenceSectionIndices = selectedSections;
+          }
+          updatedProject.updatedAt = Date.now();
+        }
+      }
+      if (updatedProject && current.matchAudition) get().clearMatchAudition();
       const assets = get().assets.map((a) =>
         a.id === assetId ? { ...a, lufs: report.loudness.integratedLufs, peakDb: report.loudness.samplePeakDb } : a,
       );
-      set({ assets, analyses, busy: null });
+      set({
+        assets,
+        analyses,
+        busy: null,
+        ...(updatedProject ? { project: updatedProject, matchPlan: null, matchPreview: null } : {}),
+      });
+      if (updatedProject) schedulePersist(updatedProject);
       return report;
     } catch (error) {
-      set({ busy: null, toast: error instanceof Error ? `Analysis failed: ${error.message}` : 'Analysis failed' });
+      const cancelled = error instanceof Error && error.name === 'AbortError';
+      set({
+        busy: null,
+        toast: cancelled
+          ? 'Analysis cancelled.'
+          : error instanceof Error
+            ? `Analysis failed: ${error.message}`
+            : 'Analysis failed',
+      });
       return null;
-    } finally {
-      worker?.terminate();
     }
   },
   analyzeProjectAssets: async () => {
     const ids = allAssetIds(get().project ?? emptyProject());
     for (const id of ids) {
-      if (!get().analyses[id]) await get().analyzeAsset(id);
+      const report = get().analyses[id];
+      // Re-run older cached reports once so the new per-section metric payload
+      // is available without discarding the user's projects or imported PCM.
+      if (!report || report.sectionMetricsVersion !== 5) {
+        const updated = await get().analyzeAsset(id);
+        if (!updated) break;
+      }
     }
   },
 
@@ -678,35 +854,80 @@ export const useApp = create<AppState>((set, get) => ({
       project.referenceAssetIds = project.referenceAssetIds.filter((id) => id !== assetId);
       project.tracks = project.tracks.filter((t) => !(t.kind === 'reference' && t.clips.some((c) => c.assetId === assetId)));
     });
+    const stillUsed = Boolean(get().project && allAssetIds(get().project!).includes(assetId));
     set((state) => {
       const analyses = { ...state.analyses };
-      delete analyses[assetId];
-      return { analyses, matchPlan: null, matchPreview: null };
+      if (!stillUsed) delete analyses[assetId];
+      const assets = stillUsed ? state.assets : state.assets.filter((asset) => asset.id !== assetId);
+      const assetBuffers = { ...state.assetBuffers };
+      if (!stillUsed) delete assetBuffers[assetId];
+      return { analyses, assets, assetBuffers, matchPlan: null, matchPreview: null };
     });
+    if (!stillUsed) {
+      void db.deleteAsset(assetId).catch((error) => {
+        useApp.setState({ toast: `Could not release removed reference audio: ${error instanceof Error ? error.message : String(error)}` });
+      });
+    }
   },
 
   mutate: (mutator, options) => {
-    const state = get();
+    let state = get();
     if (!state.project) return;
-    const previous = cloneProject(state.project);
-    const next = cloneProject(state.project);
+    if (state.matchAudition) {
+      get().clearMatchAudition();
+      state = get();
+      if (!state.project) return;
+    }
+    const project = state.project;
+    const previous = cloneProject(project);
+    const next = cloneProject(project);
     mutator(next);
+    const projectContentChanged = JSON.stringify(previous) !== JSON.stringify(next);
+    const mixContextChanged = JSON.stringify(previous.tracks) !== JSON.stringify(next.tracks) ||
+      JSON.stringify(previous.buses) !== JSON.stringify(next.buses) ||
+      previous.tempo !== next.tempo || previous.sampleRate !== next.sampleRate;
+    const masterChanged = JSON.stringify(previous.master) !== JSON.stringify(next.master);
+    const clearAudition = projectContentChanged && state.activeSlot !== null && !options?.preserveAb;
+    // A/B recalls are temporary views. Keep history and the persisted project
+    // anchored to the user's working master, not to the auditioned snapshot.
+    if (state.activeSlot !== null && state.workingMix?.projectId === project.id) {
+      previous.master.processors = structuredClone(state.workingMix.processors);
+      previous.master.volumeDb = state.workingMix.volumeDb;
+      if (clearAudition && !masterChanged) {
+        next.master.processors = structuredClone(state.workingMix.processors);
+        next.master.volumeDb = state.workingMix.volumeDb;
+      }
+    }
     next.updatedAt = Date.now();
     const coalesce = options?.coalesce;
     const shouldCoalesce =
       Boolean(coalesce) && state.lastCoalesceKey === coalesce && Date.now() - state.lastCoalesceAt < 800;
     set({
       project: next,
-      history: shouldCoalesce ? state.history : [...state.history.slice(-49), previous],
+      history: options?.skipHistory ? state.history : shouldCoalesce ? state.history : [...state.history.slice(-49), previous],
       future: [],
       lastCoalesceKey: coalesce ?? null,
       lastCoalesceAt: Date.now(),
+      ...(mixContextChanged && state.abSlots.length ? { abSlots: state.abSlots.map((slot) => ({ ...slot, stale: true })) } : {}),
+      ...(clearAudition ? { activeSlot: null, workingMix: null, comparisonDb: 0 } : {}),
+      ...(projectContentChanged && state.matchAudition ? { matchAudition: null } : {}),
     });
-    schedulePersist(next);
+    if (clearAudition) realtimeHost.setComparisonGain(0);
+    if (projectContentChanged && state.matchAudition) {
+      realtimeHost.clearMatchAuditionBuffers();
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.setComparisonGain(state.comparisonDb);
+    }
+    if (!options?.skipPersist && !(state.activeSlot !== null && !projectContentChanged)) schedulePersist(next);
     syncEngine(next, get().assetBuffers);
   },
 
   undo: () => {
+    if (get().matchAudition) get().clearMatchAudition();
+    if (get().activeSlot !== null) {
+      get().restoreWorkingMix();
+      return;
+    }
     const { history, project, future } = get();
     if (!history.length || !project) return;
     const previous = history[history.length - 1];
@@ -715,12 +936,24 @@ export const useApp = create<AppState>((set, get) => ({
       history: history.slice(0, -1),
       future: [project, ...future].slice(0, 50),
       selectedProcessorId: null,
+      matchAudition: null,
+      activeSlot: null,
+      workingMix: null,
+      comparisonDb: 0,
     });
     schedulePersist(previous);
+    realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     syncEngine(previous, get().assetBuffers);
   },
 
   redo: () => {
+    if (get().matchAudition) get().clearMatchAudition();
+    if (get().activeSlot !== null) {
+      get().restoreWorkingMix();
+      return;
+    }
     const { future, project, history } = get();
     if (!future.length || !project) return;
     const next = future[0];
@@ -729,15 +962,27 @@ export const useApp = create<AppState>((set, get) => ({
       future: future.slice(1),
       history: [...history, project].slice(-50),
       selectedProcessorId: null,
+      matchAudition: null,
+      activeSlot: null,
+      workingMix: null,
+      comparisonDb: 0,
     });
     schedulePersist(next);
+    realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
     syncEngine(next, get().assetBuffers);
   },
 
   saveNow: async () => {
-    const project = get().project;
-    if (!project) return;
-    await db.saveProject(project);
+    const state = get();
+    if (!state.project) return;
+    const project = cloneProject(state.project);
+    if (state.activeSlot !== null && state.workingMix?.projectId === project.id) {
+      project.master.processors = structuredClone(state.workingMix.processors);
+      project.master.volumeDb = state.workingMix.volumeDb;
+    }
+    await projectSaveQueue.flush(project, projectSaveLifecycle);
     set({ lastSavedAt: Date.now() });
   },
 
@@ -916,21 +1161,30 @@ export const useApp = create<AppState>((set, get) => ({
     if (!project) return;
     try {
       await realtimeHost.initialise();
+      realtimeHost.syncAssets(engineAssets(project, assetBuffers));
+      realtimeHost.pushProject(project);
+      realtimeHost.setMonitorGain(get().monitorDb);
+      realtimeHost.setComparisonGain(get().matchAudition?.comparisonDb ?? get().comparisonDb);
+      realtimeHost.setLoop(transport.loopEnabled, transport.loopStart, transport.loopEnd);
+      if (shouldPauseTransport(transport.playing, realtimeHost.contextState)) {
+        realtimeHost.pause();
+        set((state) => ({ transport: { ...state.transport, playing: false } }));
+      } else {
+        // A suspended/interrupted/closed context must be resumed/rebuilt from
+        // the last UI playhead, not mistaken for a normal pause request.
+        await realtimeHost.play(transport.position);
+        set((state) => ({
+          engineError: null,
+          transport: { ...state.transport, playing: true },
+        }));
+      }
     } catch (error) {
-      set({ engineError: error instanceof Error ? error.message : String(error), toast: 'Audio engine could not start.' });
-      return;
-    }
-    realtimeHost.loadAssets(engineAssets(project, assetBuffers));
-    realtimeHost.pushProject(project);
-    realtimeHost.setMonitorGain(get().monitorDb);
-    realtimeHost.setComparisonGain(get().comparisonDb);
-    realtimeHost.setLoop(transport.loopEnabled, transport.loopStart, transport.loopEnd);
-    if (transport.playing) {
-      realtimeHost.pause();
-      set((state) => ({ transport: { ...state.transport, playing: false } }));
-    } else {
-      await realtimeHost.play(transport.position);
-      set((state) => ({ transport: { ...state.transport, playing: true } }));
+      const message = error instanceof Error ? error.message : String(error);
+      set((state) => ({
+        engineError: message,
+        toast: `Audio engine could not start: ${message}`,
+        transport: { ...state.transport, playing: false },
+      }));
     }
   },
 
@@ -959,6 +1213,7 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   generateMatch: async () => {
+    get().clearMatchAudition();
     const { project, analyses, assets } = get();
     if (!project) return;
     const targetId = project.targetAssetIds[0];
@@ -966,9 +1221,25 @@ export const useApp = create<AppState>((set, get) => ({
       set({ toast: 'Analyse a target song first.' });
       return;
     }
+    if (analyses[targetId].sectionMetricsVersion !== 5) {
+      set({ toast: 'Update the analyses to enable the complete section-level measurements.' });
+      return;
+    }
+    const outdatedReferences = project.referenceAssetIds.filter(
+      (id) => analyses[id] && analyses[id].sectionMetricsVersion !== 5,
+    );
+    if (outdatedReferences.length) {
+      set({ toast: 'Update all reference analyses before generating a section-accurate match.' });
+      return;
+    }
     const references = project.referenceAssetIds
       .filter((id) => analyses[id])
-      .map((id) => ({ assetId: id, report: analyses[id] }));
+      .map((id) => ({
+        assetId: id,
+        report: analyses[id],
+        weight: project.match.referenceWeights?.[id] ?? 100,
+        sectionIndex: project.match.referenceSectionIndices?.[id],
+      }));
     if (!references.length) {
       set({ toast: 'Analyse at least one reference track first.' });
       return;
@@ -989,6 +1260,158 @@ export const useApp = create<AppState>((set, get) => ({
     void assets;
   },
 
+  prepareMatchAudition: async (proposalIds) => {
+    const initial = get();
+    if (!initial.project || !initial.matchPlan) {
+      set({ toast: 'Generate a Reference Match processing chain first.' });
+      return;
+    }
+    if (initial.busy) {
+      set({ toast: 'Finish the current task before preparing the audio comparison.' });
+      return;
+    }
+    const selectedPlan = proposalIds
+      ? { ...initial.matchPlan, proposals: initial.matchPlan.proposals.filter((proposal) => proposalIds.includes(proposal.id)) }
+      : initial.matchPlan;
+    if (!selectedPlan.proposals.length) {
+      set({ toast: 'Select at least one proposed processor before preparing the audition.' });
+      return;
+    }
+
+    const projectSnapshot = cloneProject(initial.project);
+    const projectSignature = JSON.stringify(projectSnapshot);
+    const planSignature = JSON.stringify(initial.matchPlan);
+    const projectId = projectSnapshot.id;
+    const startPosition = initial.transport.playing ? realtimeHost.position : initial.transport.position;
+    get().clearMatchAudition();
+
+    try {
+      await realtimeHost.initialise();
+      if (realtimeHost.playing) realtimeHost.pause();
+      set((state) => ({
+        transport: { ...state.transport, playing: false, position: startPosition },
+      }));
+
+      const beforeProject = cloneProject(projectSnapshot);
+      const afterProject = cloneProject(projectSnapshot);
+      afterProject.master.processors = planToNodes(selectedPlan);
+      afterProject.match.enabled = true;
+      const endSec = timelineDuration(projectSnapshot);
+
+      const beforeResult = await renderProject(get, {
+        mode: 'master', startSec: 0, endSec,
+        label: 'Measuring original mix for A/B audition',
+        projectOverride: beforeProject, statsOnly: true,
+      });
+      const afterResult = await renderProject(get, {
+        mode: 'master', startSec: 0, endSec,
+        label: 'Measuring matched mix for A/B audition',
+        projectOverride: afterProject, statsOnly: true,
+      });
+
+      const current = get();
+      if (
+        current.screen !== 'reference' ||
+        !current.project ||
+        current.project.id !== projectId ||
+        JSON.stringify(current.project) !== projectSignature ||
+        !current.matchPlan ||
+        JSON.stringify(current.matchPlan) !== planSignature
+      ) {
+        set({ busy: null, toast: 'The project or match plan changed during rendering. Prepare the A/B audition again.' });
+        return;
+      }
+      if (
+        beforeResult.sampleRate !== realtimeHost.sampleRate ||
+        beforeResult.sampleRate !== afterResult.sampleRate ||
+        Math.abs(beforeResult.stats.duration - afterResult.stats.duration) > 1 / beforeResult.sampleRate
+      ) {
+        throw new Error('The original and matched renders do not share the same sample timeline.');
+      }
+
+      realtimeHost.syncAssets(engineAssets(current.project, current.assetBuffers));
+      realtimeHost.pushProject(current.project);
+      realtimeHost.setMatchAuditionProjects({ before: beforeProject, after: afterProject });
+      const comparisonDb = loudnessMatchedMonitorGain([
+        { id: 'before', lufs: beforeResult.stats.lufs },
+        { id: 'after', lufs: afterResult.stats.lufs },
+      ], 'before');
+      realtimeHost.setMatchAudition(true, 'before');
+      realtimeHost.setMonitorGain(current.monitorDb);
+      realtimeHost.setComparisonGain(comparisonDb);
+      realtimeHost.setLoop(current.transport.loopEnabled, current.transport.loopStart, current.transport.loopEnd);
+      realtimeHost.seek(Math.min(startPosition, beforeResult.stats.duration));
+      set({
+        matchAudition: {
+          mode: 'before',
+          loudnessMatch: true,
+          comparisonDb,
+          before: beforeResult.stats,
+          after: afterResult.stats,
+        },
+        transport: {
+          ...get().transport,
+          playing: false,
+          position: Math.min(startPosition, beforeResult.stats.duration),
+          duration: beforeResult.stats.duration,
+        },
+        busy: null,
+        toast: 'A/B audition ready. Press Play, then switch between A (original) and B (Reference Match).',
+      });
+    } catch (error) {
+      realtimeHost.setMatchAudition(false);
+      realtimeHost.clearMatchAuditionBuffers();
+      realtimeHost.setComparisonGain(get().comparisonDb);
+      set({
+        busy: null,
+        matchAudition: null,
+        toast: error instanceof Error ? `Could not prepare the A/B audition: ${error.message}` : 'Could not prepare the A/B audition.',
+      });
+    }
+  },
+
+  setMatchAuditionMode: (mode) => {
+    const audition = get().matchAudition;
+    if (!audition) return;
+    const comparisonDb = audition.loudnessMatch
+      ? loudnessMatchedMonitorGain([
+          { id: 'before', lufs: audition.before.lufs },
+          { id: 'after', lufs: audition.after.lufs },
+        ], mode)
+      : 0;
+    realtimeHost.setMatchAudition(true, mode);
+    realtimeHost.setComparisonGain(comparisonDb);
+    set({ matchAudition: { ...audition, mode, comparisonDb } });
+  },
+
+  setMatchAuditionLoudnessMatch: (on) => {
+    const audition = get().matchAudition;
+    if (!audition) return;
+    const comparisonDb = on
+      ? loudnessMatchedMonitorGain([
+          { id: 'before', lufs: audition.before.lufs },
+          { id: 'after', lufs: audition.after.lufs },
+        ], audition.mode)
+      : 0;
+    realtimeHost.setComparisonGain(comparisonDb);
+    set({ matchAudition: { ...audition, loudnessMatch: on, comparisonDb } });
+  },
+
+  clearMatchAudition: () => {
+    const state = get();
+    if (!state.matchAudition) return;
+    if (state.transport.playing || realtimeHost.playing) {
+      realtimeHost.pause();
+      set((current) => ({
+        transport: { ...current.transport, playing: false, position: realtimeHost.position },
+      }));
+    }
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
+    realtimeHost.setComparisonGain(state.comparisonDb);
+    set({ matchAudition: null });
+  },
+
   applyMatchPlan: (proposalIds) => {
     const plan = get().matchPlan;
     if (!plan) return;
@@ -1004,7 +1427,10 @@ export const useApp = create<AppState>((set, get) => ({
     });
   },
 
-  clearMatchPlan: () => set({ matchPlan: null, matchPreview: null }),
+  clearMatchPlan: () => {
+    get().clearMatchAudition();
+    set({ matchPlan: null, matchPreview: null });
+  },
 
   verifyMaster: async () => {
     const { project } = get();
@@ -1330,42 +1756,138 @@ export const useApp = create<AppState>((set, get) => ({
     set((state) => ({ presets: state.presets.filter((p) => p.id !== id) }));
   },
 
-  captureSlot: (label) => {
-    const project = get().project;
+  captureSlot: async (label) => {
+    const initial = get();
+    const project = initial.project;
     if (!project) return;
-    const slot: ABSlot = {
-      id: uid('slot'),
-      label,
-      processors: structuredClone(project.master.processors),
-      volumeDb: project.master.volumeDb,
-      lufs: get().lastRenderStats?.lufs ?? null,
-      truePeakDb: get().lastRenderStats?.truePeakDb ?? null,
-      createdAt: Date.now(),
-    };
-    set((state) => ({ abSlots: [...state.abSlots.filter((s) => s.label !== label), slot].slice(-8), activeSlot: slot.id }));
+    if (initial.busy) {
+      set({ toast: 'Finish the current task before measuring an A/B version.' });
+      return;
+    }
+    const capturedProject = cloneProject(project);
+    const projectId = project.id;
+    try {
+      const result = await renderProject(get, {
+        mode: 'master',
+        startSec: 0,
+        endSec: timelineDuration(capturedProject),
+        label: `Measuring version ${label}`,
+      });
+      const currentProject = get().project;
+      if (!currentProject || currentProject.id !== projectId) {
+        set({ busy: null, toast: 'A/B capture discarded because the open project changed.' });
+        return;
+      }
+      const slot: ABSlot = {
+        id: uid('slot'),
+        label,
+        processors: structuredClone(capturedProject.master.processors),
+        volumeDb: capturedProject.master.volumeDb,
+        lufs: Number.isFinite(result.stats.lufs) ? result.stats.lufs : null,
+        truePeakDb: Number.isFinite(result.stats.truePeakDb) ? result.stats.truePeakDb : null,
+        createdAt: Date.now(),
+      };
+      const state = get();
+      const nextSlots = [...state.abSlots.filter((item) => item.label !== label), slot].slice(-8);
+      const mixContextUnchanged = JSON.stringify(currentProject.tracks) === JSON.stringify(capturedProject.tracks) &&
+        JSON.stringify(currentProject.buses) === JSON.stringify(capturedProject.buses) &&
+        currentProject.tempo === capturedProject.tempo && currentProject.sampleRate === capturedProject.sampleRate;
+      const masterUnchanged = JSON.stringify(currentProject.master) === JSON.stringify(capturedProject.master);
+      const canAutoSelect = mixContextUnchanged && masterUnchanged;
+      slot.stale = !mixContextUnchanged;
+      const nextActiveSlot = canAutoSelect
+        ? slot.id
+        : (nextSlots.some((item) => item.id === state.activeSlot) ? state.activeSlot : null);
+      const nextWorkingMix = state.workingMix ?? (canAutoSelect && state.activeSlot === null
+        ? {
+            projectId,
+            processors: structuredClone(currentProject.master.processors),
+            volumeDb: currentProject.master.volumeDb,
+          }
+        : null);
+      const comparisonDb = state.loudnessMatch
+        ? loudnessMatchedMonitorGain(nextSlots, nextActiveSlot)
+        : 0;
+      realtimeHost.setComparisonGain(comparisonDb);
+      set({
+        abSlots: nextSlots,
+        activeSlot: nextActiveSlot,
+        workingMix: nextWorkingMix,
+        comparisonDb,
+        ...(canAutoSelect ? { lastRenderStats: result.stats } : {}),
+        busy: null,
+        toast: canAutoSelect
+          ? `Captured version ${label}: ${slot.lufs !== null ? slot.lufs.toFixed(1) + ' LUFS' : 'loudness unavailable'}.`
+          : !mixContextUnchanged
+            ? `Version ${label} was saved, but the track or bus mix changed during capture. Its loudness measurement is marked stale; recapture it for level matching.`
+            : `Version ${label} was measured and saved. The live master chain changed during capture, so select the slot to audition it.`,
+      });
+    } catch (error) {
+      set({ busy: null, toast: error instanceof Error ? `A/B capture failed: ${error.message}` : 'A/B capture failed.' });
+    }
   },
 
   recallSlot: (id) => {
-    const slot = get().abSlots.find((s) => s.id === id);
-    if (!slot) return;
-    get().mutate((project) => {
-      project.master.processors = structuredClone(slot.processors);
-      project.master.volumeDb = slot.volumeDb;
-    });
-    let comparisonDb = 0;
-    if (get().loudnessMatch && slot.lufs && get().lastRenderStats?.lufs) {
-      comparisonDb = (get().lastRenderStats!.lufs - slot.lufs!);
-    }
+    const state = get();
+    const slot = state.abSlots.find((item) => item.id === id);
+    const project = state.project;
+    if (!slot || !project) return;
+    const workingMix = state.workingMix ?? (state.activeSlot === null
+      ? {
+          projectId: project.id,
+          processors: structuredClone(project.master.processors),
+          volumeDb: project.master.volumeDb,
+        }
+      : null);
+    if (workingMix) set({ workingMix });
+    get().mutate((next) => {
+      next.master.processors = structuredClone(slot.processors);
+      next.master.volumeDb = slot.volumeDb;
+    }, { preserveAb: true, skipPersist: true, skipHistory: true });
+    const comparisonDb = get().loudnessMatch
+      ? loudnessMatchedMonitorGain(get().abSlots, slot.id)
+      : 0;
     realtimeHost.setComparisonGain(comparisonDb);
     set({ activeSlot: slot.id, comparisonDb });
   },
 
-  deleteSlot: (id) => set((state) => ({ abSlots: state.abSlots.filter((s) => s.id !== id) })),
+  deleteSlot: (id) => {
+    const state = get();
+    const nextSlots = state.abSlots.filter((slot) => slot.id !== id);
+    if (state.activeSlot === id) {
+      get().restoreWorkingMix();
+    }
+    const current = get();
+    const comparisonDb = current.loudnessMatch
+      ? loudnessMatchedMonitorGain(nextSlots, current.activeSlot)
+      : 0;
+    realtimeHost.setComparisonGain(comparisonDb);
+    set({
+      abSlots: nextSlots,
+      activeSlot: current.activeSlot === id ? null : current.activeSlot,
+      comparisonDb: current.activeSlot === id ? 0 : comparisonDb,
+    });
+  },
+
+  restoreWorkingMix: () => {
+    const state = get();
+    const project = state.project;
+    const workingMix = state.workingMix;
+    if (project && workingMix && project.id === workingMix.projectId) {
+      get().mutate((next) => {
+        next.master.processors = structuredClone(workingMix.processors);
+        next.master.volumeDb = workingMix.volumeDb;
+      }, { preserveAb: true, skipHistory: true });
+    }
+    realtimeHost.setComparisonGain(0);
+    set({ activeSlot: null, workingMix: null, comparisonDb: 0 });
+  },
 
   setLoudnessMatch: (on) => {
-    const slot = get().abSlots.find((s) => s.id === get().activeSlot);
-    let comparisonDb = 0;
-    if (on && slot?.lufs && get().lastRenderStats?.lufs) comparisonDb = get().lastRenderStats!.lufs - slot.lufs;
+    const state = get();
+    const comparisonDb = on
+      ? loudnessMatchedMonitorGain(state.abSlots, state.activeSlot)
+      : 0;
     realtimeHost.setComparisonGain(comparisonDb);
     set({ loudnessMatch: on, comparisonDb });
   },
@@ -1373,8 +1895,22 @@ export const useApp = create<AppState>((set, get) => ({
   exportMix: async (settings) => {
     const project = get().project;
     if (!project) return;
-    set({ busy: { kind: 'render', label: 'Rendering offline', progress: 0 } });
+    if (settings.format === 'aiff' && settings.bitDepth === 32) {
+      set({ toast: 'AIFF export supports 16 or 24-bit. Choose WAV for 32-bit float.' });
+      return;
+    }
+    set({ busy: { kind: 'render', label: 'Preparing export destination', progress: 0 } });
     try {
+      const filename = sanitizeFilename(settings.filename || project.name);
+      const suggestedName = `${filename}.${settings.format}`;
+
+      // The native picker must be requested directly from the button action,
+      // before the offline render introduces any asynchronous work.
+      const directHandle = settings.format === 'wav' || settings.format === 'aiff'
+        ? await chooseDirectExportFile(suggestedName, settings.format)
+        : null;
+
+      set({ busy: { kind: 'render', label: 'Rendering offline', progress: 0 } });
       const result = await renderProject(get, {
         mode: settings.mode,
         trackId: settings.trackId,
@@ -1384,45 +1920,84 @@ export const useApp = create<AppState>((set, get) => ({
       let L = result.L;
       let R = result.R;
       let sampleRate = result.sampleRate;
+      const processingController = new AbortController();
+      const cancelProcessing = () => processingController.abort();
+
+      // Convert to the requested delivery rate first. True-peak normalization
+      // must operate on the final PCM rate, because SRC can change the
+      // reconstructed inter-sample maximum. The converter yields between
+      // bounded output blocks and can be cancelled without a browser-wide
+      // OfflineAudioBuffer allocation.
       if (settings.sampleRate !== sampleRate) {
-        set({ busy: { kind: 'render', label: `Resampling to ${settings.sampleRate} Hz`, progress: 0.92 } });
-        const resampled = await resampleToRate(L, R, sampleRate, settings.sampleRate);
+        const label = `Resampling to ${settings.sampleRate} Hz`;
+        set({ busy: { kind: 'render', label, progress: 0.9, cancel: cancelProcessing } });
+        const resampled = await resampleToRate(L, R, sampleRate, settings.sampleRate, {
+          signal: processingController.signal,
+          onProgress: (fraction) => set({
+            busy: {
+              kind: 'render',
+              label,
+              progress: 0.9 + fraction * 0.025,
+              cancel: cancelProcessing,
+            },
+          }),
+        });
         L = resampled.L;
         R = resampled.R;
         sampleRate = settings.sampleRate;
       }
 
-      // Measure after sample-rate conversion so normalization targets the file that will be delivered.
-      let measured = analyzeLoudness(L, R, sampleRate);
-      if (
-        settings.normalize &&
-        Number.isFinite(project.targetTruePeak) &&
-        Number.isFinite(measured.truePeakDb) &&
-        measured.samplePeakDb > -90
-      ) {
-        const gainDb = project.targetTruePeak - measured.truePeakDb;
-        const gain = Math.pow(10, gainDb / 20);
-        if (Number.isFinite(gain) && gain > 0) {
-          for (let i = 0; i < L.length; i++) {
-            L[i] *= gain;
-            R[i] *= gain;
-          }
-          measured = analyzeLoudness(L, R, sampleRate);
-        }
+      if (settings.normalize) {
+        const label = 'Normalising to the true-peak target';
+        set({ busy: { kind: 'render', label, progress: 0.93, cancel: cancelProcessing } });
+        await normalizeToTruePeakAsync(L, R, project.targetTruePeak ?? -1, {
+          signal: processingController.signal,
+          onProgress: (fraction) => set({
+            busy: {
+              kind: 'render',
+              label,
+              progress: 0.93 + fraction * 0.02,
+              cancel: cancelProcessing,
+            },
+          }),
+        });
       }
-      const exportStats: RenderStats = {
+
+      const loudnessLabel = 'Measuring final PCM loudness';
+      set({ busy: { kind: 'render', label: loudnessLabel, progress: 0.95, cancel: cancelProcessing } });
+      const pcmReport = await analyzeLoudnessAsync(L, R, sampleRate, {
+        signal: processingController.signal,
+        onProgress: (fraction) => set({
+          busy: {
+            kind: 'render',
+            label: loudnessLabel,
+            progress: 0.95 + fraction * 0.025,
+            cancel: cancelProcessing,
+          },
+        }),
+      });
+      let finalStats: RenderStats = {
         ...result.stats,
-        lufs: measured.integratedLufs,
-        truePeakDb: measured.truePeakDb,
-        samplePeakDb: measured.samplePeakDb,
-        lra: measured.lra,
-        crestDb: measured.crestDb,
+        lufs: pcmReport.integratedLufs,
+        truePeakDb: pcmReport.truePeakDb,
+        samplePeakDb: pcmReport.samplePeakDb,
+        lra: pcmReport.lra,
+        crestDb: pcmReport.crestDb,
         duration: L.length / sampleRate,
       };
-      const filename = sanitizeFilename(settings.filename || project.name);
-      let blob: Blob;
-      if (settings.format === 'wav') {
-        blob = encodeWav(L, R, {
+
+      const extension = settings.format === 'mp3' ? 'mp3' : settings.format;
+      let exportName = `${filename}.${extension}`;
+      let outputBlob: Blob;
+
+      if (directHandle) {
+        // On supporting browsers, encoded PCM is written sequentially to the
+        // user-selected file. No complete encoded Blob is assembled in-page.
+        const savedFile = await writeDirectExportFile(directHandle, L, R, sampleRate, settings);
+        outputBlob = savedFile;
+        exportName = savedFile.name || directHandle.name || exportName;
+      } else if (settings.format === 'wav') {
+        outputBlob = encodeWav(L, R, {
           sampleRate,
           bitDepth: settings.bitDepth,
           dither: settings.dither,
@@ -1433,42 +2008,74 @@ export const useApp = create<AppState>((set, get) => ({
             software: 'Sonora Reference Studio',
           },
         });
+        downloadBlob(outputBlob, exportName);
       } else if (settings.format === 'aiff') {
-        if (settings.bitDepth === 32) throw new Error('AIFF export supports 16 or 24-bit. Choose WAV for 32-bit float.');
-        blob = encodeAiff(L, R, sampleRate, settings.bitDepth === 16 ? 16 : 24);
+        outputBlob = encodeAiff(L, R, sampleRate, settings.bitDepth === 16 ? 16 : 24);
+        downloadBlob(outputBlob, exportName);
       } else {
-        blob = await encodeMp3(L, R, sampleRate);
+        outputBlob = await encodeMp3(L, R, sampleRate);
+        downloadBlob(outputBlob, exportName);
       }
-      const extension = settings.format === 'mp3' ? 'mp3' : settings.format;
-      downloadBlob(blob, `${filename}.${extension}`);
+
+      let encodedVerification: EncodedFileMeasurements | null = null;
+      let verificationWarning: string | null = null;
+      try {
+        set({ busy: { kind: 'render', label: 'Verifying encoded delivery file', progress: 0.98 } });
+        encodedVerification = await verifyEncodedBlob(outputBlob);
+      } catch (error) {
+        verificationWarning = error instanceof Error ? error.message : String(error);
+      }
+
+      if (encodedVerification) {
+        finalStats = {
+          ...finalStats,
+          lufs: encodedVerification.lufs,
+          truePeakDb: encodedVerification.truePeakDb,
+          samplePeakDb: encodedVerification.samplePeakDb,
+          lra: encodedVerification.lra,
+          crestDb: encodedVerification.crestDb,
+          duration: encodedVerification.duration,
+        };
+      }
+
       const record: ExportRecord = {
         id: uid('export'),
         projectId: project.id,
-        name: `${filename}.${extension}`,
+        name: exportName,
         createdAt: Date.now(),
         format: settings.format.toUpperCase(),
         sampleRate,
         bitDepth: settings.format === 'mp3' ? 16 : settings.bitDepth,
-        duration: L.length / sampleRate,
-        lufs: exportStats.lufs,
-        truePeak: exportStats.truePeakDb,
-        sizeBytes: blob.size,
+        duration: finalStats.duration,
+        lufs: finalStats.lufs,
+        truePeak: finalStats.truePeakDb,
+        sizeBytes: outputBlob.size,
         settings: { ...settings },
+        verifiedLufs: encodedVerification?.lufs ?? null,
+        verifiedTruePeakDb: encodedVerification?.truePeakDb ?? null,
+        verificationNote: verificationWarning ?? undefined,
       };
-      await db.saveExport(record, blob);
+      // File objects are Blobs, so the existing durable export history remains
+      // available for Download and Verify after a direct-to-file write.
+      await db.saveExport(record, outputBlob);
+      const measuredText = `${finalStats.lufs.toFixed(1)} LUFS · ${finalStats.truePeakDb.toFixed(1)} dBTP`;
+      const delivery = directHandle ? 'Saved directly to file' : 'Exported';
+      const toast = verificationWarning
+        ? `${delivery} ${record.name} · pre-encode measurement ${measuredText}. Encoded-file verification unavailable: ${verificationWarning}`
+        : `${delivery} and verified ${record.name} · ${measuredText}`;
       set((state) => ({
         exports: [record, ...state.exports],
-        lastRenderStats: exportStats,
+        lastRenderStats: finalStats,
         busy: null,
-        toast: `Exported ${record.name} · ${exportStats.lufs.toFixed(1)} LUFS · ${exportStats.truePeakDb.toFixed(1)} dBTP.`,
+        toast,
       }));
       if (settings.mode === 'master') {
         const masterVersion = {
           id: uid('master'),
           name: filename,
           createdAt: Date.now(),
-          lufs: exportStats.lufs,
-          truePeak: exportStats.truePeakDb,
+          lufs: finalStats.lufs,
+          truePeak: finalStats.truePeakDb,
           processors: structuredClone(project.master.processors),
         };
         get().mutate((p) => {
@@ -1476,7 +2083,8 @@ export const useApp = create<AppState>((set, get) => ({
         });
       }
     } catch (error) {
-      set({ busy: null, toast: error instanceof Error ? error.message : 'Export failed.' });
+      const cancelled = error instanceof Error && error.name === 'AbortError';
+      set({ busy: null, toast: cancelled ? 'Export cancelled.' : error instanceof Error ? error.message : 'Export failed.' });
     }
   },
 
@@ -1500,6 +2108,13 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   clearAllData: async () => {
+    realtimeHost.stop();
+    realtimeHost.setComparisonGain(0);
+    realtimeHost.setMatchAudition(false);
+    realtimeHost.clearMatchAuditionBuffers();
+    realtimeHost.syncAssets([]);
+    projectSaveQueue.cancelAll();
+    await projectSaveQueue.drain();
     await db.clearAllData();
     set({
       projects: [],
@@ -1507,9 +2122,17 @@ export const useApp = create<AppState>((set, get) => ({
       assets: [],
       assetBuffers: {},
       analyses: {},
+      matchPlan: null,
+      matchPreview: null,
+      matchAudition: null,
       exports: [],
       presets: [...BUILT_IN_PRESETS],
       screen: 'dashboard',
+      abSlots: [],
+      activeSlot: null,
+      workingMix: null,
+      loudnessMatch: false,
+      comparisonDb: 0,
       toast: 'All local project data was deleted.',
     });
   },
@@ -1525,10 +2148,10 @@ function timelineDuration(project: ProjectState): number {
 
 async function renderProject(
   get: () => AppState,
-  options: { mode: 'master' | 'track'; trackId?: string; startSec: number; endSec: number },
+  options: { mode: 'master' | 'track'; trackId?: string; startSec: number; endSec: number; label?: string; projectOverride?: ProjectState; statsOnly?: boolean },
 ): Promise<{ L: Float32Array; R: Float32Array; sampleRate: number; stats: RenderStats }> {
   const state = get();
-  const project = state.project;
+  const project = options.projectOverride ?? state.project;
   if (!project) throw new Error('No project open.');
   let renderProjectState = cloneProject(project);
   if (options.mode === 'track' && options.trackId) {
@@ -1562,7 +2185,7 @@ async function renderProject(
       useApp.setState({
         busy: {
           kind: 'render',
-          label: 'Rendering offline',
+          label: options.label ?? 'Rendering offline',
           progress: 0,
           cancel,
         },
@@ -1571,7 +2194,12 @@ async function renderProject(
         const message = event.data;
         if (message.type === 'progress') {
           useApp.setState({
-            busy: { kind: 'render', label: 'Rendering offline', progress: message.progress as number, cancel },
+            busy: {
+              kind: 'render',
+              label: typeof message.stage === 'string' ? message.stage : options.label ?? 'Rendering offline',
+              progress: message.progress as number,
+              cancel,
+            },
           });
         } else if (message.type === 'done') {
           resolve({
@@ -1581,7 +2209,9 @@ async function renderProject(
             stats: message.stats as RenderStats,
           });
         } else if (message.type === 'cancelled') {
-          reject(new Error('Render cancelled.'));
+          const error = new Error('The offline render was cancelled.');
+          error.name = 'AbortError';
+          reject(error);
         } else if (message.type === 'error') {
           reject(new Error(message.message as string));
         }
@@ -1594,6 +2224,7 @@ async function renderProject(
         sampleRate: renderProjectState.sampleRate,
         startSec: options.startSec,
         endSec: options.endSec,
+        statsOnly: options.statsOnly,
       });
     });
   } finally {
@@ -1616,6 +2247,103 @@ function downloadBlob(blob: Blob, filename: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+interface DirectExportWritable extends SequentialPcmWritable {
+  close(): Promise<void>;
+  abort(reason?: unknown): Promise<void>;
+}
+
+interface DirectExportFileHandle {
+  readonly name: string;
+  createWritable(): Promise<DirectExportWritable>;
+  getFile(): Promise<File>;
+}
+
+interface SaveFilePickerOptions {
+  suggestedName: string;
+  types: { description: string; accept: Record<string, string[]> }[];
+}
+
+interface SaveFilePickerWindow extends Window {
+  showSaveFilePicker?: (options: SaveFilePickerOptions) => Promise<DirectExportFileHandle>;
+}
+
+/** Request the destination while the Export button's user activation is still active. */
+async function chooseDirectExportFile(
+  suggestedName: string,
+  format: 'wav' | 'aiff',
+): Promise<DirectExportFileHandle | null> {
+  if (typeof window === 'undefined' || !window.isSecureContext) return null;
+  const picker = (window as SaveFilePickerWindow).showSaveFilePicker;
+  if (!picker) return null;
+  const type: SaveFilePickerOptions['types'][number] = format === 'wav'
+    ? { description: 'WAV audio', accept: { 'audio/wav': ['.wav'] } }
+    : { description: 'AIFF audio', accept: { 'audio/aiff': ['.aiff', '.aif'] } };
+  return picker.call(window, { suggestedName, types: [type] });
+}
+
+async function writeDirectExportFile(
+  handle: DirectExportFileHandle,
+  L: Float32Array,
+  R: Float32Array,
+  sampleRate: number,
+  settings: ExportSettings,
+): Promise<File> {
+  if (settings.format !== 'wav' && settings.format !== 'aiff') {
+    throw new Error('Direct file writing is available for WAV and AIFF only.');
+  }
+  const writable = await handle.createWritable();
+  const controller = new AbortController();
+  let abortPromise: Promise<void> | null = null;
+  const cancel = () => {
+    controller.abort();
+    if (!abortPromise) abortPromise = writable.abort('Export cancelled.').catch(() => undefined);
+  };
+  const label = settings.format === 'wav' ? 'Writing WAV directly to file' : 'Writing AIFF directly to file';
+  const onProgress = (progress: number) => {
+    useApp.setState({
+      busy: {
+        kind: 'render',
+        label,
+        progress: 0.91 + Math.min(1, Math.max(0, progress)) * 0.06,
+        cancel,
+      },
+    });
+  };
+
+  try {
+    if (settings.format === 'wav') {
+      await writeWavToWritable(L, R, {
+        sampleRate,
+        bitDepth: settings.bitDepth,
+        dither: settings.dither,
+        metadata: {
+          title: settings.metadata.title,
+          artist: settings.metadata.artist,
+          comment: settings.metadata.comment,
+          software: 'Sonora Reference Studio',
+        },
+      }, writable, { signal: controller.signal, onProgress });
+    } else {
+      if (settings.bitDepth === 32) {
+        throw new Error('AIFF export supports 16 or 24-bit. Choose WAV for 32-bit float.');
+      }
+      await writeAiffToWritable(
+        L, R, sampleRate, settings.bitDepth === 16 ? 16 : 24,
+        writable, { signal: controller.signal, onProgress },
+      );
+    }
+    if (controller.signal.aborted) throw new DOMException('The export was cancelled.', 'AbortError');
+    useApp.setState({ busy: { kind: 'render', label: 'Finalizing saved file', progress: 0.98 } });
+    await writable.close();
+  } catch (error) {
+    if (!abortPromise) abortPromise = writable.abort(error).catch(() => undefined);
+    await abortPromise;
+    throw error;
+  }
+
+  return handle.getFile();
+}
+
 async function encodeMp3(L: Float32Array, R: Float32Array, sampleRate: number): Promise<Blob> {
   if (sampleRate !== 44100 && sampleRate !== 48000) {
     throw new Error('MP3 encoding supports 44.1 kHz and 48 kHz. Choose WAV/AIFF for other sample rates.');
@@ -1628,17 +2356,16 @@ async function encodeMp3(L: Float32Array, R: Float32Array, sampleRate: number): 
   } }).Mp3Encoder;
   if (!Mp3Encoder) throw new Error('MP3 encoder failed to load.');
   const encoder = new Mp3Encoder(2, sampleRate, 320);
-  const left = new Int16Array(L.length);
-  const right = new Int16Array(R.length);
-  for (let i = 0; i < L.length; i++) {
-    left[i] = Math.max(-32768, Math.min(32767, Math.round(L[i] * 32767)));
-    right[i] = Math.max(-32768, Math.min(32767, Math.round(R[i] * 32767)));
-  }
   const chunkSize = 1152;
+  // Reuse bounded scratch buffers instead of allocating a full-song Int16 pair.
+  const left = new Int16Array(chunkSize);
+  const right = new Int16Array(chunkSize);
   const chunks: BlobPart[] = [];
-  for (let offset = 0; offset < left.length; offset += chunkSize) {
-    const l = left.subarray(offset, offset + chunkSize);
-    const r = right.subarray(offset, offset + chunkSize);
+  for (let offset = 0; offset < L.length; offset += chunkSize) {
+    const frames = Math.min(chunkSize, L.length - offset);
+    fillStereoPcm16Block(L, R, offset, frames, left, right);
+    const l = left.subarray(0, frames);
+    const r = right.subarray(0, frames);
     const encoded = encoder.encodeBuffer(l, r);
     if (encoded.length) chunks.push(new Uint8Array(encoded.slice()));
   }
@@ -1647,12 +2374,68 @@ async function encodeMp3(L: Float32Array, R: Float32Array, sampleRate: number): 
   return new Blob(chunks, { type: 'audio/mpeg' });
 }
 
-/** Re-measure an encoded file from its bytes — used by QA and the export panel. */
-export async function verifyEncodedBlob(blob: Blob): Promise<{ lufs: number; truePeakDb: number }> {
+export interface EncodedFileMeasurements {
+  lufs: number;
+  truePeakDb: number;
+  samplePeakDb: number;
+  lra: number;
+  crestDb: number;
+  duration: number;
+}
+
+/**
+ * Estimate verification memory from a short container-header read before
+ * decodeAudioFile can materialize whole-file and decoded PCM copies.
+ */
+export async function estimateEncodedVerificationMemory(blob: Blob): Promise<number> {
+  const mime = blob.type.toLowerCase();
+  if (mime.includes('wav') || mime.includes('wave')) {
+    const header = await blob.slice(0, Math.min(blob.size, 256 * 1024)).arrayBuffer();
+    const info = parseWavHeader(header);
+    if (info?.lengthFrames !== null && info?.lengthFrames !== undefined) {
+      return estimateVerificationWorkingSetBytes({
+        encodedBytes: blob.size,
+        decodedFrames: info.lengthFrames,
+        channels: info.channels || 2,
+      });
+    }
+  } else if (mime.includes('aiff') || mime.includes('aif')) {
+    const header = await blob.slice(0, Math.min(blob.size, 256 * 1024)).arrayBuffer();
+    const info = parseAiffHeader(header);
+    if (info?.lengthFrames !== null && info?.lengthFrames !== undefined) {
+      return estimateVerificationWorkingSetBytes({
+        encodedBytes: blob.size,
+        decodedFrames: info.lengthFrames,
+        channels: info.channels || 2,
+      });
+    }
+  }
+
+  // Compressed streams (including MP3) may decode to many times their stored
+  // size. Use a conservative multiplier when a trusted duration is unavailable.
+  return estimateVerificationWorkingSetBytes({ encodedBytes: blob.size });
+}
+
+/** Decode and re-measure only when a conservative memory preflight allows it. */
+export async function verifyEncodedBlob(blob: Blob): Promise<EncodedFileMeasurements> {
+  const estimatedBytes = await estimateEncodedVerificationMemory(blob);
+  if (shouldDeferVerification(estimatedBytes)) {
+    throw new Error(
+      `Encoded-file verification was deferred to protect browser memory (${formatMemoryEstimate(estimatedBytes)} estimated; limit ${formatMemoryEstimate(MAX_VERIFY_WORKING_SET_BYTES)}). The export is saved, and the displayed measurements remain the pre-encode PCM analysis.`,
+    );
+  }
+
   const file = new File([blob], 'verification.wav', { type: blob.type });
   const decoded = await decodeAudioFile(file);
-  const report = analyzeLoudness(decoded.L, decoded.R, decoded.sampleRate);
-  return { lufs: report.integratedLufs, truePeakDb: report.truePeakDb };
+  const report = await analyzeLoudnessAsync(decoded.L, decoded.R, decoded.sampleRate);
+  return {
+    lufs: report.integratedLufs,
+    truePeakDb: report.truePeakDb,
+    samplePeakDb: report.samplePeakDb,
+    lra: report.lra,
+    crestDb: report.crestDb,
+    duration: decoded.duration,
+  };
 }
 
 export function assistantSuggestions(): string[] {

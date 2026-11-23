@@ -107,7 +107,13 @@ export interface MatchSettings {
   excludeHighHz: number;
   targetSection: 'full' | 'chorus' | 'verse';
   referenceSection: 'full' | 'chorus' | 'verse';
+  /** Exact analysed target segment index; overrides targetSection when present. */
+  targetSectionIndex?: number;
+  /** Per-reference exact analysed segment indices; omitted entries use referenceSection. */
+  referenceSectionIndices?: Record<string, number>;
   categorySource: Record<string, number>;
+  /** Relative reference influence for weighted consensus; 0 excludes a file. */
+  referenceWeights?: Record<string, number>;
   matchTonal: boolean;
   matchLoudness: boolean;
   matchDynamics: boolean;

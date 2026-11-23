@@ -35,13 +35,34 @@ export default function Export() {
 
   const verify = async (id: string) => {
     setVerifyingId(id);
+    const record = exports.find((item) => item.id === id);
+    let blob: Blob | null = null;
     try {
-      const blob = await db.getExportBlob(id);
+      blob = await db.getExportBlob(id);
       if (!blob) throw new Error('Export file not found.');
       const result = await verifyEncodedBlob(blob);
+      if (record) {
+        // Replace the earlier PCM estimate with measurements from the decoded
+        // file bytes and keep the verified figures separately for auditability.
+        const { verificationNote: _previousNote, ...recordWithoutNote } = record;
+        await db.saveExport({
+          ...recordWithoutNote,
+          duration: result.duration,
+          lufs: result.lufs,
+          truePeak: result.truePeakDb,
+          verifiedLufs: result.lufs,
+          verifiedTruePeakDb: result.truePeakDb,
+        }, blob);
+        await refreshExports();
+      }
       useApp.getState().setToast(`Verified decoded file: ${result.lufs.toFixed(1)} LUFS · ${result.truePeakDb.toFixed(1)} dBTP.`);
     } catch (error) {
-      useApp.getState().setToast(`Verification failed: ${error instanceof Error ? error.message : String(error)}`);
+      const message = error instanceof Error ? error.message : String(error);
+      if (record && blob) {
+        await db.saveExport({ ...record, verificationNote: message }, blob);
+        await refreshExports();
+      }
+      useApp.getState().setToast(`Verification unavailable: ${message}`);
     } finally {
       setVerifyingId(null);
     }
@@ -54,8 +75,7 @@ export default function Export() {
           <p className="section-label">Delivery</p>
           <h1 className="mt-1 text-2xl font-semibold tracking-[-.025em] text-white">Export</h1>
           <p className="mt-1 text-xs text-ink-400">
-            Offline, deterministic rendering at the session rate or higher. The download is the encoded file itself — no
-            additional lossy conversion.
+            Offline, deterministic rendering at the session rate or higher. WAV/AIFF can be saved directly to a chosen file in supported browsers; MP3 and unsupported browsers use the standard download flow.
           </p>
         </div>
         <Badge tone="info">{audioTracks.length} audio track{audioTracks.length === 1 ? '' : 's'}</Badge>
@@ -152,12 +172,12 @@ export default function Export() {
               label="Advanced options"
               icon="sliders"
               title="Advanced export options"
-              description="Dithering, final peak handling and file metadata."
+              description="Dithering, final true-peak normalisation and file metadata."
               placement="bottom-end"
               width="lg"
             >
               <Toggle checked={settings.dither} onChange={(value) => setSettings((current) => ({ ...current, dither: value }))} label="TPDF dither when reducing bit depth" description="Only applied for 16/24-bit PCM. It is never applied to 32-bit float." />
-              <Toggle checked={settings.normalize} onChange={(value) => setSettings((current) => ({ ...current, normalize: value }))} label={`Normalise peak to ${targetTp.toFixed(1)} dB`} description="A final gain safety net. It does not replace the limiter and does not loudness-normalise." />
+              <Toggle checked={settings.normalize} onChange={(value) => setSettings((current) => ({ ...current, normalize: value }))} label={`Normalise true peak to ${targetTp.toFixed(1)} dBTP`} description="Applies a common gain to the final PCM after sample-rate conversion using Annex 2 FIR true-peak measurement. The encoded file is measured again after decoding; lossy encoding can change the result." />
               <div className="space-y-2 border-t border-white/[.07] pt-3">
                 <p className="text-[9px] font-semibold uppercase tracking-[.12em] text-ink-500">Metadata</p>
                 <label className="block">
@@ -189,7 +209,7 @@ export default function Export() {
                 })
               }
             >
-              <Icon name="download" size={14} /> Render &amp; download
+              <Icon name="download" size={14} /> Render &amp; export
             </Button>
             <span className="text-2xs text-ink-500">
               {settings.format === 'mp3' ? 'MP3 is limited to 44.1/48 kHz and is lossy.' : settings.format === 'aiff' && settings.bitDepth === 32 ? 'AIFF does not support 32-bit float here; choose WAV.' : `${settings.format.toUpperCase()} · ${settings.sampleRate} Hz`}
@@ -231,6 +251,13 @@ export default function Export() {
               <div key={record.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/[.07] bg-[#0D0D1B]/65 px-3 py-3">
                 <div>
                   <div className="text-xs text-ink-100">{record.name}</div>
+                  {record.verificationNote ? (
+                    <p className="mt-1 max-w-2xl text-2xs leading-relaxed text-signal-amber/90">
+                      Verification deferred or unavailable: {record.verificationNote}
+                    </p>
+                  ) : record.verifiedLufs !== undefined && record.verifiedLufs !== null ? (
+                    <p className="mt-1 text-2xs text-signal-green/80">Encoded file verified</p>
+                  ) : null}
                   <div className="font-mono text-2xs text-ink-500">
                     {record.format} · {record.sampleRate} Hz · {record.bitDepth}-bit · {formatBytes(record.sizeBytes)} ·{' '}
                     {new Date(record.createdAt).toLocaleString()}

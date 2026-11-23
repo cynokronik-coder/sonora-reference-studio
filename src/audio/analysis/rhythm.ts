@@ -9,10 +9,39 @@ export interface SectionBoundary {
 export interface RhythmReport {
   tempoBpm: number;
   beatConfidence: number;
+  /** Alternative metrical interpretations when the pulse has a strong half/double-time alias. */
+  tempoCandidatesBpm?: number[];
+  /** Robust range of local tempo estimates when the track contains measurable tempo changes. */
+  tempoRangeBpm?: { min: number; max: number } | null;
+  /** Fraction of grouped transient strength that aligns with the estimated beat grid. */
+  beatGridConfidence?: number;
+  /** Fraction of grouped transient strength away from the estimated beat grid. */
+  offBeatRatio?: number;
+  /** Beat-grid phase in seconds, measured from the start of this analysed buffer. */
+  beatPhaseSeconds?: number | null;
+  /** Estimated number of quarter-note beats in a repeating bar; null when ambiguous. */
+  beatsPerBar?: number | null;
+  /** Downbeat location as a zero-based beat offset from the detected beat-grid phase. */
+  downbeatOffsetBeats?: number | null;
+  /** Phase of the next bar downbeat within the repeating bar period, in seconds. */
+  barPhaseSeconds?: number | null;
+  /** Confidence that the accent pattern repeats at the estimated bar length. */
+  meterConfidence?: number;
+  /** Confidence that one beat position is a distinct downbeat. */
+  downbeatConfidence?: number;
+  /** Transient events per second after collapsing closely spaced FFT peaks. */
+  groupedOnsetDensity?: number;
   onsetDensity: number;
   punchScore: number;
   attackSharpness: number;
   sections: SectionBoundary[];
+}
+
+export interface AnalyzeRhythmOptions {
+  /** Skip nested structural segmentation when measuring an already-selected section. */
+  includeSections?: boolean;
+  /** Reports phase name and a monotonically increasing fraction from 0 to 1. */
+  onProgress?: (stage: string, fraction: number) => void;
 }
 
 interface FeatureFrame {
@@ -24,16 +53,40 @@ interface FeatureFrame {
 /**
  * Tempo, onset density and section estimation.
  *
- * Tempo comes from autocorrelation of a spectral-flux onset envelope, folded
- * into a musically plausible range. Sections come from a self-similarity
- * novelty curve over 0.5 s feature frames (band energy + loudness) and are
- * deliberately labelled as estimates in the UI.
+ * Tempo comes from autocorrelation of a band-balanced, adaptively thresholded
+ * spectral-flux onset envelope. Sections come from a self-similarity novelty
+ * curve over 0.5 s feature frames (band energy + loudness) and are deliberately
+ * labelled as estimates in the UI.
  */
-export function analyzeRhythm(L: Float32Array, R: Float32Array, sampleRate: number): RhythmReport {
+export function analyzeRhythm(
+  L: Float32Array,
+  R: Float32Array,
+  sampleRate: number,
+  options: AnalyzeRhythmOptions = {},
+): RhythmReport {
   const n = Math.min(L.length, R.length);
   const duration = n / sampleRate;
   if (n < sampleRate) {
-    return { tempoBpm: 0, beatConfidence: 0, onsetDensity: 0, punchScore: 0, attackSharpness: 0, sections: [{ start: 0, end: duration }] };
+    options.onProgress?.('Detecting tempo and sections', 1);
+    return {
+      tempoBpm: 0,
+      beatConfidence: 0,
+      tempoCandidatesBpm: [],
+      tempoRangeBpm: null,
+      beatGridConfidence: 0,
+      offBeatRatio: 0,
+      beatPhaseSeconds: null,
+      beatsPerBar: null,
+      downbeatOffsetBeats: null,
+      barPhaseSeconds: null,
+      meterConfidence: 0,
+      downbeatConfidence: 0,
+      groupedOnsetDensity: 0,
+      onsetDensity: 0,
+      punchScore: 0,
+      attackSharpness: 0,
+      sections: options.includeSections === false ? [] : [{ start: 0, end: duration }],
+    };
   }
 
   const fftSize = 1024;
@@ -43,9 +96,26 @@ export function analyzeRhythm(L: Float32Array, R: Float32Array, sampleRate: numb
   const re = new Float64Array(fftSize);
   const im = new Float64Array(fftSize);
   const prevMag = new Float64Array(fftSize / 2 + 1);
+  const frequencyBands = [
+    { low: 30, high: 150 },
+    { low: 150, high: 500 },
+    { low: 500, high: 1_800 },
+    { low: 1_800, high: 6_000 },
+    { low: 6_000, high: Number.POSITIVE_INFINITY },
+  ];
+  const bandForBin = new Int8Array(fftSize / 2 + 1);
+  bandForBin.fill(-1);
+  for (let k = 1; k <= fftSize / 2; k++) {
+    const frequency = (k * sampleRate) / fftSize;
+    const band = frequencyBands.findIndex((range) => frequency >= range.low && frequency < range.high);
+    if (band >= 0) bandForBin[k] = band;
+  }
+  const bandFlux = new Float64Array(frequencyBands.length);
+  const bandMagnitude = new Float64Array(frequencyBands.length);
   const flux: number[] = [];
   let meanEnergy = 0;
   let frames = 0;
+  const totalFrames = Math.max(0, Math.floor((n - fftSize) / hop) + 1);
 
   for (let start = 0; start + fftSize <= n; start += hop) {
     for (let i = 0; i < fftSize; i++) {
@@ -53,35 +123,44 @@ export function analyzeRhythm(L: Float32Array, R: Float32Array, sampleRate: numb
       im[i] = 0;
     }
     fft.forward(re, im);
-    let f = 0;
+    bandFlux.fill(0);
+    bandMagnitude.fill(0);
+    let totalMagnitude = 0;
     for (let k = 1; k <= fftSize / 2; k++) {
       const mag = Math.hypot(re[k], im[k]);
       const diff = mag - prevMag[k];
-      if (diff > 0) f += diff;
+      const band = bandForBin[k];
+      if (band >= 0) {
+        bandMagnitude[band] += mag;
+        if (diff > 0) bandFlux[band] += diff;
+      }
+      totalMagnitude += mag;
       prevMag[k] = mag;
     }
+    const f = combineBandFlux(bandFlux, bandMagnitude, totalMagnitude);
     flux.push(f);
     meanEnergy += f;
     frames++;
+    if ((frames & 0x3f) === 0 || frames === totalFrames) {
+      options.onProgress?.('Detecting onsets', 0.55 * (frames / Math.max(1, totalFrames)));
+    }
   }
   const fluxMean = meanEnergy / Math.max(1, frames);
   const fluxNorm = flux.map((v) => v / Math.max(1e-9, fluxMean));
-  // Onset strength above the local average.
-  const onset = fluxNorm.map((v, i) => {
-    const from = Math.max(0, i - 8);
-    const to = Math.min(fluxNorm.length, i + 8);
-    let local = 0;
-    for (let j = from; j < to; j++) local += fluxNorm[j];
-    local /= to - from;
-    return Math.max(0, v - local * 0.92);
-  });
+  const onset = adaptiveOnsetEnvelope(
+    fluxNorm,
+    Math.max(4, Math.round((sampleRate / hop) * 0.13)),
+    (fraction) => options.onProgress?.('Detecting onsets', Math.min(0.58, 0.55 + fraction * 0.03)),
+  );
+  options.onProgress?.('Preparing onset envelope', 0.58);
 
   const frameRate = sampleRate / hop;
-  const { tempoBpm, confidence } = estimateTempo(onset, frameRate);
-  const onsetThreshold = Math.max(0.35, median(onset.filter((v) => v > 0.05)) * 1.6);
+  // Keep a raw peak count for compatibility, but create a second event stream
+  // that collapses very close FFT peaks from one transient into one event.
+  const onsetThreshold = 0.06;
   let onsetCount = 0;
   for (let i = 1; i < onset.length - 1; i++) {
-    if (onset[i] > onsetThreshold && onset[i] >= onset[i - 1] && onset[i] >= onset[i + 1]) onsetCount++;
+    if (onset[i] > onsetThreshold && onset[i] > onset[i - 1] && onset[i] >= onset[i + 1]) onsetCount++;
   }
   const onsetDensity = onsetCount / Math.max(1, duration);
   const attackSharpness = clamp(
@@ -89,11 +168,47 @@ export function analyzeRhythm(L: Float32Array, R: Float32Array, sampleRate: numb
     0,
     1,
   );
+  options.onProgress?.('Grouping transients', 0.59);
+  const onsetEvents = groupOnsetEvents(onset, frameRate, onsetThreshold);
+  const groupedEnvelope = new Array<number>(onset.length).fill(0);
+  for (const event of onsetEvents) groupedEnvelope[event.frame] = event.strength;
+  const groupedOnsetDensity = onsetEvents.length / Math.max(1, duration);
 
-  const segments = estimateSections(L, R, sampleRate, duration);
+  options.onProgress?.('Estimating tempo', 0.6);
+  const tempo = estimateTempo(
+    groupedEnvelope,
+    frameRate,
+    (fraction) => options.onProgress?.('Estimating tempo', 0.6 + fraction * 0.22),
+  );
+  const { tempoBpm, confidence } = tempo;
+  const grid = scoreBeatGrid(onsetEvents, tempoBpm, frameRate);
+  const meter = estimateMeterAndDownbeat(onsetEvents, tempoBpm, frameRate, grid.phaseFrames);
+  options.onProgress?.('Scoring attacks', 0.83);
+
+  const segments = options.includeSections === false
+    ? []
+    : estimateSections(
+        L,
+        R,
+        sampleRate,
+        duration,
+        (fraction) => options.onProgress?.('Detecting song sections', 0.84 + fraction * 0.16),
+      );
+  options.onProgress?.('Detecting tempo and sections', 1);
   return {
     tempoBpm,
     beatConfidence: confidence,
+    tempoCandidatesBpm: tempo.candidatesBpm,
+    tempoRangeBpm: tempo.rangeBpm,
+    beatGridConfidence: grid.confidence,
+    offBeatRatio: grid.offBeatRatio,
+    beatPhaseSeconds: grid.phaseFrames === null ? null : grid.phaseFrames / frameRate,
+    beatsPerBar: meter.beatsPerBar,
+    downbeatOffsetBeats: meter.downbeatOffsetBeats,
+    barPhaseSeconds: meter.barPhaseFrames === null ? null : meter.barPhaseFrames / frameRate,
+    meterConfidence: meter.meterConfidence,
+    downbeatConfidence: meter.downbeatConfidence,
+    groupedOnsetDensity,
     onsetDensity,
     punchScore: clamp(attackSharpness * 0.7 + clamp(onsetDensity / 3, 0, 1) * 0.3, 0, 1),
     attackSharpness,
@@ -101,73 +216,618 @@ export function analyzeRhythm(L: Float32Array, R: Float32Array, sampleRate: numb
   };
 }
 
-function estimateTempo(onset: number[], frameRate: number): { tempoBpm: number; confidence: number } {
+
+/**
+ * Combine positive spectral changes after normalising each frequency band by
+ * its own energy. This prevents a loud bass or midrange element from masking
+ * quieter attacks in another band, while excluding effectively silent bands.
+ */
+export function combineBandFlux(
+  bandFlux: ArrayLike<number>,
+  bandMagnitude: ArrayLike<number>,
+  totalMagnitude: number,
+): number {
+  if (!Number.isFinite(totalMagnitude) || totalMagnitude <= 1e-12) return 0;
+  const activeFloor = Math.max(1e-12, totalMagnitude * 0.00025);
+  const scaleFloor = Math.max(1e-12, totalMagnitude * 0.001);
+  let score = 0;
+  let activeBands = 0;
+  const count = Math.min(bandFlux.length, bandMagnitude.length);
+  for (let i = 0; i < count; i++) {
+    const energy = bandMagnitude[i];
+    if (!Number.isFinite(energy) || energy <= activeFloor) continue;
+    const relativeFlux = Math.max(0, bandFlux[i]) / Math.max(energy, scaleFloor);
+    score += clamp(relativeFlux, 0, 2);
+    activeBands++;
+  }
+  return activeBands ? score / activeBands : 0;
+}
+
+/**
+ * Subtract a local median background and a robust MAD-derived noise margin.
+ * The ~260 ms default-scale window follows slow level changes but does not
+ * require attacks to fall on a beat grid; isolated syncopated transients remain
+ * prominent even when their absolute level is lower than neighbouring hits.
+ */
+export function adaptiveOnsetEnvelope(
+  flux: number[],
+  radiusFrames = 12,
+  onProgress?: (fraction: number) => void,
+): number[] {
+  const radius = Math.max(1, Math.round(radiusFrames));
+  const onset = new Array<number>(flux.length).fill(0);
+  for (let i = 0; i < flux.length; i++) {
+    const from = Math.max(0, i - radius);
+    const to = Math.min(flux.length, i + radius + 1);
+    const local = flux.slice(from, to);
+    const baseline = median(local);
+    const deviations = local.map((value) => Math.abs(value - baseline));
+    const mad = median(deviations) * 1.4826;
+    const margin = Math.max(0.025, mad * 1.5);
+    onset[i] = Math.max(0, flux[i] - baseline - margin);
+    if (onProgress && ((i & 0x1ff) === 0 || i === flux.length - 1)) {
+      onProgress((i + 1) / Math.max(1, flux.length));
+    }
+  }
+  if (!flux.length) onProgress?.(1);
+  return onset;
+}
+
+
+
+/**
+ * Convert a section-local beat phase into a song-relative phase. A beat phase
+ * is periodic, so the result is wrapped into the current beat interval.
+ */
+
+
+export interface MeterDownbeatEstimate {
+  beatsPerBar: number | null;
+  downbeatOffsetBeats: number | null;
+  barPhaseFrames: number | null;
+  meterConfidence: number;
+  downbeatConfidence: number;
+}
+
+/**
+ * Infer a repeating beat-group size from accent recurrence, then identify a
+ * distinct downbeat within that group. This is intentionally conservative:
+ * uniform beats or ambiguous accent rotations return null rather than an
+ * invented 4/4 label.
+ */
+export function estimateMeterAndDownbeat(
+  events: OnsetEvent[],
+  tempoBpm: number,
+  frameRate: number,
+  phaseFrames: number | null,
+): MeterDownbeatEstimate {
+  const empty: MeterDownbeatEstimate = {
+    beatsPerBar: null,
+    downbeatOffsetBeats: null,
+    barPhaseFrames: null,
+    meterConfidence: 0,
+    downbeatConfidence: 0,
+  };
+  if (
+    events.length < 12 ||
+    !(tempoBpm > 0) ||
+    !(frameRate > 0) ||
+    phaseFrames === null ||
+    !Number.isFinite(phaseFrames)
+  ) return empty;
+
+  const periodFrames = (60 * frameRate) / tempoBpm;
+  if (!Number.isFinite(periodFrames) || periodFrames < 2) return empty;
+
+  const beatStrength = new Map<number, number>();
+  let minBeat = Number.POSITIVE_INFINITY;
+  let maxBeat = Number.NEGATIVE_INFINITY;
+  const tolerance = periodFrames * 0.22;
+  for (const event of events) {
+    const beatIndex = Math.round((event.frame - phaseFrames) / periodFrames);
+    const beatFrame = phaseFrames + beatIndex * periodFrames;
+    const distance = Math.abs(event.frame - beatFrame);
+    if (distance > tolerance) continue;
+    const weight = Math.max(0, event.strength) * (1 - distance / tolerance);
+    beatStrength.set(beatIndex, (beatStrength.get(beatIndex) ?? 0) + weight);
+    minBeat = Math.min(minBeat, beatIndex);
+    maxBeat = Math.max(maxBeat, beatIndex);
+  }
+  if (!Number.isFinite(minBeat) || maxBeat - minBeat + 1 < 9) return empty;
+
+  const strengths = new Array<number>(maxBeat - minBeat + 1).fill(0);
+  for (const [beatIndex, strength] of beatStrength) strengths[beatIndex - minBeat] = strength;
+
+  const candidates = [3, 4, 5, 6, 7]
+    .filter((beats) => strengths.length >= beats * 3)
+    .map((beats) => ({ beats, score: periodicBeatCorrelation(strengths, beats) }))
+    .filter((item): item is { beats: number; score: number } => item.score !== null)
+    .sort((a, b) => b.score - a.score);
+
+  if (!candidates.length) return empty;
+  const best = candidates[0];
+  // A rhythm that repeats every three beats also repeats every six beats.
+  // Ignore longer integer multiples when measuring meter ambiguity so the
+  // estimator prefers the shortest bar grouping supported by the accents.
+  const nonHarmonicAlternatives = candidates.filter(
+    (candidate) => candidate.beats % best.beats !== 0,
+  );
+  const secondScore = nonHarmonicAlternatives[0]?.score ?? 0;
+  const margin = best.score - secondScore;
+  const meterConfidence = clamp(
+    (best.score - 0.25) * 1.25,
+    0,
+    1,
+  ) * clamp(margin * 2.2, 0, 1);
+  if (best.score < 0.45 || margin < 0.08 || meterConfidence < 0.25) {
+    return { ...empty, meterConfidence };
+  }
+
+  const slotStrength = new Array<number>(best.beats).fill(0);
+  const slotCount = new Array<number>(best.beats).fill(0);
+  for (let beatIndex = minBeat; beatIndex <= maxBeat; beatIndex++) {
+    const slot = positiveModulo(beatIndex, best.beats);
+    slotStrength[slot] += beatStrength.get(beatIndex) ?? 0;
+    slotCount[slot]++;
+  }
+  const slotMeans = slotStrength.map((value, index) => value / Math.max(1, slotCount[index]));
+  const rankedSlots = slotMeans
+    .map((strength, index) => ({ strength, index }))
+    .sort((a, b) => b.strength - a.strength);
+  const strongest = rankedSlots[0];
+  const nextStrongest = rankedSlots[1]?.strength ?? 0;
+  const contrast = strongest.strength > 1e-12
+    ? (strongest.strength - nextStrongest) / strongest.strength
+    : 0;
+  const downbeatConfidence = meterConfidence * clamp(contrast * 2.2, 0, 1);
+  const downbeatOffsetBeats = downbeatConfidence >= 0.35 ? strongest.index : null;
+  const barPhaseFrames = downbeatOffsetBeats === null
+    ? null
+    : positiveModulo(
+        phaseFrames + downbeatOffsetBeats * periodFrames,
+        best.beats * periodFrames,
+      );
+
+  return {
+    beatsPerBar: best.beats,
+    downbeatOffsetBeats,
+    barPhaseFrames,
+    meterConfidence,
+    downbeatConfidence,
+  };
+}
+
+function periodicBeatCorrelation(values: number[], lag: number): number | null {
+  const count = values.length - lag;
+  if (count < lag * 2) return null;
+  let meanA = 0;
+  let meanB = 0;
+  for (let i = 0; i < count; i++) {
+    meanA += values[i];
+    meanB += values[i + lag];
+  }
+  meanA /= count;
+  meanB /= count;
+
+  let covariance = 0;
+  let energyA = 0;
+  let energyB = 0;
+  for (let i = 0; i < count; i++) {
+    const a = values[i] - meanA;
+    const b = values[i + lag] - meanB;
+    covariance += a * b;
+    energyA += a * a;
+    energyB += b * b;
+  }
+  const denominator = Math.sqrt(energyA * energyB);
+  return denominator > 1e-12 ? covariance / denominator : null;
+}
+
+function positiveModulo(value: number, modulus: number): number {
+  return ((value % modulus) + modulus) % modulus;
+}
+
+/**
+ * Map a section-local downbeat phase onto the song timeline, wrapped within
+ * the section's inferred bar length.
+ */
+export function absoluteBarPhaseSeconds(
+  sectionStartSeconds: number,
+  localBarPhaseSeconds: number | null,
+  tempoBpm: number,
+  beatsPerBar: number | null,
+): number | null {
+  if (
+    !Number.isFinite(sectionStartSeconds) ||
+    localBarPhaseSeconds === null ||
+    !Number.isFinite(localBarPhaseSeconds) ||
+    !(tempoBpm > 0) ||
+    !Number.isFinite(tempoBpm) ||
+    !beatsPerBar ||
+    !Number.isFinite(beatsPerBar)
+  ) return null;
+  const barPeriod = (60 / tempoBpm) * beatsPerBar;
+  return positiveModulo(sectionStartSeconds + localBarPhaseSeconds, barPeriod);
+}
+
+export interface BeatSectionState {
+  tempoBpm: number;
+  /** Beat-grid phase relative to the full song timeline, wrapped to one beat. */
+  beatPhaseSeconds: number;
+}
+
+export interface BeatSectionTransition {
+  /** Current section tempo minus the previous section tempo. */
+  tempoChangeBpm: number | null;
+  /** Signed phase shift in milliseconds; null when tempos are not comparable. */
+  beatPhaseShiftMs: number | null;
+  /** 0–1 continuity score for comparable adjacent section grids. */
+  beatContinuity: number | null;
+}
+
+/**
+ * Compare adjacent section beat grids. A meaningful tempo change is reported
+ * independently; phase shift is only compared when the two beat periods are
+ * close enough that a shared phase reference remains meaningful.
+ */
+export function compareBeatSectionTransition(
+  previous: BeatSectionState | null,
+  current: BeatSectionState | null,
+): BeatSectionTransition {
+  if (!previous || !current) {
+    return { tempoChangeBpm: null, beatPhaseShiftMs: null, beatContinuity: null };
+  }
+  const tempoChangeBpm = Math.round((current.tempoBpm - previous.tempoBpm) * 10) / 10;
+  const relativeTempoChange = Math.abs(tempoChangeBpm) / Math.max(previous.tempoBpm, current.tempoBpm);
+  if (relativeTempoChange > 0.02) {
+    return { tempoChangeBpm, beatPhaseShiftMs: null, beatContinuity: null };
+  }
+
+  const period = (60 / previous.tempoBpm + 60 / current.tempoBpm) * 0.5;
+  const rawDifference = current.beatPhaseSeconds - previous.beatPhaseSeconds;
+  const wrappedDifference = ((rawDifference + period / 2) % period + period) % period - period / 2;
+  const beatPhaseShiftMs = Math.round(wrappedDifference * 1000 * 10) / 10;
+  const beatContinuity = clamp(1 - Math.abs(wrappedDifference) / (period * 0.25), 0, 1);
+  return { tempoChangeBpm, beatPhaseShiftMs, beatContinuity };
+}
+
+export function absoluteBeatPhaseSeconds(
+  sectionStartSeconds: number,
+  localPhaseSeconds: number | null,
+  tempoBpm: number,
+): number | null {
+  if (
+    !Number.isFinite(sectionStartSeconds) ||
+    localPhaseSeconds === null ||
+    !Number.isFinite(localPhaseSeconds) ||
+    !(tempoBpm > 0) ||
+    !Number.isFinite(tempoBpm)
+  ) return null;
+  const beatPeriod = 60 / tempoBpm;
+  const absolute = sectionStartSeconds + localPhaseSeconds;
+  return ((absolute % beatPeriod) + beatPeriod) % beatPeriod;
+}
+
+export interface OnsetEvent {
+  /** Frame index of the strongest peak in the grouped transient. */
+  frame: number;
+  /** Normalized peak strength used for energy-weighted beat-grid scoring. */
+  strength: number;
+}
+
+/**
+ * Collapse nearby local maxima into one transient event. The short refractory
+ * interval removes FFT-window ringing and double-counted attacks without
+ * merging ordinary sixteenth-note and syncopated hits at common tempos.
+ */
+export function groupOnsetEvents(
+  onset: number[],
+  frameRate: number,
+  threshold = 0.06,
+  refractoryMs = 45,
+): OnsetEvent[] {
+  const minimumGap = Math.max(1, Math.round((Math.max(1, frameRate) * refractoryMs) / 1000));
+  const events: OnsetEvent[] = [];
+  for (let i = 1; i < onset.length - 1; i++) {
+    const strength = onset[i];
+    if (!(strength > threshold && strength > onset[i - 1] && strength >= onset[i + 1])) continue;
+    const previous = events[events.length - 1];
+    if (previous && i - previous.frame <= minimumGap) {
+      if (strength > previous.strength) {
+        previous.frame = i;
+        previous.strength = strength;
+      }
+    } else {
+      events.push({ frame: i, strength });
+    }
+  }
+  return events;
+}
+
+export interface BeatGridScore {
+  confidence: number;
+  offBeatRatio: number;
+  phaseFrames: number | null;
+}
+
+/**
+ * Find the strongest phase for the measured BPM and calculate the weighted
+ * share of transient energy close to that beat grid. Off-grid energy is kept
+ * explicit because it may be syncopation, subdivisions, or ornamentation—not
+ * automatically classified as an error.
+ */
+export function scoreBeatGrid(
+  events: OnsetEvent[],
+  tempoBpm: number,
+  frameRate: number,
+): BeatGridScore {
+  if (events.length < 4 || !(tempoBpm > 0) || !(frameRate > 0)) {
+    return { confidence: 0, offBeatRatio: 0, phaseFrames: null };
+  }
+  const periodFrames = (60 * frameRate) / tempoBpm;
+  if (!Number.isFinite(periodFrames) || periodFrames < 2) {
+    return { confidence: 0, offBeatRatio: 0, phaseFrames: null };
+  }
+  const totalStrength = events.reduce((sum, event) => sum + Math.max(0, event.strength), 0);
+  if (!(totalStrength > 0)) {
+    return { confidence: 0, offBeatRatio: 0, phaseFrames: null };
+  }
+
+  const tolerance = Math.max(1, periodFrames * 0.18);
+  const phaseSteps = Math.max(12, Math.min(256, Math.ceil(periodFrames)));
+  let bestScore = -1;
+  let bestPhase = 0;
+  for (let step = 0; step < phaseSteps; step++) {
+    const phase = (step / phaseSteps) * periodFrames;
+    let score = 0;
+    for (const event of events) {
+      const relative = ((event.frame - phase) % periodFrames + periodFrames) % periodFrames;
+      const distance = Math.min(relative, periodFrames - relative);
+      const alignment = Math.max(0, 1 - distance / tolerance);
+      score += Math.max(0, event.strength) * alignment;
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      bestPhase = phase;
+    }
+  }
+
+  const confidence = clamp(bestScore / totalStrength, 0, 1);
+  return {
+    confidence,
+    offBeatRatio: clamp(1 - confidence, 0, 1),
+    phaseFrames: bestPhase,
+  };
+}
+
+interface TempoWindowEstimate {
+  tempoBpm: number;
+  confidence: number;
+  candidatesBpm: number[];
+}
+
+/**
+ * Estimate a track-level pulse while retaining plausible half/double-time
+ * interpretations. For tracks long enough to support it, also measure
+ * non-overlapping local windows and report their robust tempo range.
+ */
+export function estimateTempo(
+  onset: number[],
+  frameRate: number,
+  onProgress?: (fraction: number) => void,
+): {
+  tempoBpm: number;
+  confidence: number;
+  candidatesBpm: number[];
+  rangeBpm: { min: number; max: number } | null;
+} {
+  const global = estimateTempoWindow(onset, frameRate, (fraction) => onProgress?.(fraction * 0.55));
+  if (!global.tempoBpm || onset.length < Math.round(frameRate * 16)) {
+    onProgress?.(1);
+    return {
+      ...global,
+      rangeBpm: null,
+    };
+  }
+
+  // Eight-second windows provide enough beat cycles to distinguish common
+  // tempos while still following arrangement-level tempo changes.
+  const windowFrames = Math.max(1, Math.round(frameRate * 8));
+  const starts: number[] = [];
+  for (let start = 0; start + windowFrames <= onset.length; start += windowFrames) {
+    starts.push(start);
+  }
+  const finalStart = onset.length - windowFrames;
+  if (
+    starts.length &&
+    finalStart - starts[starts.length - 1] >= Math.round(windowFrames * 0.5)
+  ) {
+    starts.push(finalStart);
+  }
+
+  const local: TempoWindowEstimate[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const estimate = estimateTempoWindow(
+      onset.slice(starts[i], starts[i] + windowFrames),
+      frameRate,
+    );
+    // Very weak windows are often breakdowns, fades, or sparse material.
+    // Excluding them prevents silence from pulling the reported tempo down.
+    if (estimate.tempoBpm > 0 && estimate.confidence >= 0.08) local.push(estimate);
+    onProgress?.(0.55 + 0.4 * ((i + 1) / Math.max(1, starts.length)));
+  }
+
+  if (local.length < 2) {
+    onProgress?.(1);
+    return { ...global, rangeBpm: null };
+  }
+
+  const localTempos = local.map((item) => item.tempoBpm).sort((a, b) => a - b);
+  const localConfidences = local.map((item) => item.confidence);
+  const localMedian = median(localTempos);
+  const minTempo = localTempos[0];
+  const maxTempo = localTempos[localTempos.length - 1];
+  const spread = maxTempo - minTempo;
+  const rangeBpm = spread >= 5
+    ? { min: roundTempo(minTempo), max: roundTempo(maxTempo) }
+    : null;
+
+  // A median is less sensitive than a whole-song autocorrelation peak to a
+  // dominant section masking a meaningful tempo change elsewhere in the song.
+  const dispersion = median(localTempos.map((value) => Math.abs(value - localMedian)));
+  const stability = clamp(1 - dispersion / Math.max(1, localMedian * 0.12), 0, 1);
+  const confidence = clamp(
+    median(localConfidences) * (0.75 + stability * 0.25),
+    0,
+    1,
+  );
+
+  onProgress?.(1);
+  return {
+    tempoBpm: roundTempo(localMedian),
+    confidence,
+    candidatesBpm: global.candidatesBpm,
+    rangeBpm,
+  };
+}
+
+function estimateTempoWindow(
+  onset: number[],
+  frameRate: number,
+  onProgress?: (fraction: number) => void,
+): TempoWindowEstimate {
   let mean = 0;
-  for (const v of onset) mean += v;
+  for (const value of onset) mean += value;
   mean /= Math.max(1, onset.length);
-  const centered = onset.map((v) => v - mean);
+
+  const centered = new Float64Array(onset.length);
+  for (let i = 0; i < onset.length; i++) centered[i] = onset[i] - mean;
+
+  const minBpm = 40;
+  const maxBpm = 210;
+  const minLag = Math.max(2, Math.round((60 / maxBpm) * frameRate));
+  const maxLag = Math.min(centered.length - 1, Math.round((60 / minBpm) * frameRate));
+  if (maxLag < minLag) {
+    onProgress?.(1);
+    return { tempoBpm: 0, confidence: 0, candidatesBpm: [] };
+  }
+
+  const scores = new Float64Array(maxLag + 1);
   let bestLag = 0;
   let bestScore = 0;
   let scoreSum = 0;
   let scoreCount = 0;
-  const minBpm = 60;
-  const maxBpm = 200;
-  const minLag = Math.max(2, Math.round((60 / maxBpm) * frameRate));
-  const maxLag = Math.min(centered.length - 1, Math.round((60 / minBpm) * frameRate));
+  const lagCount = Math.max(1, maxLag - minLag + 1);
+
   for (let lag = minLag; lag <= maxLag; lag++) {
     let sum = 0;
-    for (let i = 0; i + lag < centered.length; i++) sum += centered[i] * centered[i + lag];
-    const score = sum / Math.max(1, centered.length - lag);
+    let energyA = 0;
+    let energyB = 0;
+    for (let i = 0; i + lag < centered.length; i++) {
+      const a = centered[i];
+      const b = centered[i + lag];
+      sum += a * b;
+      energyA += a * a;
+      energyB += b * b;
+    }
+    const denominator = Math.sqrt(energyA * energyB);
+    const score = denominator > 1e-18 ? sum / denominator : 0;
+    scores[lag] = score;
     scoreSum += Math.abs(score);
     scoreCount++;
     if (score > bestScore) {
       bestScore = score;
       bestLag = lag;
     }
+    if (onProgress && (((lag - minLag) & 0x07) === 0 || lag === maxLag)) {
+      onProgress((lag - minLag + 1) / lagCount);
+    }
   }
+
   const average = scoreCount ? scoreSum / scoreCount : 0;
-  const confidence = average > 0 ? clamp(bestScore / (average * 4), 0, 1) : 0;
-  if (!bestLag) return { tempoBpm: 0, confidence: 0 };
-  let bpm = (60 * frameRate) / bestLag;
-  while (bpm < 70) bpm *= 2;
-  while (bpm > 180) bpm /= 2;
-  return { tempoBpm: Math.round(bpm * 10) / 10, confidence };
+  let confidence = average > 0 ? clamp(bestScore / (average * 4), 0, 1) : 0;
+  if (!bestLag || bestScore <= 0) {
+    return { tempoBpm: 0, confidence, candidatesBpm: [] };
+  }
+
+  const rawBpm = (60 * frameRate) / bestLag;
+  // Preserve the measured pulse even below 70 BPM; low-tempo music should
+  // not be silently relabelled as double-time without supporting evidence.
+  const tempoBpm = roundTempo(rawBpm);
+  const candidatesBpm = [tempoBpm];
+  // The autocorrelation at one beat interval and at two beat intervals can
+  // both be strong. Keep the second interpretation only when its own peak
+  // has substantial support; do not present every mathematical subdivision.
+  for (const candidate of [rawBpm / 2, rawBpm * 2]) {
+    if (candidate < minBpm || candidate > maxBpm) continue;
+    const lag = Math.round((60 * frameRate) / candidate);
+    if (lag < minLag || lag > maxLag) continue;
+    if (scores[lag] < bestScore * 0.68) continue;
+    const rounded = roundTempo(candidate);
+    if (!candidatesBpm.some((value) => Math.abs(value - rounded) < 1)) {
+      candidatesBpm.push(rounded);
+    }
+  }
+  if (candidatesBpm.length > 1) confidence *= 0.82;
+
+  return { tempoBpm, confidence, candidatesBpm };
 }
 
-function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, duration: number): SectionBoundary[] {
+
+function roundTempo(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function estimateSections(
+  L: Float32Array,
+  R: Float32Array,
+  sampleRate: number,
+  duration: number,
+  onProgress?: (fraction: number) => void,
+): SectionBoundary[] {
   const frameHop = Math.round(sampleRate * 0.5);
   const fftSize = 2048;
   const fft = new FFT(fftSize);
   const window = hannWindow(fftSize);
   const frames: FeatureFrame[] = [];
   const bands = [40, 80, 160, 320, 640, 1250, 2500, 5000, 8000, 12000];
+  const sixthOctave = Math.pow(2, 1 / 6);
+  const bandRanges = bands.map((center) => ({
+    low: Math.floor((center / sixthOctave * fftSize) / sampleRate),
+    high: Math.ceil((center * sixthOctave * fftSize) / sampleRate),
+  }));
+  const re = new Float64Array(fftSize);
+  const im = new Float64Array(fftSize);
+  const totalFrames = Math.max(0, Math.floor((L.length - fftSize) / frameHop) + 1);
 
   for (let start = 0; start + fftSize <= L.length; start += frameHop) {
-    const re = new Float64Array(fftSize);
-    const im = new Float64Array(fftSize);
     let energy = 0;
     for (let i = 0; i < fftSize; i++) {
       const x = (L[start + i] + R[start + i]) * 0.5;
       energy += x * x;
       re[i] = x * window[i];
+      im[i] = 0;
     }
     fft.forward(re, im);
     const bandValues: number[] = [];
-    for (const center of bands) {
-      const low = Math.floor((center / Math.pow(2, 1 / 6) * fftSize) / sampleRate);
-      const high = Math.ceil((center * Math.pow(2, 1 / 6) * fftSize) / sampleRate);
+    for (const range of bandRanges) {
       let sum = 0;
-      for (let k = Math.max(1, low); k <= Math.min(fftSize / 2, high); k++) {
+      for (let k = Math.max(1, range.low); k <= Math.min(fftSize / 2, range.high); k++) {
         sum += re[k] * re[k] + im[k] * im[k];
       }
       bandValues.push(Math.log10(Math.max(sum, 1e-12)));
     }
     frames.push({ time: start / sampleRate, energy: Math.sqrt(energy / fftSize), bands: bandValues });
+    if ((frames.length & 0x0f) === 0 || frames.length === totalFrames) {
+      onProgress?.(0.55 * (frames.length / Math.max(1, totalFrames)));
+    }
   }
 
   if (frames.length < 8) {
+    onProgress?.(1);
     return [{ start: 0, end: duration }];
   }
+  onProgress?.(0.56);
 
   // Normalise features so distance is not dominated by loudness alone.
   const meanBand = new Array(bands.length).fill(0);
@@ -181,8 +841,11 @@ function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, 
   ]);
 
   const context = 8; // 4 seconds each side
-  const novelty: number[] = vectors.map((_, i) => {
-    if (i < context || i >= vectors.length - context) return 0;
+  const novelty: number[] = [];
+  for (let i = 0; i < vectors.length; i++) {
+    if (i < context || i >= vectors.length - context) {
+      novelty.push(0);
+    } else {
     let distance = 0;
     for (let d = 0; d < vectors[i].length; d++) {
       let left = 0;
@@ -195,8 +858,12 @@ function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, 
       right /= context;
       distance += (left - right) * (left - right);
     }
-    return distance;
-  });
+      novelty.push(distance);
+    }
+    if ((i & 0x3f) === 0 || i === vectors.length - 1) {
+      onProgress?.(0.56 + 0.34 * ((i + 1) / Math.max(1, vectors.length)));
+    }
+  }
 
   const noveltyMean = novelty.reduce((a, b) => a + b, 0) / novelty.length;
   const threshold = noveltyMean * 1.6 + 1e-6;
@@ -215,6 +882,7 @@ function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, 
     }
   }
   boundaries.push(duration);
+  onProgress?.(0.92);
   if (boundaries.length > 13) {
     // Keep the strongest boundaries plus start/end.
     const ranked = novelty
@@ -223,12 +891,15 @@ function estimateSections(L: Float32Array, R: Float32Array, sampleRate: number, 
       .slice(0, 10)
       .map((x) => frames[x.i].time)
       .sort((a, b) => a - b);
-    return [{ start: 0, end: ranked[0] ?? duration }, ...ranked.map((t, i) => ({ start: t, end: ranked[i + 1] ?? duration }))];
+    const result = [{ start: 0, end: ranked[0] ?? duration }, ...ranked.map((t, i) => ({ start: t, end: ranked[i + 1] ?? duration }))];
+    onProgress?.(1);
+    return result;
   }
   const sections: SectionBoundary[] = [];
   for (let i = 0; i < boundaries.length - 1; i++) {
     sections.push({ start: boundaries[i], end: boundaries[i + 1] });
   }
+  onProgress?.(1);
   return sections;
 }
 

@@ -36,7 +36,9 @@ behavior so older parameter maps retain their response.
 ## Dynamics
 
 ### Compressor
-- Soft-knee feed-forward design with dB-domain ballistics.
+- Soft-knee feed-forward design with independent left/right detector filters, RMS states and dB-domain gain-reduction ballistics.
+- Stereo Link has defined operation: 0% uses independent dual-mono detectors/envelopes; 100% uses the stronger channel's detector for common stereo gain reduction; intermediate values blend each channel's detector towards the stronger side.
+- Left and right sidechain high-pass filters have independent histories, avoiding inter-channel filter-state contamination.
 - Styles (VCA/FET/Optical/Vari-mu/Bus) change attack/release scaling, knee, ratio scaling and RMS detection blend. These
   are **behaviour styles**, not emulations of specific hardware circuits.
 - Left and right detectors and gain-reduction envelopes are independent at 0% Stereo Link; full link follows the
@@ -123,19 +125,38 @@ These presets remain editable; check for added sibilance and hiss on bright sour
 ## Stereo
 
 ### Stereo Imaging
-Frequency-dependent width: low band, high band and global width, with a mono-maker below the split. Mid/side trims,
-balance, output, and an optional Haas delay with its own mix (documented as a mono-compatibility trade-off).
+A Linkwitz–Riley fourth-order low/mid/high crossover feeds M/S width processing. Global width and independent low-band
+and above-split width controls scale side energy; the mono-maker collapses only the low band below the selected split,
+leaving upper-band side information intact. Mid and side trims, balance, mono-maker amount, Haas delay time, Haas mix and output are smoothed over 20 ms. Fractional
+Haas read positions are linearly interpolated to avoid whole-sample delay jumps. Crossover changes also ramp their biquad coefficients, and the splitter's six output buffers are prepared once rather than
+wrapped in a new object each render block. Optional Haas widening applies a delayed right-channel blend and is an
+explicit mono-compatibility/localisation trade-off. Its ring buffer keeps advancing while the effect is disabled, so
+re-enabling it does not replay stale audio. Factory starting points include Mono-safe low end, Wide highs, Narrower mix,
+Gentle width, Haas creative and Mono check. Always compare in mono and check correlation before choosing a widened setting.
 
 ## Time
 
 ### Reverb
-Freeverb-derived topology: eight parallel damped comb filters and four allpass diffusers per channel, with stereo spread.
-Room/hall/plate/spring presets alter feedback, damping, diffusion and default pre-delay. Pre-delay, decay, damping, width,
-low/high cut, wet mix and output. Algorithmic synthesis, not convolution.
+Freeverb-derived algorithmic stereo reverb: eight parallel damped feedback combs feed four serial allpass diffusers per
+channel, with slightly offset right-channel delay lengths. Each comb's feedback is derived from its actual delay length
+and the selected RT60 decay time in seconds: (g = 10^{-3D/(f_s T_{60})}). This makes the Decay control a real
+approximate 60 dB decay-time target rather than an arbitrary room-size coefficient. Room, Hall, Plate and Spring
+characters alter damping, diffusion and suggested pre-delay without secretly rescaling the displayed RT60. Predelay
+supports the full 0–250 ms range with fractional-sample interpolation. Damping, diffusion, RT60, predelay, width, wet
+mix, output and tone filters ramp over 20 ms; filters are redesigned only when their cutoffs change. Left/right comb,
+allpass, predelay and tone-filter histories are independent. Factory starting points include Small room, Vocal plate,
+Large hall, Spring amp and Ambient wash. This is an algorithmic synthesis reverb, not convolution or a simulation of a
+measured room impulse response.
 
 ### Delay
-Stereo, ping-pong, slapback and multi-tap modes. Tempo-synced note values or free milliseconds, feedback, damping,
-high-pass, width, wet mix and output. Buffers support up to 2.9 s.
+Four modes: Stereo, Ping-pong, Slapback and Multi-tap. Tempo sync uses 1/32 through 1/2 note values against the
+project BPM; free time supports up to 3 seconds. The three-tap mode reads 1x/2x/3x the base time, with a preallocated
+9-second ring buffer so the longest third tap never wraps into an invalid read. Tap heads use fractional linear
+interpolation, and time changes ramp over 20 ms. Feedback is bounded to 95% and ramps rather than stepping. Independent
+left/right damping low-pass and feedback high-pass filters update only when their cutoff changes and use smoothed
+coefficients. Width, mix and output also ramp over 20 ms. Ping-pong crosses the feedback path; slapback clamps its free
+delay to 20–250 ms; multi-tap produces three diminishing repeats. Factory starting points include Eighth-note
+ping-pong, Quarter-note echo, Slapback vocal, Multi-tap groove, Dark analog echo and Wide ambient delay.
 
 ## Parameters and automation
 

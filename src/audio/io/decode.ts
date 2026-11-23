@@ -1,4 +1,5 @@
 import { detectHeader, type AudioHeaderInfo } from './wav';
+import { resampleStereoSinc, type StreamingResampleOptions } from './resample';
 
 export interface DecodedAudio {
   L: Float32Array;
@@ -114,29 +115,21 @@ export async function decodeAudioFile(file: File): Promise<DecodedAudio> {
   };
 }
 
-/** Convert decoded channels to a target sample rate using the browser's SRC. */
+/** Convert decoded channels with bounded, cooperative polyphase sinc processing. */
 export async function resampleToRate(
   L: Float32Array,
   R: Float32Array,
   fromRate: number,
   toRate: number,
+  options: StreamingResampleOptions = {},
 ): Promise<{ L: Float32Array; R: Float32Array; quality: string }> {
-  if (fromRate === toRate) return { L, R, quality: 'none' };
-  const length = Math.max(1, Math.ceil((L.length / fromRate) * toRate));
-  const ctx = new OfflineAudioContext(2, length, toRate);
-  const buffer = ctx.createBuffer(2, L.length, fromRate);
-  buffer.getChannelData(0).set(L);
-  buffer.getChannelData(1).set(R);
-  const source = ctx.createBufferSource();
-  source.buffer = buffer;
-  source.connect(ctx.destination);
-  source.start();
-  const rendered = await ctx.startRendering();
-  return {
-    L: new Float32Array(rendered.getChannelData(0)),
-    R: new Float32Array(rendered.getChannelData(1)),
-    quality: 'OfflineAudioContext sinc resampling',
-  };
+  if (fromRate === toRate) {
+    // Validate rates even on the no-op path.
+    if (!Number.isFinite(fromRate) || fromRate <= 0) throw new RangeError('Sample rates must be finite positive numbers.');
+    return { L, R, quality: 'none' };
+  }
+  const converted = await resampleStereoSinc(L, R, fromRate, toRate, options);
+  return { ...converted, quality: '1024-phase Kaiser-windowed sinc resampling' };
 }
 
 /** Peak amplitude of a decoded buffer. */

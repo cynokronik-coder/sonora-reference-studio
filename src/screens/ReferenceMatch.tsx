@@ -4,9 +4,33 @@ import { AUDIO_ACCEPT, Badge, Button, EmptyState, HelpTip, InfoRow, Panel, Param
 import { Icon } from '../ui/Icon';
 import { FlyoutMenu } from '../ui/FlyoutMenu';
 import { BandChart, BandBars, Waveform } from '../ui/viz';
-import { MATCH_CATEGORIES, type CategorySource } from '../audio/analysis/match';
+import { MATCH_CATEGORIES, resolveReferenceMetrics, selectAnalysisSection, type CategorySource } from '../audio/analysis/match';
+import type { AnalysisReport } from '../audio/analysis/analyze';
 import type { MatchSettings } from '../audio/model/types';
+import { computeMatchPreview } from '../audio/analysis/preview';
 import { formatTime } from '../audio/dsp/util';
+import { TransportBar } from '../ui/Mixer';
+import { realtimeHost, type AuditionPerformance } from '../audio/engine/realtime';
+
+function sectionOptions(report: AnalysisReport | undefined, automaticLabel: string): { value: number; label: string }[] {
+  const occurrences: Record<string, number> = {};
+  const detected = (report?.sections ?? []).filter((section) => section.label !== 'full');
+  return [
+    { value: -1, label: `Automatic · ${automaticLabel}` },
+    ...detected.map((section) => {
+      occurrences[section.label] = (occurrences[section.label] ?? 0) + 1;
+      const label = section.label.charAt(0).toUpperCase() + section.label.slice(1);
+      return {
+        value: section.index,
+        label: `${label} · #${occurrences[section.label]} · ${formatTime(section.start)}–${formatTime(section.end)}`,
+      };
+    }),
+  ];
+}
+
+function automaticSectionLabel(section: MatchSettings['targetSection']): string {
+  return section === 'full' ? 'full track' : `longest detected ${section}`;
+}
 
 export default function ReferenceMatch() {
   const {
@@ -15,6 +39,14 @@ export default function ReferenceMatch() {
     assetBuffers,
     analyses,
     matchPlan,
+    matchAudition,
+    prepareMatchAudition,
+    setMatchAuditionMode,
+    setMatchAuditionLoudnessMatch,
+    clearMatchAudition,
+    setLoop,
+    seek,
+    transport,
     importFiles,
     analyzeProjectAssets,
     removeReference,
@@ -28,6 +60,7 @@ export default function ReferenceMatch() {
   } = useApp();
   const picker = useFilePicker();
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
+  const [auditionPerformance, setAuditionPerformance] = useState<AuditionPerformance | null>(null);
 
   const targetId = project?.targetAssetIds[0];
   const targetMeta = assets.find((a) => a.id === targetId);
@@ -44,39 +77,78 @@ export default function ReferenceMatch() {
   const primaryReference = references.find((reference) => reference.report) ?? references[0];
   const primaryReferenceMeta = primaryReference?.meta;
   const primaryReferencePeaks = primaryReference ? assetBuffers[primaryReference.id]?.peaks ?? null : null;
-  const readyReports = Number(Boolean(targetReport)) + Number(Boolean(referenceReport));
+  const sectionAnalysisCurrent = (report: AnalysisReport | undefined) => report?.sectionMetricsVersion === 5;
+  const readyReports = Number(sectionAnalysisCurrent(targetReport)) + Number(sectionAnalysisCurrent(referenceReport));
   const analysisReadiness = Math.round((readyReports / 2) * 100);
+  const hasStaleSectionReports =
+    Boolean(targetReport && !sectionAnalysisCurrent(targetReport)) ||
+    analysedRefs.some((reference) => !sectionAnalysisCurrent(reference.report));
 
   useEffect(() => {
     if (matchPlan) setExcluded(new Set());
   }, [matchPlan]);
 
-  const preview = useMemo(() => {
-    if (!targetReport || !referenceReport) return null;
-    const before = targetReport.spectrum.bands.map((b) => b.relativeDb);
-    const after = before.map((value, i) => {
-      const diff = (referenceReport.spectrum.bands[i]?.relativeDb ?? value) - value;
-      const scale = Math.pow((project?.match.intensity ?? 0) / 100, 1.25) * ((project?.match.frequencyBalance ?? 0) / 100);
-      return value + diff * scale;
-    });
-    return { before, after };
-  }, [targetReport, referenceReport, project?.match.intensity, project?.match.frequencyBalance]);
+  useEffect(() => realtimeHost.onMeters((meters) => {
+    setAuditionPerformance(meters.auditionPerformance);
+  }), []);
+
+  const preview = useMemo(() => (project ? computeMatchPreview(project, analyses) : null), [project, analyses]);
 
   if (!project) {
     return <div className="p-5"><Panel><EmptyState title="No project open" description="Open a project to start a reference match." /></Panel></div>;
   }
 
   const setMatch = (patch: Partial<MatchSettings>) => updateMatchSettings(patch);
-  const ready = Boolean(targetReport) && analysedRefs.length > 0;
+  const ready = sectionAnalysisCurrent(targetReport) &&
+    analysedRefs.length > 0 &&
+    analysedRefs.every((entry) => sectionAnalysisCurrent(entry.report));
 
-  const comparison = targetReport && referenceReport
+  const referenceInputs = analysedRefs.map((entry) => ({
+    assetId: entry.id,
+    report: entry.report!,
+    weight: project.match.referenceWeights?.[entry.id] ?? 100,
+    sectionIndex: project.match.referenceSectionIndices?.[entry.id],
+  }));
+  const resolveForComparison = (category: keyof CategorySource) =>
+    resolveReferenceMetrics(project.match.categorySource?.[category] ?? -1, referenceInputs, project.match.referenceSection);
+  const loudnessReference = referenceInputs.length ? resolveForComparison('loudness') : null;
+  const dynamicsReference = referenceInputs.length ? resolveForComparison('dynamics') : null;
+  const stereoReference = referenceInputs.length ? resolveForComparison('stereoWidth') : null;
+  const targetComparisonSection = targetReport
+    ? selectAnalysisSection(targetReport, project.match.targetSection, project.match.targetSectionIndex)
+    : null;
+  const targetSectionMetrics = targetReport ? {
+    lufs: targetComparisonSection?.lufs ?? targetReport.loudness.integratedLufs,
+    truePeakDb: targetComparisonSection?.truePeakDb ?? targetReport.loudness.truePeakDb,
+    crestDb: targetComparisonSection?.crestDb ?? targetReport.loudness.crestDb,
+    lra: targetComparisonSection?.lra ?? targetReport.loudness.lra,
+    plrDb: targetComparisonSection?.plrDb ?? targetReport.loudness.plrDb,
+    widthDb: targetComparisonSection?.widthDb ?? targetReport.stereo.widthDb,
+    correlation: targetComparisonSection?.correlation ?? targetReport.stereo.correlation,
+    monoCompatibility: targetComparisonSection?.monoCompatibility ?? targetReport.stereo.monoCompatibility,
+    lowSideRatioDb: targetComparisonSection?.lowSideRatioDb ?? targetReport.stereo.lowSideRatioDb,
+  } : null;
+  const targetLraFallback = Boolean(targetComparisonSection && !Number.isFinite(targetComparisonSection.lra));
+  const selectedSectionRange = targetComparisonSection && targetComparisonSection.label !== 'full' &&
+    Number.isFinite(targetComparisonSection.start) && Number.isFinite(targetComparisonSection.end) &&
+    targetComparisonSection.end > targetComparisonSection.start
+    ? { start: targetComparisonSection.start, end: targetComparisonSection.end }
+    : null;
+  const selectedSectionLoopActive = Boolean(selectedSectionRange && transport.loopEnabled &&
+    Math.abs(transport.loopStart - selectedSectionRange.start) < 0.01 &&
+    Math.abs(transport.loopEnd - selectedSectionRange.end) < 0.01);
+  const referenceLraFallback = Boolean(dynamicsReference?.metricFallbacks.includes('LRA'));
+  const comparison = targetReport && targetSectionMetrics && loudnessReference && dynamicsReference && stereoReference
     ? [
-        { label: 'Integrated loudness', target: `${targetReport.loudness.integratedLufs.toFixed(1)} LUFS`, ref: `${referenceReport.loudness.integratedLufs.toFixed(1)} LUFS`, delta: referenceReport.loudness.integratedLufs - targetReport.loudness.integratedLufs, unit: 'LU' },
-        { label: 'True peak', target: `${targetReport.loudness.truePeakDb.toFixed(1)} dBTP`, ref: `${referenceReport.loudness.truePeakDb.toFixed(1)} dBTP`, delta: referenceReport.loudness.truePeakDb - targetReport.loudness.truePeakDb, unit: 'dB' },
-        { label: 'Loudness range', target: `${targetReport.loudness.lra.toFixed(1)} LU`, ref: `${referenceReport.loudness.lra.toFixed(1)} LU`, delta: referenceReport.loudness.lra - targetReport.loudness.lra, unit: 'LU' },
-        { label: 'Crest factor', target: `${targetReport.loudness.crestDb.toFixed(1)} dB`, ref: `${referenceReport.loudness.crestDb.toFixed(1)} dB`, delta: referenceReport.loudness.crestDb - targetReport.loudness.crestDb, unit: 'dB' },
-        { label: 'Stereo width', target: `${targetReport.stereo.widthDb.toFixed(1)} dB`, ref: `${referenceReport.stereo.widthDb.toFixed(1)} dB`, delta: referenceReport.stereo.widthDb - targetReport.stereo.widthDb, unit: 'dB' },
-        { label: 'Correlation', target: targetReport.stereo.correlation.toFixed(2), ref: referenceReport.stereo.correlation.toFixed(2), delta: referenceReport.stereo.correlation - targetReport.stereo.correlation, unit: '' },
+        { label: 'Integrated loudness', target: `${targetSectionMetrics.lufs.toFixed(1)} LUFS`, ref: `${loudnessReference.metrics.lufs.toFixed(1)} LUFS`, delta: loudnessReference.metrics.lufs - targetSectionMetrics.lufs, unit: 'LU' },
+        { label: 'True peak', target: `${targetSectionMetrics.truePeakDb.toFixed(1)} dBTP`, ref: `${loudnessReference.metrics.truePeakDb.toFixed(1)} dBTP`, delta: loudnessReference.metrics.truePeakDb - targetSectionMetrics.truePeakDb, unit: 'dB' },
+        { label: targetLraFallback || referenceLraFallback ? 'LRA · full-track fallback' : 'Loudness range', target: `${targetSectionMetrics.lra.toFixed(1)} LU`, ref: `${dynamicsReference.metrics.lra.toFixed(1)} LU`, delta: dynamicsReference.metrics.lra - targetSectionMetrics.lra, unit: 'LU' },
+        { label: 'Peak-to-loudness ratio', target: `${targetSectionMetrics.plrDb.toFixed(1)} dB`, ref: `${dynamicsReference.metrics.plrDb.toFixed(1)} dB`, delta: dynamicsReference.metrics.plrDb - targetSectionMetrics.plrDb, unit: 'dB' },
+        { label: 'Crest factor', target: `${targetSectionMetrics.crestDb.toFixed(1)} dB`, ref: `${dynamicsReference.metrics.crestDb.toFixed(1)} dB`, delta: dynamicsReference.metrics.crestDb - targetSectionMetrics.crestDb, unit: 'dB' },
+        { label: 'Stereo width', target: `${targetSectionMetrics.widthDb.toFixed(1)} dB`, ref: `${stereoReference.metrics.widthDb.toFixed(1)} dB`, delta: stereoReference.metrics.widthDb - targetSectionMetrics.widthDb, unit: 'dB' },
+        { label: 'Correlation', target: targetSectionMetrics.correlation.toFixed(2), ref: stereoReference.metrics.correlation.toFixed(2), delta: stereoReference.metrics.correlation - targetSectionMetrics.correlation, unit: '' },
+        { label: 'Mono compatibility', target: `${targetSectionMetrics.monoCompatibility.toFixed(1)}%`, ref: `${stereoReference.metrics.monoCompatibility.toFixed(1)}%`, delta: stereoReference.metrics.monoCompatibility - targetSectionMetrics.monoCompatibility, unit: '%' },
+        { label: 'Low-end side ratio', target: `${targetSectionMetrics.lowSideRatioDb.toFixed(1)} dB`, ref: `${stereoReference.metrics.lowSideDb.toFixed(1)} dB`, delta: stereoReference.metrics.lowSideDb - targetSectionMetrics.lowSideRatioDb, unit: 'dB' },
       ]
     : [];
 
@@ -97,14 +169,30 @@ export default function ReferenceMatch() {
           <Button size="md" variant="secondary" onClick={() => picker.open(AUDIO_ACCEPT, true, (files) => void importFiles(files, 'reference'))}>
             <Icon name="upload" size={14} /> Upload reference
           </Button>
-          <Button size="sm" onClick={() => void analyzeProjectAssets()} disabled={!targetId && referenceIds.length === 0}>
-            Analyse all
+          <Button size="sm" onClick={() => void analyzeProjectAssets()} disabled={(!targetId && referenceIds.length === 0) || Boolean(busy)}>
+            {hasStaleSectionReports ? 'Update analyses' : 'Analyse all'}
           </Button>
-          <Button size="sm" variant="primary" onClick={() => void generateMatch()} disabled={!ready}>
+          <Button size="sm" variant="primary" onClick={() => void generateMatch()} disabled={!ready || Boolean(busy)}>
             <Icon name="sparkles" size={14} /> Generate chain
           </Button>
         </div>
       </header>
+
+      <TransportBar />
+
+      {hasStaleSectionReports && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-signal-amber/25 bg-signal-amber/[.06] px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold text-ink-100">Expanded section measurements are available</p>
+            <p className="mt-1 text-2xs leading-relaxed text-ink-400">
+              Some saved analyses predate the new section metrics. Re-analyse the target and references to unlock section true peak, PLR, stereo compatibility, low-end side energy and transient measurements.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => void analyzeProjectAssets()} disabled={Boolean(busy)}>
+            Re-analyse audio
+          </Button>
+        </div>
+      )}
 
       <section className="grid items-stretch gap-3 xl:grid-cols-[minmax(0,1fr)_112px_minmax(0,1fr)]">
         <Panel dataTour="reference-target" title="Your Track" subtitle="The mix you want to improve." right={targetMeta && <Badge tone={targetReport ? 'accent' : 'warn'}>{targetReport ? 'Analysed' : 'Analysis pending'}</Badge>}>
@@ -123,7 +211,7 @@ export default function ReferenceMatch() {
               </div>
               {targetReport ? (
                 <div className="grid grid-cols-3 gap-2">
-                  <Stat label="LUFS" value={targetReport.loudness.integratedLufs.toFixed(1)} />
+                  <Stat label="Full LUFS" value={targetReport.loudness.integratedLufs.toFixed(1)} />
                   <Stat label="True peak" value={targetReport.loudness.truePeakDb.toFixed(1)} />
                   <Stat label="Crest" value={`${targetReport.loudness.crestDb.toFixed(1)} dB`} />
                 </div>
@@ -156,7 +244,7 @@ export default function ReferenceMatch() {
             <p className="mt-1 text-[9px] text-ink-500">{readyReports}/2 reports</p>
           </div>
           <span className={`mt-1 rounded-full border px-2 py-0.5 text-[9px] ${ready ? 'border-signal-green/25 bg-signal-green/10 text-signal-green' : 'border-white/[.08] text-ink-500'}`}>
-            {ready ? 'Ready to compare' : 'Awaiting analysis'}
+            {ready ? 'Ready to compare' : hasStaleSectionReports ? 'Analysis update needed' : 'Awaiting analysis'}
           </span>
         </div>
 
@@ -180,7 +268,7 @@ export default function ReferenceMatch() {
               </div>
               {primaryReference.report ? (
                 <div className="grid grid-cols-3 gap-2">
-                  <Stat label="LUFS" value={primaryReference.report.loudness.integratedLufs.toFixed(1)} />
+                  <Stat label="Full LUFS" value={primaryReference.report.loudness.integratedLufs.toFixed(1)} />
                   <Stat label="True peak" value={primaryReference.report.loudness.truePeakDb.toFixed(1)} />
                   <Stat label="Crest" value={`${primaryReference.report.loudness.crestDb.toFixed(1)} dB`} />
                 </div>
@@ -219,7 +307,7 @@ export default function ReferenceMatch() {
       </section>
 
       {comparison.length > 0 && (
-        <Panel title="Measured differences" subtitle="Reference minus target. Positive means the reference is higher." right={<HelpTip title="How to read these measurements">The values are measured from your uploaded audio. A positive difference means the reference has a higher measured value than your target. A difference is not automatically a problem: use your ears and the arrangement as context.</HelpTip>}>
+        <Panel title="Measured differences" subtitle="Selected reference set minus target. Values are section-based unless an indicator is too short to measure reliably." right={<HelpTip title="How to read these measurements">The values are measured from your uploaded audio. A positive difference means the reference has a higher measured value than your target. A difference is not automatically a problem: use your ears and the arrangement as context.</HelpTip>}>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {comparison.map((row) => (
               <div key={row.label} className="rounded-xl border border-white/[.07] bg-[#0D0D1B]/70 p-3">
@@ -297,17 +385,45 @@ export default function ReferenceMatch() {
             >
               <div className="grid gap-3 sm:grid-cols-2">
                 <Select
-                  label="Target section"
+                  label="Target section class"
                   value={project.match.targetSection}
                   options={[{ value: 'full', label: 'Full track' }, { value: 'chorus', label: 'Chorus only' }, { value: 'verse', label: 'Verse only' }]}
-                  onChange={(value) => setMatch({ targetSection: value as MatchSettings['targetSection'] })}
+                  onChange={(value) => setMatch({ targetSection: value as MatchSettings['targetSection'], targetSectionIndex: undefined })}
                 />
                 <Select
-                  label="Reference section"
+                  label="Reference section class"
                   value={project.match.referenceSection}
                   options={[{ value: 'full', label: 'Full track' }, { value: 'chorus', label: 'Chorus only' }, { value: 'verse', label: 'Verse only' }]}
-                  onChange={(value) => setMatch({ referenceSection: value as MatchSettings['referenceSection'] })}
+                  onChange={(value) => setMatch({ referenceSection: value as MatchSettings['referenceSection'], referenceSectionIndices: undefined })}
                 />
+                <div className="sm:col-span-2 rounded-xl border border-white/[.07] bg-[#0D0D1B]/60 p-3">
+                  <p className="mb-3 text-2xs leading-relaxed text-ink-400">
+                    Select a specific detected occurrence when the automatic section choice is too broad. Exact selections override the section class. If a segment is unavailable, the matcher falls back to full-track measurements and reports the limitation.
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Select
+                      label="Exact target occurrence"
+                      value={project.match.targetSectionIndex ?? -1}
+                      options={sectionOptions(targetReport, automaticSectionLabel(project.match.targetSection))}
+                      disabled={!targetReport}
+                      onChange={(value) => setMatch({ targetSectionIndex: value < 0 ? undefined : value })}
+                    />
+                    {analysedRefs.map((ref, index) => (
+                      <Select
+                        key={ref.id}
+                        label={`Exact occurrence · ${ref.meta?.name ?? `Reference ${index + 1}`}`}
+                        value={project.match.referenceSectionIndices?.[ref.id] ?? -1}
+                        options={sectionOptions(ref.report, automaticSectionLabel(project.match.referenceSection))}
+                        onChange={(value) => {
+                          const next = { ...(project.match.referenceSectionIndices ?? {}) };
+                          if (value < 0) delete next[ref.id];
+                          else next[ref.id] = value;
+                          setMatch({ referenceSectionIndices: next });
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
                 <ParamSlider label="Max EQ boost" value={project.match.maxEqBoost} min={0} max={18} step={0.5} unit="dB" onChange={(value) => setMatch({ maxEqBoost: value })} />
                 <ParamSlider label="Max EQ cut" value={project.match.maxEqCut} min={0} max={18} step={0.5} unit="dB" onChange={(value) => setMatch({ maxEqCut: value })} />
                 <ParamSlider label="Max loudness change" value={project.match.maxLoudnessChange} min={0} max={15} step={0.5} unit="dB" onChange={(value) => setMatch({ maxLoudnessChange: value })} />
@@ -325,9 +441,31 @@ export default function ReferenceMatch() {
                         <Select
                           key={category.key}
                           label={category.label}
-                          value={project.match.categorySource[category.key] ?? 0}
-                          options={analysedRefs.map((ref, index) => ({ value: index, label: `Ref ${index + 1} · ${ref.meta?.name ?? ''}`.slice(0, 40) }))}
+                          value={project.match.categorySource[category.key] ?? -1}
+                          options={[{ value: -1, label: 'Weighted blend · all references' }, ...analysedRefs.map((ref, index) => ({ value: index, label: `Ref ${index + 1} · ${ref.meta?.name ?? ''}`.slice(0, 40) }))]}
                           onChange={(value) => setMatch({ categorySource: { ...project.match.categorySource, [category.key]: value } })}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {analysedRefs.length > 1 && (
+                  <div className="sm:col-span-2 rounded-xl border border-white/[.07] bg-[#0D0D1B]/70 p-3">
+                    <div className="section-label mb-1">Reference influence</div>
+                    <p className="mb-3 text-2xs leading-relaxed text-ink-500">
+                      These weights control the weighted blend. Set a reference to 0% to exclude it. A characteristic set to a specific reference ignores these weights.
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      {analysedRefs.map((ref, index) => (
+                        <ParamSlider
+                          key={ref.id}
+                          label={ref.meta?.name ?? `Reference ${index + 1}`}
+                          value={project.match.referenceWeights?.[ref.id] ?? 100}
+                          min={0}
+                          max={200}
+                          step={5}
+                          unit="%"
+                          onChange={(value) => setMatch({ referenceWeights: { ...(project.match.referenceWeights ?? {}), [ref.id]: value } })}
                         />
                       ))}
                     </div>
@@ -341,27 +479,29 @@ export default function ReferenceMatch() {
         <Panel title="Tonal comparison" subtitle="Relative band levels. Loudness-independent, so quiet and loud masters compare fairly." right={<HelpTip title="What is tonal balance?">This chart shows how energy is distributed across frequency bands. More bass or treble is not automatically better. Compare broad trends, then listen for muddiness, harshness, missing body or excessive brightness.</HelpTip>}>
           {preview ? (
             <>
-              <BandChart bands={preview.before} compare={referenceReport?.spectrum.bands.map((b) => b.relativeDb)} label="Target" compareLabel="Reference" height={170} />
+              <BandChart bands={preview.before} compare={preview.reference} label="Target" compareLabel="Reference" height={170} />
               <div className="mt-2 grid gap-2 sm:grid-cols-2">
                 <div>
                   <div className="section-label mb-1">Target buildup</div>
-                  <BandBars bands={targetReport!.spectrum.bands} height={70} />
+                  <BandBars bands={preview.targetBands} height={70} />
                 </div>
                 <div>
                   <div className="section-label mb-1">Reference buildup</div>
-                  <BandBars bands={referenceReport!.spectrum.bands} height={70} color="#5ad1e6" />
+                  <BandBars bands={preview.referenceBands} height={70} color="#5ad1e6" />
                 </div>
               </div>
               <div className="mt-2 space-y-1">
-                {(targetReport!.spectrum.resonances.length > 0 || targetReport!.spectrum.buildupBands.length > 0) && (
+                {(targetComparisonSection?.resonances ?? targetReport!.spectrum.resonances).length > 0 && (
                   <p className="text-2xs leading-relaxed text-ink-400">
-                    Target resonances:{' '}
-                    {targetReport!.spectrum.resonances.map((r) => `${r.frequency} Hz (+${r.excessDb.toFixed(1)} dB)`).join(', ') || 'none detected above 4 dB'}.
+                    Selected-segment resonances:{' '}
+                    {(targetComparisonSection?.resonances ?? targetReport!.spectrum.resonances).map((r) => `${r.frequency} Hz (+${r.excessDb.toFixed(1)} dB)`).join(', ')}.
                   </p>
                 )}
                 <p className="text-2xs leading-relaxed text-ink-500">
-                  Estimated tempo: {targetReport!.rhythm.tempoBpm || '—'} BPM (confidence{' '}
-                  {Math.round(targetReport!.rhythm.beatConfidence * 100)}%). Sections: {targetReport!.sections.map((s) => s.label).join(', ')}.
+                  Selected-segment tempo: {targetComparisonSection?.tempoBpm ?? (targetReport!.rhythm.tempoBpm || '—')} BPM
+                  {targetComparisonSection?.beatConfidence !== null && targetComparisonSection?.beatConfidence !== undefined
+                    ? ` (confidence ${Math.round(targetComparisonSection.beatConfidence * 100)}%)`
+                    : ''}. Detected segments: {targetReport!.sections.map((s) => `${s.label} ${formatTime(s.start)}–${formatTime(s.end)}`).join(' · ')}.
                 </p>
               </div>
             </>
@@ -386,7 +526,9 @@ export default function ReferenceMatch() {
                 <input
                   type="checkbox"
                   checked={!excluded.has(proposal.id)}
+                  disabled={Boolean(busy)}
                   onChange={() => {
+                    clearMatchAudition();
                     const next = new Set(excluded);
                     if (next.has(proposal.id)) next.delete(proposal.id);
                     else next.add(proposal.id);
@@ -431,14 +573,122 @@ export default function ReferenceMatch() {
               <Button
                 variant="primary"
                 onClick={() => applyMatchPlan(matchPlan.proposals.filter((p) => !excluded.has(p.id)).map((p) => p.id))}
+                disabled={Boolean(busy) || matchPlan.proposals.every((p) => excluded.has(p.id))}
               >
                 Apply {matchPlan.proposals.length - excluded.size} processors to master
               </Button>
-              <Button onClick={() => void verifyMaster()}>Render & measure master</Button>
+              <Button onClick={() => void verifyMaster()} disabled={Boolean(busy)}>Render & measure master</Button>
               <Button variant="ghost" onClick={() => useApp.getState().setScreen('mastering')}>Open mastering</Button>
               <span className="ml-auto text-2xs text-ink-500">
-                Predicted {matchPlan.predicted.integratedLufs.toFixed(1)} LUFS · {matchPlan.predicted.truePeakDb.toFixed(1)} dBTP
+                Predicted pre-limiter: {matchPlan.predicted.integratedLufs.toFixed(1)} LUFS · {matchPlan.predicted.truePeakDb.toFixed(1)} dBTP
               </span>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-[#A77AFF]/20 bg-[#8957FF]/[.055] p-3 sm:p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <Icon name="headphones" size={16} className="text-[#C4A2FF]" />
+                    <h3 className="text-sm font-semibold text-ink-100">Before / after audition</h3>
+                    {matchAudition && <Badge tone="accent">Ready</Badge>}
+                  </div>
+                  <p className="mt-1 max-w-2xl text-2xs leading-relaxed text-ink-400">
+                    The A/B engines stay aligned on the same project timeline. Loop the selected target section to audition only that passage; this monitor loop never changes your export range.
+                  </p>
+                </div>
+                <Button
+                  size="md"
+                  variant="primary"
+                  disabled={Boolean(busy) || matchPlan.proposals.every((p) => excluded.has(p.id))}
+                  onClick={() => void prepareMatchAudition(matchPlan.proposals.filter((p) => !excluded.has(p.id)).map((p) => p.id))}
+                >
+                  <Icon name="audio-lines" size={14} />
+                  {matchAudition ? 'Rebuild audition' : 'Prepare A/B audition'}
+                </Button>
+              </div>
+
+              {matchAudition && (
+                <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-white/[.07] bg-[#0D0D1B]/60 px-3 py-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-ink-100">Section audition</p>
+                    <p className="mt-0.5 text-2xs text-ink-500">
+                      {selectedSectionRange
+                        ? `Selected passage · ${formatTime(selectedSectionRange.start)}–${formatTime(selectedSectionRange.end)}`
+                        : 'Choose a detected target occurrence to enable section looping.'}
+                    </p>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant={selectedSectionLoopActive ? 'primary' : 'secondary'}
+                    disabled={!selectedSectionRange}
+                    onClick={() => {
+                      if (selectedSectionLoopActive) {
+                        setLoop(false);
+                      } else if (selectedSectionRange) {
+                        setLoop(true, selectedSectionRange.start, selectedSectionRange.end);
+                        seek(selectedSectionRange.start);
+                      }
+                    }}
+                  >
+                    <Icon name={selectedSectionLoopActive ? 'repeat' : 'repeat'} size={13} />
+                    {selectedSectionLoopActive ? 'Stop section loop' : 'Loop selected section'}
+                  </Button>
+                </div>
+              )}
+
+              {matchAudition && auditionPerformance && (
+                <div className="mt-3 rounded-lg border border-white/[.07] bg-[#0D0D1B]/55 px-3 py-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-2xs font-semibold uppercase tracking-wide text-ink-400">Live DSP block budget</p>
+                    <span className={`font-mono text-2xs ${auditionPerformance.utilizationPercent >= 90 ? 'text-signal-amber' : 'text-ink-300'}`}>
+                      {auditionPerformance.utilizationPercent.toFixed(0)}% of real-time budget
+                    </span>
+                  </div>
+                  <p className="mt-1 text-2xs text-ink-500">
+                    Average {auditionPerformance.averageMs.toFixed(2)} ms · peak {auditionPerformance.maxMs.toFixed(2)} ms · block deadline {auditionPerformance.blockBudgetMs.toFixed(2)} ms
+                  </p>
+                  {auditionPerformance.utilizationPercent >= 90 && (
+                    <p className="mt-1 text-2xs text-signal-amber">High DSP load: reduce processor complexity or buffer pressure if you hear dropouts.</p>
+                  )}
+                </div>
+              )}
+
+              {matchAudition && (
+                <div className="mt-4 space-y-3 border-t border-white/[.08] pt-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <div className={`rounded-xl border p-3 ${matchAudition.mode === 'before' ? 'border-[#A77AFF]/55 bg-[#8957FF]/[.12]' : 'border-white/[.07] bg-[#0D0D1B]/65'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-semibold text-ink-100">A · Original mix</span>
+                        {matchAudition.mode === 'before' && <Badge tone="accent">Auditioning</Badge>}
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <Stat label="Integrated" value={`${matchAudition.before.lufs.toFixed(1)} LUFS`} />
+                        <Stat label="True peak" value={`${matchAudition.before.truePeakDb.toFixed(1)} dBTP`} />
+                      </div>
+                      <Button size="md" variant={matchAudition.mode === 'before' ? 'primary' : 'secondary'} className="mt-3 w-full" onClick={() => setMatchAuditionMode('before')}>Listen to A</Button>
+                    </div>
+                    <div className={`rounded-xl border p-3 ${matchAudition.mode === 'after' ? 'border-[#A77AFF]/55 bg-[#8957FF]/[.12]' : 'border-white/[.07] bg-[#0D0D1B]/65'}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-semibold text-ink-100">B · Reference Match</span>
+                        {matchAudition.mode === 'after' && <Badge tone="accent">Auditioning</Badge>}
+                      </div>
+                      <div className="mt-2 grid grid-cols-2 gap-2">
+                        <Stat label="Integrated" value={`${matchAudition.after.lufs.toFixed(1)} LUFS`} />
+                        <Stat label="True peak" value={`${matchAudition.after.truePeakDb.toFixed(1)} dBTP`} />
+                      </div>
+                      <Button size="md" variant={matchAudition.mode === 'after' ? 'primary' : 'secondary'} className="mt-3 w-full" onClick={() => setMatchAuditionMode('after')}>Listen to B</Button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-white/[.07] bg-[#0D0D1B]/60 px-3 py-2">
+                    <div className="min-w-0 flex-1">
+                      <Toggle checked={matchAudition.loudnessMatch} onChange={setMatchAuditionLoudnessMatch} label="Loudness-matched A/B" description="Uses the quieter measured render as the common reference. Attenuation only; monitor path, not export." />
+                      <p className="mt-1 font-mono text-2xs text-ink-500">Monitor trim {matchAudition.comparisonDb >= 0 ? '+' : ''}{matchAudition.comparisonDb.toFixed(1)} dB · {formatTime(matchAudition.before.duration)} render</p>
+                    </div>
+                    <Button size="sm" variant="ghost" onClick={clearMatchAudition}>Exit audition</Button>
+                  </div>
+                  <p className="text-2xs leading-relaxed text-ink-500">Use the transport above to play, pause, seek or loop. A/B switching follows the same playhead and crossfades over 8 ms. If you change the project or matching settings, prepare a fresh comparison.</p>
+                </div>
+              )}
             </div>
           </div>
         </Panel>

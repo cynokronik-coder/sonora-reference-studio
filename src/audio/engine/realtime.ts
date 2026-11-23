@@ -1,18 +1,46 @@
 import workletUrl from './engine.worklet.ts?worker&url';
 import type { EngineAsset } from './renderer';
-import type { ProcessorMeterSnapshot } from '../dsp/types';
 import type { ProjectState } from '../model/types';
+
+export interface AuditionPerformance {
+  averageMs: number;
+  maxMs: number;
+  blockBudgetMs: number;
+  utilizationPercent: number;
+}
+
+export interface AssetSyncPlan {
+  releaseIds: string[];
+  loadIds: string[];
+}
+
+/** Asset delta used to keep AudioWorklet memory aligned with the open project. */
+export function planAssetSync(loadedIds: Iterable<string>, requestedIds: Iterable<string>): AssetSyncPlan {
+  const loaded = new Set(loadedIds);
+  const requested = new Set(requestedIds);
+  return {
+    releaseIds: [...loaded].filter((id) => !requested.has(id)),
+    loadIds: [...requested].filter((id) => !loaded.has(id)),
+  };
+}
 
 export interface RealtimeMeters {
   peakL: number;
   peakR: number;
-  gr: ProcessorMeterSnapshot;
+  gr: Record<string, Record<string, { reduction?: number }>>;
   peaks: Record<string, { L: number; R: number }>;
+  auditionPerformance: AuditionPerformance | null;
 }
 
 type PositionListener = (seconds: number, playing: boolean) => void;
 type MeterListener = (meters: RealtimeMeters) => void;
 type EndedListener = () => void;
+type ErrorListener = (message: string) => void;
+
+/** Whether a transport toggle should pause instead of attempting recovery. */
+export function shouldPauseTransport(playing: boolean, contextState: string): boolean {
+  return playing && contextState !== 'suspended' && contextState !== 'interrupted' && contextState !== 'closed';
+}
 
 /**
  * Browser-side controller for the AudioWorklet engine.
@@ -23,6 +51,7 @@ type EndedListener = () => void;
  */
 export class RealtimeHost {
   private ctx: AudioContext | null = null;
+  private workletLoadedFor: AudioContext | null = null;
   private node: AudioWorkletNode | null = null;
   private monitor: GainNode | null = null;
   private comparison: GainNode | null = null;
@@ -32,11 +61,12 @@ export class RealtimeHost {
   private positionListeners = new Set<PositionListener>();
   private meterListeners = new Set<MeterListener>();
   private endedListeners = new Set<EndedListener>();
+  private errorListeners = new Set<ErrorListener>();
   private pendingProject: ProjectState | null = null;
   private pendingAssets: EngineAsset[] = [];
   lastError: string | null = null;
-  lastMeters: ProcessorMeterSnapshot = {};
-  lastPayload: RealtimeMeters = { peakL: -120, peakR: -120, gr: {}, peaks: {} };
+  lastMeters: Record<string, Record<string, { reduction?: number }>> = {};
+  lastPayload: RealtimeMeters = { peakL: -120, peakR: -120, gr: {}, peaks: {}, auditionPerformance: null };
   playing = false;
   position = 0;
 
@@ -53,32 +83,57 @@ export class RealtimeHost {
   }
 
   async initialise(): Promise<void> {
-    if (this.ready) return;
+    if (this.ready && this.node && this.ctx?.state !== 'closed') return;
     if (this.initialising) return this.initialising;
 
-    const attempt = (async () => {
+    const initialization = (async () => {
       const AudioCtor = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
       if (!AudioCtor) throw new Error('Web Audio is not supported in this browser.');
+
+      if (this.ctx?.state === 'closed') {
+        this.ready = false;
+        this.node?.disconnect();
+        this.node = null;
+        this.comparison?.disconnect();
+        this.monitor?.disconnect();
+        this.comparison = null;
+        this.monitor = null;
+        this.ctx = null;
+        this.workletLoadedFor = null;
+        this.loadedAssets.clear();
+        this.playing = false;
+      }
       const ctx = this.ctx ?? new AudioCtor({ latencyHint: 'interactive' });
       this.ctx = ctx;
       if (!ctx.audioWorklet) throw new Error('AudioWorklet is not supported in this browser.');
-      await ctx.audioWorklet.addModule(workletUrl);
+      if (this.workletLoadedFor !== ctx) {
+        await ctx.audioWorklet.addModule(workletUrl);
+        this.workletLoadedFor = ctx;
+      }
 
+      // A processorerror permanently silences that AudioWorkletNode. A fresh
+      // node can be created on the same live AudioContext and repopulated from
+      // the app's still-owned decoded asset buffers.
+      this.node?.disconnect();
+      this.comparison?.disconnect();
+      this.monitor?.disconnect();
       const node = new AudioWorkletNode(ctx, 'sonora-engine', {
         numberOfInputs: 0,
         numberOfOutputs: 1,
         outputChannelCount: [2],
       });
-      this.node = node;
       const comparison = ctx.createGain();
       const monitor = ctx.createGain();
-      this.comparison = comparison;
-      this.monitor = monitor;
       node.connect(comparison);
       comparison.connect(monitor);
       monitor.connect(ctx.destination);
       node.port.onmessage = (event: MessageEvent) => this.handle(event.data);
+      node.onprocessorerror = () => this.handleProcessorError();
+      this.node = node;
+      this.comparison = comparison;
+      this.monitor = monitor;
       this.ready = true;
+      this.lastError = null;
 
       if (this.pendingAssets.length) {
         this.pushAssets(this.pendingAssets);
@@ -90,9 +145,9 @@ export class RealtimeHost {
       }
     })();
 
-    this.initialising = attempt;
+    this.initialising = initialization;
     try {
-      await attempt;
+      await initialization;
     } catch (error) {
       // A rejected initialization must not poison every future play attempt.
       this.ready = false;
@@ -105,6 +160,7 @@ export class RealtimeHost {
       this.comparison = null;
       const context = this.ctx;
       this.ctx = null;
+      this.workletLoadedFor = null;
       this.loadedAssets.clear();
       if (context && context.state !== 'closed') {
         try {
@@ -115,8 +171,24 @@ export class RealtimeHost {
       }
       throw error;
     } finally {
-      if (this.initialising === attempt) this.initialising = null;
+      if (this.initialising === initialization) this.initialising = null;
     }
+  }
+
+  private handleProcessorError(): void {
+    const message = 'The audio processor stopped unexpectedly. Press Play to rebuild the audio engine and resume.';
+    this.lastError = message;
+    this.ready = false;
+    this.playing = false;
+    this.loadedAssets.clear();
+    this.node?.port.close();
+    this.node?.disconnect();
+    this.node = null;
+    this.comparison?.disconnect();
+    this.monitor?.disconnect();
+    this.comparison = null;
+    this.monitor = null;
+    for (const listener of this.errorListeners) listener(message);
   }
 
   private handle(message: Record<string, unknown>): void {
@@ -126,6 +198,7 @@ export class RealtimeHost {
         peakR: message.peakR as number,
         gr: (message.gr as RealtimeMeters['gr']) ?? {},
         peaks: (message.peaks as RealtimeMeters['peaks']) ?? {},
+        auditionPerformance: (message.auditionPerformance as AuditionPerformance | null) ?? null,
       };
       this.lastMeters = payload.gr;
       this.lastPayload = payload;
@@ -165,31 +238,50 @@ export class RealtimeHost {
       this.pendingAssets = assets;
       return;
     }
-    const { payload, transfer } = this.transferableAssets(assets);
-    this.node.port.postMessage({ type: 'assets', assets: payload }, transfer);
-    for (const asset of assets) this.loadedAssets.add(asset.id);
+    // Copy and transfer a small batch at a time. A single postMessage carrying
+    // every stem would temporarily duplicate the entire session PCM in memory.
+    const batchSize = 2;
+    for (let start = 0; start < assets.length; start += batchSize) {
+      const batch = assets.slice(start, start + batchSize);
+      const { payload, transfer } = this.transferableAssets(batch);
+      this.node.port.postMessage({ type: 'assets', assets: payload }, transfer);
+      for (const asset of batch) this.loadedAssets.add(asset.id);
+    }
   }
 
-  /** Reconcile the worklet's asset bank with the assets used by the active project. */
+  /** Load only assets the worklet has not already received. */
   loadAssets(assets: EngineAsset[]): void {
-    const activeIds = new Set(assets.map((asset) => asset.id));
-
+    const fresh = assets.filter((a) => !this.loadedAssets.has(a.id));
+    if (!fresh.length) return;
     if (!this.ready) {
-      this.pendingAssets = this.pendingAssets.filter((asset) => activeIds.has(asset.id));
-      const pendingIds = new Set(this.pendingAssets.map((asset) => asset.id));
-      const fresh = assets.filter((asset) => !this.loadedAssets.has(asset.id) && !pendingIds.has(asset.id));
-      this.pendingAssets.push(...fresh);
+      const pending = new Map(this.pendingAssets.map((asset) => [asset.id, asset]));
+      for (const asset of fresh) pending.set(asset.id, asset);
+      this.pendingAssets = [...pending.values()];
+      return;
+    }
+    this.pushAssets(fresh);
+  }
+
+  /**
+   * Synchronize AudioWorklet PCM residency with the assets reachable from the
+   * open project. Assets removed from the project are explicitly released.
+   */
+  syncAssets(assets: EngineAsset[]): void {
+    if (!this.ready || !this.node) {
+      this.pendingAssets = [...assets];
+      this.loadedAssets.clear();
       return;
     }
 
-    const removed = [...this.loadedAssets].filter((id) => !activeIds.has(id));
-    if (removed.length && this.node) {
-      this.node.port.postMessage({ type: 'removeAssets', ids: removed });
-      for (const id of removed) this.loadedAssets.delete(id);
+    const plan = planAssetSync(this.loadedAssets, assets.map((asset) => asset.id));
+    if (plan.releaseIds.length) {
+      this.node.port.postMessage({ type: 'release-assets', ids: plan.releaseIds });
+      for (const id of plan.releaseIds) this.loadedAssets.delete(id);
     }
-
-    const fresh = assets.filter((asset) => !this.loadedAssets.has(asset.id));
-    if (fresh.length) this.pushAssets(fresh);
+    if (plan.loadIds.length) {
+      const loadSet = new Set(plan.loadIds);
+      this.pushAssets(assets.filter((asset) => loadSet.has(asset.id)));
+    }
   }
 
   pushProject(project: ProjectState): void {
@@ -200,11 +292,34 @@ export class RealtimeHost {
     this.node.port.postMessage({ type: 'configure', project: JSON.parse(JSON.stringify(project)) });
   }
 
+  /** Configure two independent live render paths for Reference Match audition. */
+  setMatchAuditionProjects(projects: { before: ProjectState; after: ProjectState }): void {
+    if (!this.ready || !this.node) throw new Error('Audio engine is not ready for Reference Match audition.');
+    this.node.port.postMessage({
+      type: 'match-audition-projects',
+      before: JSON.parse(JSON.stringify(projects.before)),
+      after: JSON.parse(JSON.stringify(projects.after)),
+    });
+  }
+
+  setMatchAudition(active: boolean, mode: 'before' | 'after' = 'before'): void {
+    this.node?.port.postMessage({ type: 'match-audition-mode', active, mode });
+  }
+
+  clearMatchAuditionBuffers(): void {
+    this.node?.port.postMessage({ type: 'clear-match-audition' });
+  }
+
   async play(position?: number): Promise<void> {
     await this.initialise();
-    await this.ctx?.resume();
-    this.node?.port.postMessage({ type: 'play', position: position ?? this.position });
+    if (!this.ctx || !this.node) throw new Error('Audio engine could not be rebuilt.');
+    await this.ctx.resume();
+    if (this.ctx.state !== 'running') {
+      throw new Error(`Audio context did not resume (state: ${this.ctx.state}). Click Play again after the browser interruption.`);
+    }
+    this.node.port.postMessage({ type: 'play', position: position ?? this.position });
     this.playing = true;
+    this.lastError = null;
   }
 
   pause(): void {
@@ -254,28 +369,26 @@ export class RealtimeHost {
     return () => this.endedListeners.delete(listener);
   }
 
+  onError(listener: ErrorListener): () => void {
+    this.errorListeners.add(listener);
+    return () => this.errorListeners.delete(listener);
+  }
+
   async close(): Promise<void> {
-    const pendingInitialisation = this.initialising;
-    if (pendingInitialisation) {
-      try {
-        await pendingInitialisation;
-      } catch {
-        // The failed initialization has already released its partial resources.
-      }
-    }
-    this.initialising = null;
     this.ready = false;
+    this.node?.port.postMessage({ type: 'release-assets', ids: [...this.loadedAssets] });
     this.node?.disconnect();
     this.node = null;
+    this.pendingAssets = [];
     this.monitor?.disconnect();
     this.comparison?.disconnect();
     this.monitor = null;
     this.comparison = null;
     await this.ctx?.close();
     this.ctx = null;
+    this.workletLoadedFor = null;
+    this.initialising = null;
     this.loadedAssets.clear();
-    this.pendingAssets = [];
-    this.pendingProject = null;
   }
 }
 

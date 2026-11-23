@@ -15,13 +15,7 @@ const DELIVERY_TARGETS = [
   { id: 'lossless', label: 'Lossless digital release', lufs: -14, tp: -1 },
 ];
 
-const MASTERING_STYLES = [
-  { id: 'master-transparent', label: 'Balanced', description: 'Clean, controlled and transparent.', detail: 'A restrained starting point with clean peak control.', color: '#8957FF' },
-  { id: 'master-warm', label: 'Warm', description: 'Weight, glue and a softer top end.', detail: 'A gentle colour-focused starting point.', color: '#E6AD3D' },
-  { id: 'master-modern-pop', label: 'Bright', description: 'Forward presence and a modern polished edge.', detail: 'A brighter, denser pop-oriented starting point.', color: '#55B7EA' },
-] as const;
-
-export default function Mastering({ embedded = false }: { embedded?: boolean } = {}) {
+export default function Mastering() {
   const {
     project,
     assets,
@@ -37,6 +31,8 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
     recallSlot,
     deleteSlot,
     activeSlot,
+    workingMix,
+    restoreWorkingMix,
     loudnessMatch,
     setLoudnessMatch,
     comparisonDb,
@@ -77,7 +73,6 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-sonora-canvas">
-      {!embedded && (
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-white/[.07] bg-[#0D0D1B]/75 px-5 py-4 backdrop-blur-xl sm:px-6">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -98,12 +93,11 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
           </Button>
         </div>
       </header>
-      )}
 
-      {!embedded && <TransportBar />}
+      <TransportBar />
 
       <main className="min-h-0 flex-1 overflow-y-auto">
-        <div className={`mx-auto w-full max-w-[1600px] space-y-5 ${embedded ? 'p-4 sm:p-5' : 'p-5 sm:p-6 lg:p-7'}`}>
+        <div className="mx-auto w-full max-w-[1600px] space-y-5 p-5 sm:p-6 lg:p-7">
           <section className="grid gap-3 xl:grid-cols-[1.05fr_.95fr]">
             <Panel dataTour="mastering-upload" title="Your track" subtitle="The original audio remains untouched; mastering uses the current project chain.">
               <div
@@ -194,7 +188,7 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
           </section>
 
           <div className="grid gap-3 xl:grid-cols-[1.15fr_.85fr]">
-            <Panel dataTour="mastering-metering" title="Master metering" subtitle="Peak and gain reduction are live; loudness is measured from an offline render." right={<HelpTip title="Understanding the meters">Peak shows the signal level. Gain reduction shows how much a dynamics processor is turning the signal down. LUFS describes perceived loudness; dBTP measures estimated reconstructed peaks.</HelpTip>}>
+            <Panel dataTour="mastering-metering" title="Master metering" subtitle="Peak and gain reduction are live; LUFS, LRA and Annex 2 FIR true peak are measured offline." right={<HelpTip title="Understanding the meters">Peak is the live sample level. Gain reduction shows how much a dynamics processor is turning the signal down. LUFS and LRA are measured offline using the BS.1770-5 and EBU analysis windows; dBTP uses the Annex 2 FIR interpolation meter. The realtime limiter still uses its separate conservative IIR estimate.</HelpTip>}>
               <div className="grid gap-3 sm:grid-cols-[auto_1fr]">
                 <div className="flex gap-3">
                   <div className="text-center">
@@ -235,29 +229,45 @@ export default function Mastering({ embedded = false }: { embedded?: boolean } =
                 <p className="mt-2 text-2xs leading-relaxed text-ink-500">Configurable starting points, not universal platform rules. Check your distributor's current requirements.</p>
               </Panel>
 
-              <Panel title="A/B comparison" right={<HelpTip title="Why match listening volume?">A louder master can seem better even when it is more distorted. Loudness-matched listening compensates monitor volume only; it does not alter the exported audio.</HelpTip>}>
-                <div className="grid grid-cols-4 gap-1.5">
+              <Panel title="A/B comparison" right={<HelpTip title="How level matching works">Each slot is measured with an offline render. The quietest measured version is the reference, and louder versions are attenuated at the monitor output only. No audio file or export is changed.</HelpTip>}>
+                <div className="grid grid-cols-4 gap-2">
                   {['A', 'B', 'C', 'D'].map((label) => {
                     const slot = abSlots.find((item) => item.label === label);
+                    const selected = activeSlot === slot?.id;
                     return (
-                      <div key={label} className={`rounded-lg border p-2 ${activeSlot === slot?.id ? 'border-[#A77AFF]/45 bg-[#8957FF]/10' : 'border-white/[.07] bg-[#0D0D1B]/50'}`}>
+                      <div key={label} className={`min-w-0 rounded-xl border p-2.5 ${selected ? 'border-[#A77AFF]/55 bg-[#8957FF]/[.12]' : 'border-white/[.07] bg-[#0D0D1B]/50'}`}>
                         <div className="flex items-center justify-between">
-                          <span className="font-mono text-xs text-ink-100">{label}</span>
-                          {slot ? <button type="button" className="text-2xs text-ink-500 hover:text-signal-red" onClick={() => deleteSlot(slot.id)}>×</button> : <span className="text-[9px] text-ink-600">empty</span>}
+                          <span className="font-mono text-sm font-semibold text-ink-100">{label}</span>
+                          {slot ? (
+                            <button type="button" aria-label={`Delete version ${label}`} disabled={busy?.kind === 'render'} className="text-xs text-ink-500 hover:text-signal-red disabled:opacity-40" onClick={() => deleteSlot(slot.id)}>×</button>
+                          ) : <span className="text-[9px] uppercase tracking-wide text-ink-600">empty</span>}
                         </div>
                         {slot ? (
                           <>
-                            <div className="mt-1 font-mono text-[9px] text-ink-500">{slot.lufs !== null ? `${slot.lufs.toFixed(1)} LUFS` : 'unmeasured'}</div>
-                            <Button size="sm" variant="ghost" className="mt-1 w-full" onClick={() => recallSlot(slot.id)}>Recall</Button>
+                            <div className="mt-2 space-y-1 font-mono text-[10px] leading-relaxed text-ink-400">
+                              <div>{slot.lufs !== null ? `${slot.lufs.toFixed(1)} LUFS` : 'LUFS —'}</div>
+                              <div>{slot.truePeakDb !== null ? `${slot.truePeakDb.toFixed(1)} dBTP` : 'Peak —'}</div>
+                              {slot.stale && <div className="font-sans text-[9px] text-amber-300">Mix changed · recapture</div>}
+                            </div>
+                            <Button size="sm" variant={selected ? 'primary' : 'secondary'} className="mt-2 w-full" disabled={busy?.kind === 'render'} onClick={() => recallSlot(slot.id)}>{selected ? 'Selected' : 'Audition'}</Button>
+                            <Button size="sm" variant="ghost" className="mt-1 w-full" disabled={busy?.kind === 'render'} onClick={() => void captureSlot(label)}>Replace</Button>
                           </>
-                        ) : <Button size="sm" variant="ghost" className="mt-1 w-full" onClick={() => captureSlot(label)}>Capture</Button>}
+                        ) : (
+                          <Button size="sm" variant="ghost" className="mt-2 w-full" disabled={busy?.kind === 'render'} onClick={() => void captureSlot(label)}>Capture</Button>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-                <div className="mt-3 space-y-1.5">
-                  <Toggle checked={loudnessMatch} onChange={setLoudnessMatch} label="Loudness-matched listening" description="Monitor-only gain keeps louder versions from seeming automatically better." />
-                  <p className="font-mono text-2xs text-ink-500">Comparison gain {comparisonDb >= 0 ? '+' : ''}{comparisonDb.toFixed(1)} dB</p>
+                <div className="mt-3 space-y-2 rounded-xl border border-white/[.07] bg-[#0D0D1B]/45 p-3">
+                  <Toggle checked={loudnessMatch} onChange={setLoudnessMatch} label="Loudness-matched listening" description="Uses measured integrated LUFS and only attenuates; monitor path only." />
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-mono text-2xs text-ink-400">Monitor trim {comparisonDb >= 0 ? '+' : ''}{comparisonDb.toFixed(1)} dB</p>
+                    {workingMix && (
+                      <Button size="sm" variant="secondary" disabled={busy?.kind === 'render'} onClick={restoreWorkingMix}>Return to working mix</Button>
+                    )}
+                  </div>
+                  <p className="text-2xs leading-relaxed text-ink-500">Capture measures the complete current mix. Audition switches the saved master chain; Replace stores the chain currently loaded in the mastering rack. Slots last for this session. Track or bus edits mark prior measurements stale.</p>
                 </div>
               </Panel>
             </div>

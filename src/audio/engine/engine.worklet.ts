@@ -9,6 +9,7 @@ declare class AudioWorkletProcessor {
 import { ProjectRenderer, type EngineAsset } from './renderer';
 import type { ProjectState } from '../model/types';
 import { gainToDb } from '../dsp/util';
+import { renderAuditionBlock, type AuditionMode, type AuditionTransition, type StereoAuditionBuffers } from './audition';
 
 interface AssetPayload {
   id: string;
@@ -41,6 +42,29 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
   private loopEnabled = false;
   private loopStartSample = 0;
   private loopEndSample = 0;
+  private matchBeforeRenderer: ProjectRenderer | null = null;
+  private matchAfterRenderer: ProjectRenderer | null = null;
+  private matchAuditionEndSample = 0;
+  private matchAuditionBeforeL = new Float32Array(128);
+  private matchAuditionBeforeR = new Float32Array(128);
+  private matchAuditionAfterL = new Float32Array(128);
+  private matchAuditionAfterR = new Float32Array(128);
+  private matchAuditionBuffers: StereoAuditionBuffers = {
+    beforeL: this.matchAuditionBeforeL, beforeR: this.matchAuditionBeforeR,
+    afterL: this.matchAuditionAfterL, afterR: this.matchAuditionAfterR,
+  };
+  private matchAuditionActive = false;
+  private matchAuditionMode: AuditionMode = 'before';
+  private matchAuditionTransition: AuditionTransition | null = null;
+  private auditionTimingTotalMs = 0;
+  private auditionTimingMaxMs = 0;
+  private auditionTimingBlocks = 0;
+  private auditionPerformance: {
+    averageMs: number;
+    maxMs: number;
+    blockBudgetMs: number;
+    utilizationPercent: number;
+  } | null = null;
 
   constructor() {
     super();
@@ -64,15 +88,21 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         for (const asset of assets) merged.set(asset.id, asset);
         this.assets = [...merged.values()];
         this.renderer.setAssets(this.assets);
+        this.matchBeforeRenderer?.setAssets(this.assets);
+        this.matchAfterRenderer?.setAssets(this.assets);
         if (this.project) {
           this.renderer.configure(this.project, this.assets, sampleRate, this.staticBlock);
         }
         break;
       }
-      case 'removeAssets': {
-        const removed = new Set((message.ids as string[]) ?? []);
-        this.assets = this.assets.filter((asset) => !removed.has(asset.id));
+      case 'removeAssets':
+      case 'release-assets': {
+        const ids = new Set((message.ids as string[]) ?? []);
+        if (!ids.size) break;
+        this.assets = this.assets.filter((asset) => !ids.has(asset.id));
         this.renderer.setAssets(this.assets);
+        this.matchBeforeRenderer?.setAssets(this.assets);
+        this.matchAfterRenderer?.setAssets(this.assets);
         break;
       }
       case 'configure': {
@@ -84,11 +114,61 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         this.port.postMessage({ type: 'configured', endSample: this.endSample });
         break;
       }
+      case 'match-audition-projects': {
+        const before = message.before as ProjectState;
+        const after = message.after as ProjectState;
+        this.matchBeforeRenderer = new ProjectRenderer();
+        this.matchAfterRenderer = new ProjectRenderer();
+        this.matchBeforeRenderer.configure(before, this.assets, sampleRate, this.staticBlock);
+        if (ProjectRenderer.preMasterGraphsMatch(before, after, sampleRate)) {
+          // Both versions share all track/bus processing. Keep only the
+          // independent master DSP graph in the second renderer.
+          this.matchAfterRenderer.configureMasterOnly(after, this.assets, sampleRate, this.staticBlock);
+        } else {
+          // Unusual non-master differences retain the safe full-render path.
+          this.matchAfterRenderer.configure(after, this.assets, sampleRate, this.staticBlock);
+        }
+        this.matchAuditionEndSample = Math.min(
+          Math.round(this.matchBeforeRenderer.timelineEndSeconds * sampleRate),
+          Math.round(this.matchAfterRenderer.timelineEndSeconds * sampleRate),
+        );
+        this.matchAuditionTransition = null;
+        break;
+      }
+      case 'match-audition-mode': {
+        const nextMode = message.mode === 'after' ? 'after' : 'before';
+        const nextActive = Boolean(message.active) && Boolean(this.matchBeforeRenderer) && Boolean(this.matchAfterRenderer);
+        if (this.matchAuditionActive && nextActive && nextMode !== this.matchAuditionMode) {
+          this.matchAuditionTransition = {
+            from: this.matchAuditionMode,
+            totalFrames: Math.max(1, Math.round(sampleRate * 0.008)),
+            elapsedFrames: 0,
+          };
+        } else if (!nextActive) {
+          this.matchAuditionTransition = null;
+          this.resetAuditionPerformance();
+        }
+        this.matchAuditionMode = nextMode;
+        this.matchAuditionActive = nextActive;
+        break;
+      }
+      case 'clear-match-audition': {
+        this.matchAuditionActive = false;
+        this.matchBeforeRenderer = null;
+        this.matchAfterRenderer = null;
+        this.matchAuditionEndSample = 0;
+        this.matchAuditionTransition = null;
+        this.resetAuditionPerformance();
+        this.renderer.reset();
+        break;
+      }
       case 'play': {
         const fromSeconds =
           typeof message.position === 'number' ? message.position : this.position / sampleRate;
         this.position = Math.max(0, Math.round(fromSeconds * sampleRate));
         this.renderer.reset();
+        this.matchBeforeRenderer?.reset();
+        this.matchAfterRenderer?.reset();
         this.playing = true;
         break;
       }
@@ -99,6 +179,8 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
       case 'seek':
         this.position = Math.max(0, Math.round((message.position as number) * sampleRate));
         this.renderer.reset();
+        this.matchBeforeRenderer?.reset();
+        this.matchAfterRenderer?.reset();
         this.port.postMessage({ type: 'position', position: this.position / sampleRate, playing: this.playing });
         break;
       case 'loop':
@@ -110,10 +192,37 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         this.playing = false;
         this.position = 0;
         this.renderer.reset();
+        this.matchBeforeRenderer?.reset();
+        this.matchAfterRenderer?.reset();
         break;
       default:
         break;
     }
+  }
+
+  private resetAuditionPerformance(): void {
+    this.auditionTimingTotalMs = 0;
+    this.auditionTimingMaxMs = 0;
+    this.auditionTimingBlocks = 0;
+    this.auditionPerformance = null;
+  }
+
+  private recordAuditionPerformance(renderMs: number, frames: number): void {
+    this.auditionTimingTotalMs += renderMs;
+    this.auditionTimingMaxMs = Math.max(this.auditionTimingMaxMs, renderMs);
+    this.auditionTimingBlocks++;
+    if (this.auditionTimingBlocks < 32) return;
+    const averageMs = this.auditionTimingTotalMs / this.auditionTimingBlocks;
+    const blockBudgetMs = (frames / sampleRate) * 1000;
+    this.auditionPerformance = {
+      averageMs,
+      maxMs: this.auditionTimingMaxMs,
+      blockBudgetMs,
+      utilizationPercent: blockBudgetMs > 0 ? (averageMs / blockBudgetMs) * 100 : 0,
+    };
+    this.auditionTimingTotalMs = 0;
+    this.auditionTimingMaxMs = 0;
+    this.auditionTimingBlocks = 0;
   }
 
   process(_inputs: Float32Array[][], outputs: Float32Array[][]): boolean {
@@ -128,7 +237,37 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
       return true;
     }
 
-    this.renderer.renderBlock(this.position, outL.length, outL, outR);
+    const auditionActive = this.matchAuditionActive && this.matchBeforeRenderer !== null && this.matchAfterRenderer !== null;
+    if (auditionActive) {
+      if (this.matchAuditionBeforeL.length < outL.length) {
+        this.matchAuditionBeforeL = new Float32Array(outL.length);
+        this.matchAuditionBeforeR = new Float32Array(outL.length);
+        this.matchAuditionAfterL = new Float32Array(outL.length);
+        this.matchAuditionAfterR = new Float32Array(outL.length);
+        this.matchAuditionBuffers = {
+          beforeL: this.matchAuditionBeforeL, beforeR: this.matchAuditionBeforeR,
+          afterL: this.matchAuditionAfterL, afterR: this.matchAuditionAfterR,
+        };
+      }
+      const renderStartedAt = performance.now();
+      const elapsed = renderAuditionBlock(
+        this.matchBeforeRenderer!,
+        this.matchAfterRenderer!,
+        this.position,
+        this.matchAuditionMode,
+        this.matchAuditionBuffers,
+        outL,
+        outR,
+        this.matchAuditionTransition ?? undefined,
+      );
+      if (this.matchAuditionTransition) {
+        this.matchAuditionTransition.elapsedFrames = elapsed;
+        if (elapsed >= this.matchAuditionTransition.totalFrames) this.matchAuditionTransition = null;
+      }
+      this.recordAuditionPerformance(performance.now() - renderStartedAt, outL.length);
+    } else {
+      this.renderer.renderBlock(this.position, outL.length, outL, outR);
+    }
     this.position += outL.length;
     if (
       this.loopEnabled &&
@@ -137,6 +276,8 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
     ) {
       this.position = this.loopStartSample;
       this.renderer.reset();
+      this.matchBeforeRenderer?.reset();
+      this.matchAfterRenderer?.reset();
       this.port.postMessage({ type: 'position', position: this.position / sampleRate, playing: true });
     }
 
@@ -159,15 +300,17 @@ class SonoraEngineProcessor extends AudioWorkletProcessor {
         peakR: gainToDb(this.peakR),
         position: this.position / sampleRate,
         playing: true,
-        gr: this.renderer.meterSnapshot(),
-        peaks: this.renderer.peakSnapshot(),
+        gr: auditionActive ? {} : this.renderer.meterSnapshot(),
+        peaks: auditionActive ? {} : this.renderer.peakSnapshot(),
+        auditionPerformance: auditionActive ? this.auditionPerformance : null,
       });
     } else if (this.position - this.lastPositionPost > sampleRate * 0.05) {
       this.lastPositionPost = this.position;
       this.port.postMessage({ type: 'position', position: this.position / sampleRate, playing: true });
     }
 
-    if (this.endSample > 0 && this.position >= this.endSample + sampleRate * 0.5) {
+    const auditionEnd = auditionActive ? this.matchAuditionEndSample : this.endSample + sampleRate * 0.5;
+    if ((auditionActive ? auditionEnd > 0 : this.endSample > 0) && this.position >= auditionEnd) {
       this.playing = false;
       this.position = 0;
       this.port.postMessage({ type: 'ended' });
