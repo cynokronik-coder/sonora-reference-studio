@@ -231,6 +231,25 @@ try {
 
   await page.screenshot({ path: `${artifactDir}/studio-track-settings.png`, fullPage: true });
 
+  // Reference Match uses the shared HelpTip control. Verify the larger target
+  // and the non-modal dialog's keyboard focus lifecycle on a real product page.
+  await page.goto(`${baseUrl}#reference`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Reference Match' }).waitFor({ state: 'visible' });
+  const helpTrigger = page.getByRole('button', { name: 'Explain this' }).first();
+  await helpTrigger.waitFor({ state: 'visible' });
+  const helpBounds = await helpTrigger.boundingBox();
+  assert.ok(helpBounds && helpBounds.width >= 36 && helpBounds.height >= 36,
+    `Help trigger is ${helpBounds?.width ?? 0}×${helpBounds?.height ?? 0}px; expected at least 36×36px on desktop`);
+  await helpTrigger.click();
+  const helpDialog = page.getByRole('dialog', { name: 'What is reference matching?' });
+  await helpDialog.waitFor({ state: 'visible' });
+  assert.equal(await helpDialog.evaluate((element) => element.contains(document.activeElement)), true,
+    'Opening a HelpTip should move focus into its explanation');
+  await page.keyboard.press('Escape');
+  await helpDialog.waitFor({ state: 'detached' });
+  assert.equal(await helpTrigger.evaluate((element) => element === document.activeElement), true,
+    'Escape should return focus to the HelpTip trigger');
+
   assert.deepEqual(pageErrors, [], `Browser page errors: ${pageErrors.join('; ')}`);
   assert.deepEqual(consoleErrors, [], `Browser console errors: ${consoleErrors.join('; ')}`);
   assert.deepEqual(failedRequests, [], `Failed browser requests: ${JSON.stringify(failedRequests)}`);
