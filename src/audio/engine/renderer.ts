@@ -2,7 +2,7 @@ import { ProcessorChain } from '../dsp/chain';
 import { valueAtTime, findLane } from '../dsp/automation';
 import type { ParamValues, ProcessorMeterSnapshot } from '../dsp/types';
 import { dbToGain, clamp } from '../dsp/util';
-import type { BusState, ProcessorNodeState, ProjectState, TrackState } from '../model/types';
+import type { AutomationLane, ProcessorNodeState, ProjectState, TrackState } from '../model/types';
 import type { AuditionBlockRenderer } from './audition';
 
 export interface EngineAsset {
@@ -85,6 +85,8 @@ export class ProjectRenderer {
   private assetSignature = '';
   private meterRefs: ProcessorMeterSnapshot = {};
   private channelPeaks = new Map<string, { L: number; R: number }>();
+  private automationParamScratch = new Map<string, ParamValues>();
+  private automationValueScratch = { volumeDb: 0, pan: 0 };
 
   configure(project: ProjectState, assets: EngineAsset[], sampleRate: number, blockSize: number): void {
     this.project = project;
@@ -107,6 +109,7 @@ export class ProjectRenderer {
     this.blockSize = blockSize;
     this.assets = new Map(assets.map((a) => [a.id, a]));
     this.assetSignature = assets.map((a) => [a.id, a.sampleRate, a.length]).sort((a, b) => String(a[0]).localeCompare(String(b[0]))).map((entry) => entry.join(':')).join('|');
+    this.syncRenderScratch(project);
     this.preMasterSignature = JSON.stringify({ sampleRate: this.sr, tracks: project.tracks, buses: project.buses });
     this.trackConfigSignature = '';
     this.trackPaths.clear();
@@ -164,6 +167,7 @@ export class ProjectRenderer {
   }
 
   private rebuild(project: ProjectState): void {
+    this.syncRenderScratch(project);
     // The master A/B path may share all pre-master DSP only when every track,
     // bus and source asset is identical. Compute this on configuration, never
     // inside the real-time block loop.
@@ -292,10 +296,9 @@ export class ProjectRenderer {
   private automationValues(track: TrackState, time: number): { volumeDb: number; pan: number } {
     const volLane = findLane(track.automation, 'volume');
     const panLane = findLane(track.automation, 'pan');
-    return {
-      volumeDb: volLane ? valueAtTime(volLane.points, time, track.volumeDb) : track.volumeDb,
-      pan: panLane ? valueAtTime(panLane.points, time, track.pan) : track.pan,
-    };
+    this.automationValueScratch.volumeDb = volLane ? valueAtTime(volLane.points, time, track.volumeDb) : track.volumeDb;
+    this.automationValueScratch.pan = panLane ? valueAtTime(panLane.points, time, track.pan) : track.pan;
+    return this.automationValueScratch;
   }
 
   /**
@@ -319,16 +322,30 @@ export class ProjectRenderer {
   }
 
   private applyAutomatedParams(
-    track: TrackState,
+    automation: AutomationLane[],
+    processors: ProcessorNodeState[],
     chain: ProcessorChain,
     time: number,
+    scope: 'track' | 'bus',
   ): void {
-    for (const processor of track.processors) {
-      const lanes = track.automation.filter((l) => l.enabled && l.processorId === processor.id);
-      if (!lanes.length) continue;
-      const params: ParamValues = { ...processor.params };
-      for (const lane of lanes) {
-        if (!lane.param) continue;
+    for (const processor of processors) {
+      let hasAutomation = false;
+      for (const lane of automation) {
+        if (lane.enabled && lane.processorId === processor.id && lane.param) {
+          hasAutomation = true;
+          break;
+        }
+      }
+      if (!hasAutomation) continue;
+
+      const params = this.automationParamScratch.get(`${scope}:${processor.id}`);
+      if (!params) continue;
+      for (const key in params) {
+        if (!(key in processor.params)) delete params[key];
+      }
+      Object.assign(params, processor.params);
+      for (const lane of automation) {
+        if (!lane.enabled || lane.processorId !== processor.id || !lane.param) continue;
         params[lane.param] = valueAtTime(lane.points, time, params[lane.param] ?? 0);
       }
       chain.setParams(processor.id, params);
@@ -412,6 +429,43 @@ export class ProjectRenderer {
       this.sr === other.sr;
   }
 
+  private syncRenderScratch(project: ProjectState): void {
+    const activeChannels = new Set<string>(['master']);
+    const activeAutomation = new Set<string>();
+    const syncProcessor = (scope: 'track' | 'bus', processor: ProcessorNodeState) => {
+      const key = `${scope}:${processor.id}`;
+      activeAutomation.add(key);
+      const existing = this.automationParamScratch.get(key);
+      if (existing) {
+        for (const name in existing) {
+          if (!(name in processor.params)) delete existing[name];
+        }
+        Object.assign(existing, processor.params);
+      } else {
+        this.automationParamScratch.set(key, { ...processor.params });
+      }
+    };
+
+    for (const track of project.tracks) {
+      activeChannels.add(track.id);
+      for (const processor of track.processors) syncProcessor('track', processor);
+    }
+    for (const bus of project.buses) {
+      activeChannels.add(bus.id);
+      for (const processor of bus.processors) syncProcessor('bus', processor);
+    }
+
+    for (const id of this.channelPeaks.keys()) {
+      if (!activeChannels.has(id)) this.channelPeaks.delete(id);
+    }
+    for (const id of activeChannels) {
+      if (!this.channelPeaks.has(id)) this.channelPeaks.set(id, { L: 0, R: 0 });
+    }
+    for (const key of this.automationParamScratch.keys()) {
+      if (!activeAutomation.has(key)) this.automationParamScratch.delete(key);
+    }
+  }
+
   private renderPreMasterBlock(startSample: number, frames: number, outL: Float32Array, outR: Float32Array): void {
     const project = this.project;
     if (!project) {
@@ -421,7 +475,13 @@ export class ProjectRenderer {
     }
     outL.fill(0, 0, frames);
     outR.fill(0, 0, frames);
-    const anySolo = project.tracks.some((t) => t.soloed);
+    let anySolo = false;
+    for (const track of project.tracks) {
+      if (track.soloed) {
+        anySolo = true;
+        break;
+      }
+    }
     const time = startSample / this.sr;
 
     for (const bus of project.buses) {
@@ -430,14 +490,12 @@ export class ProjectRenderer {
       acc.R.fill(0, 0, frames);
     }
 
-    const audible = (track: TrackState) => !track.muted && (!anySolo || track.soloed);
-
     // 1. Raw audio for every track, needed for external sidechain keys.
     for (const track of project.tracks) {
       const raw = this.getBuffer(this.scratch, track.id);
       this.fillTrack(track, startSample, frames, raw.L, raw.R);
       const key = this.getBuffer(this.rawKeys, track.id);
-      if (audible(track)) {
+      if (!track.muted && (!anySolo || track.soloed)) {
         key.L.set(raw.L.subarray(0, frames));
         key.R.set(raw.R.subarray(0, frames));
       } else {
@@ -448,7 +506,7 @@ export class ProjectRenderer {
 
     // 2. Track chains and routing.
     for (const track of project.tracks) {
-      if (!audible(track)) continue;
+      if (track.muted || (anySolo && !track.soloed)) continue;
       const buf = this.getBuffer(this.scratch, track.id);
       const path = this.trackPaths.get(track.id);
       if (!path) continue;
@@ -468,7 +526,7 @@ export class ProjectRenderer {
       this.syncSidechains(track.processors, path.chain);
       // Automation must be applied after the structural sync and immediately
       // before processing, otherwise the base parameter values overwrite it.
-      this.applyAutomatedParams(track, path.chain, time);
+      this.applyAutomatedParams(track.automation, track.processors, path.chain, time, 'track');
       const automated = this.automationValues(track, time);
       path.chain.process(buf.L, buf.R, frames);
 
@@ -537,7 +595,7 @@ export class ProjectRenderer {
         continue;
       }
       this.syncSidechains(bus.processors, path.chain);
-      this.applyAutomatedParams({ ...this.emptyTrack(bus.id), automation: bus.automation, processors: bus.processors } as TrackState, path.chain, time);
+      this.applyAutomatedParams(bus.automation, bus.processors, path.chain, time, 'bus');
       path.chain.process(acc.L, acc.R, frames);
       if (bus.polarity) {
         for (let i = 0; i < frames; i++) {
@@ -587,23 +645,15 @@ export class ProjectRenderer {
       if (ar > peakR) peakR = ar;
     }
     const previous = this.channelPeaks.get(id);
-    this.channelPeaks.set(id, {
-      L: Math.max(peakL, (previous?.L ?? 0) * 0.82),
-      R: Math.max(peakR, (previous?.R ?? 0) * 0.82),
-    });
+    if (!previous) return;
+    previous.L = Math.max(peakL, previous.L * 0.82);
+    previous.R = Math.max(peakR, previous.R * 0.82);
   }
 
   peakSnapshot(): Record<string, { L: number; R: number }> {
     const out: Record<string, { L: number; R: number }> = {};
     for (const [id, peak] of this.channelPeaks) out[id] = { ...peak };
     return out;
-  }
-
-  private emptyTrack(id: string): TrackState {
-    return {
-      id, name: '', kind: 'bus', color: '', volumeDb: 0, pan: 0, muted: false, soloed: false,
-      polarity: false, mono: false, output: null, sends: [], processors: [], automation: [], clips: [], height: 0,
-    };
   }
 
   meterSnapshot(): ProcessorMeterSnapshot {
@@ -638,4 +688,3 @@ export class ProjectRenderer {
   }
 }
 
-void (undefined as unknown as BusState);
