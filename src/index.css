@@ -407,3 +407,20 @@ textarea {
     min-height: 44px;
   }
 }
+
+/* Landing-page tagline reveal: restrained color transition, with a reduced-motion fallback. */
+.sonora-tagline-word {
+  color: rgb(255 255 255 / 0.32);
+  transition: color 200ms var(--sonora-ease-out);
+}
+
+.sonora-tagline-word.is-visible {
+  color: rgb(255 255 255 / 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sonora-tagline-word {
+    color: rgb(255 255 255 / 1);
+    transition: none;
+  }
+}

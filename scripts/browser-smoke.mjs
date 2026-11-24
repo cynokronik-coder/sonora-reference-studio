@@ -7,6 +7,7 @@ import { chromium } from 'playwright';
 const baseUrl = process.env.SONORA_BASE_URL || 'http://127.0.0.1:3000';
 const artifactDir = process.env.SONORA_BROWSER_ARTIFACT_DIR || 'artifacts/browser';
 const designScreenshotDir = '.design/projects-onboarding/screenshots';
+const landingScreenshotDir = '.design/landing-page/screenshots';
 const server = spawn(process.execPath, ['scripts/dev.mjs'], {
   stdio: 'inherit',
   env: {
@@ -56,6 +57,14 @@ async function checkNoHorizontalOverflow(page, width) {
   );
 }
 
+async function revealLandingTagline(page) {
+  await page.locator('#difference').scrollIntoViewIfNeeded();
+  await page.waitForFunction(() => {
+    const words = Array.from(document.querySelectorAll('#difference [data-tagline-word]'));
+    return words.length > 0 && words.every((word) => word.classList.contains('is-visible'));
+  }, null, { timeout: 5000 });
+}
+
 async function openGuidedTour(page) {
   const desktopTrigger = page.getByRole('button', { name: 'Start guided tour', exact: true });
   if (await desktopTrigger.isVisible()) {
@@ -81,6 +90,7 @@ try {
   await waitForServer();
   await mkdir(artifactDir, { recursive: true });
   await mkdir(designScreenshotDir, { recursive: true });
+  await mkdir(landingScreenshotDir, { recursive: true });
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 
@@ -108,13 +118,31 @@ try {
   await landingBodyCopy.waitFor({ state: 'visible' });
   const landingBodyFontSize = await landingBodyCopy.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
   assert.ok(landingBodyFontSize >= 14, `Landing explanatory copy is ${landingBodyFontSize}px; expected at least 14px`);
+  assert.equal((await page.getByRole('heading', { level: 1 }).innerText()).replace(/\\s+/g, ' ').trim(), 'Mix with a reference. Keep every decision yours.');
+  assert.equal(await page.locator('#capabilities article').count(), 5, 'The landing page should group related analysis and reference features into five clear capabilities');
+  await page.getByText('Free plan includes local audio tools, analysis and exports. No payment required.', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('16 BUILT-IN PROCESSORS', { exact: true }).waitFor({ state: 'visible' });
   await checkNoHorizontalOverflow(page, 1440);
+  await revealLandingTagline(page);
+  await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: `${artifactDir}/landing-desktop.png`, fullPage: true });
+  await page.screenshot({ path: `${landingScreenshotDir}/landing-desktop-1440.png`, fullPage: true });
+
+  const reducedMotionPage = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
+  await reducedMotionPage.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+  await reducedMotionPage.locator('#difference').scrollIntoViewIfNeeded();
+  await reducedMotionPage.waitForFunction(() => {
+    const words = Array.from(document.querySelectorAll('#difference [data-tagline-word]'));
+    return words.length > 0 && words.every((word) => word.classList.contains('is-visible'));
+  }, null, { timeout: 5000 });
+  await reducedMotionPage.close();
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { level: 1 }).waitFor({ state: 'visible' });
   await checkNoHorizontalOverflow(page, 390);
+  await revealLandingTagline(page);
+  await page.evaluate(() => window.scrollTo(0, 0));
 
   await page.setViewportSize({ width: 360, height: 780 });
   await checkNoHorizontalOverflow(page, 360);
@@ -132,6 +160,7 @@ try {
   const ctaHeight = await studioCta.evaluate((element) => element.getBoundingClientRect().height);
   assert.ok(ctaHeight >= 44, `Mobile Studio CTA is ${ctaHeight}px; expected at least 44px`);
   await page.screenshot({ path: `${artifactDir}/landing-mobile-390.png`, fullPage: true });
+  await page.screenshot({ path: `${landingScreenshotDir}/landing-mobile-390.png`, fullPage: true });
 
   await menuSummary.click();
   const mobileNav = page.getByRole('navigation', { name: 'Website navigation' });
@@ -202,10 +231,17 @@ try {
   assert.equal(await moreButton.evaluate((element) => element === document.activeElement), true, 'Escape should restore focus to the More trigger');
 
   for (const width of [768, 1024, 1280, 1440]) {
-    await page.setViewportSize({ width, height: 1000 });
+    const height = width === 768 ? 1024 : width === 1280 ? 800 : 1000;
+    await page.setViewportSize({ width, height });
     await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { level: 1 }).waitFor({ state: 'visible' });
     await checkNoHorizontalOverflow(page, width);
+    if (width === 768 || width === 1280) {
+      await revealLandingTagline(page);
+      await page.evaluate(() => window.scrollTo(0, 0));
+      const suffix = width === 768 ? 'tablet-768' : 'desktop-1280';
+      await page.screenshot({ path: `${landingScreenshotDir}/landing-${suffix}.png`, fullPage: true });
+    }
   }
   await page.getByRole('link', { name: 'Capabilities' }).waitFor({ state: 'visible' });
 
@@ -519,7 +555,7 @@ try {
   assert.deepEqual(failedRequests, [], `Failed browser requests: ${JSON.stringify(failedRequests)}`);
 
   console.log('Sonora browser smoke checks passed.');
-  console.log('Screenshots: landing-desktop.png, landing-mobile-390.png');
+  console.log('Screenshots: landing desktop 1440, tablet 768, mobile 390; Projects onboarding desktop/tablet/mobile.');
 } finally {
   if (browser) await browser.close();
   if (serverReady && server.exitCode === null) {

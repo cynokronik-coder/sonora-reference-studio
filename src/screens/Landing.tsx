@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { Icon, type SonoraIconName } from '../ui/Icon';
 
 type LandingProps = {
@@ -12,41 +12,34 @@ const BAR_HEIGHTS = [18, 28, 21, 35, 30, 43, 27, 50, 38, 57, 44, 65, 50, 73, 54,
 const FEATURES = [
   {
     number: '01',
-    icon: 'activity' as SonoraIconName,
-    title: 'Understand the difference',
-    description: 'Go beyond “it sounds a bit dull”. Sonora measures loudness, true peak, frequency balance, dynamics, stereo behaviour and rhythm so you can make decisions with context.',
-    tags: ['LUFS & true peak', '31-band spectrum', 'Stereo & dynamics'],
+    icon: 'headphones' as SonoraIconName,
+    title: 'Compare with a reference',
+    description: 'Measure loudness, true peak, frequency balance, dynamics, stereo width and rhythm against one or more references. See where your mix differs before you shape an editable processing chain.',
+    tags: ['31-band spectrum', 'Multiple references', 'Editable suggestions'],
   },
   {
     number: '02',
-    icon: 'headphones' as SonoraIconName,
-    title: 'Match a reference — your way',
-    description: 'Compare your mix with the records you admire. Explore tonal, dynamic, stereo and punch differences, then build a suggested chain you can inspect and edit.',
-    tags: ['Multiple references', 'Per-category control', 'Editable suggestions'],
-  },
-  {
-    number: '03',
     icon: 'waveform' as SonoraIconName,
     title: 'Shape the whole mix',
     description: 'Arrange multitrack sessions, move and trim clips, work with tracks and buses, and shape each part with a real-time processing chain.',
     tags: ['Multitrack timeline', 'Tracks & buses', 'Clip gain & fades'],
   },
   {
-    number: '04',
+    number: '03',
     icon: 'equalizer' as SonoraIconName,
     title: 'Use real processing tools',
     description: 'Build your sound with an implemented DSP engine: EQ, compression, multiband dynamics, de-essing, saturation, stereo tools, reverb, delay and more.',
     tags: ['16 processor types', 'Reorder & bypass', 'Detailed parameters'],
   },
   {
-    number: '05',
+    number: '04',
     icon: 'download' as SonoraIconName,
     title: 'Render, compare, verify',
     description: 'Render offline through the same processing graph used for playback. Check the result again, compare versions, and make informed final adjustments.',
     tags: ['A/B comparisons', 'Offline rendering', 'Post-render analysis'],
   },
   {
-    number: '06',
+    number: '05',
     icon: 'sparkles' as SonoraIconName,
     title: 'Get a second opinion from AI',
     description: 'The optional connected assistant can inspect project context and measured results, request analysis, and prepare processor changes for your approval. Nothing is applied automatically.',
@@ -63,6 +56,52 @@ const STEPS = [
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return <p className="font-mono text-[10px] uppercase tracking-[.22em] text-accent/80">{children}</p>;
+}
+
+function TaglineReveal({ text, className }: { text: string; className: string }) {
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  useEffect(() => {
+    const heading = headingRef.current;
+    if (!heading) return;
+
+    const words = Array.from(heading.querySelectorAll<HTMLElement>('[data-tagline-word]'));
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (prefersReducedMotion || typeof IntersectionObserver === 'undefined') {
+      words.forEach((word) => word.classList.add('is-visible'));
+      return;
+    }
+
+    const observers = words.map((word) => {
+      const observer = new IntersectionObserver(([entry]) => {
+        if (entry.isIntersecting) {
+          word.classList.add('is-visible');
+          observer.unobserve(word);
+        }
+      }, { threshold: 0.75, rootMargin: '0px 0px -18% 0px' });
+      observer.observe(word);
+      return observer;
+    });
+
+    return () => observers.forEach((observer) => observer.disconnect());
+  }, []);
+
+  const words = text.split(/\s+/);
+  return (
+    <h2 ref={headingRef} className={className} aria-label={text}>
+      {words.map((word, index) => (
+        <span
+          key={`${word}-${index}`}
+          aria-hidden="true"
+          data-tagline-word
+          className="sonora-tagline-word"
+          style={{ transitionDelay: `${Math.min(index * 22, 176)}ms` }}
+        >
+          {word}{index < words.length - 1 ? ' ' : ''}
+        </span>
+      ))}
+    </h2>
+  );
 }
 
 function ArrowMark() {
@@ -205,10 +244,10 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
           <div className="max-w-xl">
             <SectionLabel>Mixing · Reference matching · Mastering</SectionLabel>
             <h1 className="mt-6 text-[clamp(2.7rem,6vw,5.3rem)] font-semibold leading-[.98] tracking-[-.065em] text-white">
-              Get closer to the sound you <span className="text-accent">hear in your head.</span>
+              Mix with a reference. <span className="text-accent">Keep every decision yours.</span>
             </h1>
             <p className="mt-7 max-w-lg text-sm leading-7 text-ink-300 sm:text-base sm:leading-8">
-              Sonora brings mixing, measured reference matching, detailed audio analysis and mastering into one focused workspace. Build a sound you understand — and keep control of every move.
+              Sonora brings mixing, mastering and reference matching into your browser for independent artists and producers. Compare your mix, inspect measured differences, and shape every processing decision yourself.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <button type="button" onClick={onEnterStudio} className="group min-h-12 rounded-lg bg-accent px-5 py-3.5 text-sm font-semibold text-[#10150a] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">
@@ -218,11 +257,9 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
                 See how it works <span aria-hidden="true" className="ml-1">↓</span>
               </a>
             </div>
-            <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 border-t border-white/[.08] pt-5 text-[10px] text-ink-500">
-              <span className="flex items-center gap-2"><i className="h-1.5 w-1.5 rounded-full bg-accent" /> Local-first workflow</span>
-              <span className="flex items-center gap-2"><i className="h-1.5 w-1.5 rounded-full bg-accent" /> Editable processing</span>
-              <span className="flex items-center gap-2"><i className="h-1.5 w-1.5 rounded-full bg-accent" /> Beginner and engineer modes</span>
-            </div>
+            <p className="mt-4 max-w-lg text-xs leading-5 text-ink-400">
+              Free plan includes local audio tools, analysis and exports. No payment required.
+            </p>
           </div>
           <StudioPreview />
         </section>
@@ -230,9 +267,9 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
         <section className="border-y border-white/[.07] bg-white/[.018]">
           <div className="mx-auto grid max-w-7xl gap-5 px-5 py-7 sm:grid-cols-3 sm:px-8">
             {[
-              ['ONE WORKSPACE', 'Mix, compare, analyse and master'],
-              ['REAL DSP ENGINE', 'Every processor changes the audio'],
-              ['YOU STAY IN CONTROL', 'Suggestions are editable, not compulsory'],
+              ['LOCAL ANALYSIS', 'Audio analysis runs in your browser'],
+              ['16 BUILT-IN PROCESSORS', 'EQ, dynamics, stereo and time-based tools'],
+              ['YOU STAY IN CONTROL', 'Processor suggestions require your approval'],
             ].map(([eyebrow, detail]) => (
               <div key={eyebrow} className="flex items-start gap-3 sm:justify-center">
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_12px_rgba(200,241,105,.8)]" />
@@ -245,7 +282,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
         <section id="difference" className="mx-auto grid max-w-7xl gap-12 px-5 py-20 sm:px-8 lg:grid-cols-[.8fr_1.2fr] lg:py-28">
           <div className="max-w-lg">
             <SectionLabel>Not just a one-click finish</SectionLabel>
-            <h2 className="mt-5 text-3xl font-semibold leading-tight tracking-[-.04em] text-white sm:text-4xl">A result matters. <span className="text-ink-500">Knowing how you got there matters too.</span></h2>
+            <TaglineReveal text="A result matters. Knowing how you got there matters too." className="mt-5 text-3xl font-semibold leading-tight tracking-[-.04em] text-white sm:text-4xl" />
             <p className="mt-5 text-sm leading-7 text-ink-400">
               Quick mastering services can be useful when you simply need a fast starting point. Sonora is built for the next step: understanding what your mix needs, deciding what to change, and keeping those decisions in your hands.
             </p>
@@ -278,7 +315,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
           <div className="mx-auto max-w-7xl px-5 py-20 sm:px-8 lg:py-28">
             <div className="max-w-2xl">
               <SectionLabel>What you can do with Sonora</SectionLabel>
-              <h2 className="mt-5 text-3xl font-semibold tracking-[-.045em] text-white sm:text-4xl">A complete toolkit for shaping your sound.</h2>
+              <h2 className="mt-5 text-3xl font-semibold tracking-[-.045em] text-white sm:text-4xl">A focused toolkit for shaping your sound.</h2>
               <p className="mt-4 text-sm leading-7 text-ink-400">The point is not to hide the craft behind a button. It is to make the important information and tools easier to reach.</p>
             </div>
             <div className="mt-10 grid gap-3 md:grid-cols-2 xl:grid-cols-3">

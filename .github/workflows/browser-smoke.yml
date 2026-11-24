@@ -48,6 +48,7 @@ jobs:
           path: |
             artifacts/browser/
             .design/projects-onboarding/screenshots/
+            .design/landing-page/screenshots/
           if-no-files-found: ignore
           retention-days: 90
           include-hidden-files: true
