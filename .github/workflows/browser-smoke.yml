@@ -50,3 +50,4 @@ jobs:
             .design/projects-onboarding/screenshots/
           if-no-files-found: ignore
           retention-days: 90
+          include-hidden-files: true
