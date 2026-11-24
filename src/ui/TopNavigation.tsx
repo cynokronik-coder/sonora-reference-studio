@@ -139,7 +139,7 @@ export default function TopNavigation({
         </button>
       </div>
 
-      <nav aria-label="Primary navigation" className="no-scrollbar flex min-w-0 flex-1 items-center justify-center gap-0.5 overflow-x-auto px-1">
+      <nav aria-label="Primary navigation" className="sonora-primary-nav no-scrollbar flex min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto px-1">
         {PRIMARY_LINKS.map((item, index) => {
           const disabled = Boolean(item.disabledWithoutProject && !projectOpen);
           const selected = item.label !== 'AI Assistant' && item.screen === screen;
