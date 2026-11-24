@@ -205,7 +205,7 @@ try {
   await trackSettingsDialog.waitFor({ state: 'visible' });
   await page.waitForFunction(
     () => {
-      const dialog = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'))
+      const dialog = Array.from(document.querySelectorAll('[role="dialog"]'))
         .find((element) => /settings$/i.test(element.getAttribute('aria-label') ?? ''));
       return Boolean(dialog && dialog.contains(document.activeElement));
     },
