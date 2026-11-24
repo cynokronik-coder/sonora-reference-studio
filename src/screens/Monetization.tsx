@@ -81,8 +81,9 @@ function SectionButton({ active, children, onClick }: { active: boolean; childre
   return (
     <button
       type="button"
+      aria-pressed={active}
       onClick={onClick}
-      className={`rounded-lg border px-3.5 py-2 text-xs transition ${active ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/[.07] bg-white/[.025] text-ink-400 hover:border-white/15 hover:text-white'}`}
+      className={`min-h-11 rounded-lg border px-4 py-2.5 text-xs transition ${active ? 'border-accent/40 bg-accent/10 text-accent' : 'border-white/[.07] bg-white/[.025] text-ink-400 hover:border-white/15 hover:text-white'}`}
     >
       {children}
     </button>
