@@ -56,6 +56,27 @@ async function checkNoHorizontalOverflow(page, width) {
   );
 }
 
+async function openGuidedTour(page) {
+  const desktopTrigger = page.getByRole('button', { name: 'Start guided tour', exact: true });
+  if (await desktopTrigger.isVisible()) {
+    await desktopTrigger.click();
+    return;
+  }
+
+  await page.getByRole('button', { name: 'More', exact: true }).click();
+  const menu = page.getByRole('menu', { name: 'More workspace navigation' });
+  await menu.getByRole('menuitem', { name: 'Start guided tour', exact: true }).click();
+}
+
+async function assertTourControlTargets(dialog, viewportLabel) {
+  const closeBounds = await dialog.getByRole('button', { name: 'Close tour' }).boundingBox();
+  assert.ok(closeBounds && closeBounds.width >= 40 && closeBounds.height >= 40,
+    `Tour close target at ${viewportLabel} is ${closeBounds?.width ?? 0}×${closeBounds?.height ?? 0}px; expected at least 40×40px`);
+  const skipBounds = await dialog.getByRole('button', { name: 'Skip', exact: true }).boundingBox();
+  assert.ok(skipBounds && skipBounds.height >= 44,
+    `Tour Skip target at ${viewportLabel} is ${skipBounds?.height ?? 0}px high; expected at least 44px`);
+}
+
 try {
   await waitForServer();
   await mkdir(artifactDir, { recursive: true });
@@ -193,10 +214,10 @@ try {
   await page.goto(`${baseUrl}#projects`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: 'Projects' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'Import a song', exact: true }).waitFor({ state: 'visible' });
-  const firstRunTourTrigger = page.getByRole('button', { name: 'Start guided tour', exact: true });
-  await firstRunTourTrigger.click();
+  await openGuidedTour(page);
   const firstRunTour = page.getByRole('dialog');
   await firstRunTour.getByRole('heading', { name: 'Start your first project', exact: true }).waitFor({ state: 'visible' });
+  await assertTourControlTargets(firstRunTour, '1440px desktop');
   assert.match(await firstRunTour.innerText(), /Step 1 \/ 1/i,
     'An empty Projects workspace should show only the first-value onboarding step');
   assert.equal(
@@ -222,9 +243,10 @@ try {
       path: `${designScreenshotDir}/review-projects-empty-${breakpoint.suffix}.png`,
       fullPage: true,
     });
-    await firstRunTourTrigger.click();
+    await openGuidedTour(page);
     const responsiveTour = page.getByRole('dialog');
     await responsiveTour.getByRole('heading', { name: 'Start your first project', exact: true }).waitFor({ state: 'visible' });
+    await assertTourControlTargets(responsiveTour, `${breakpoint.width}px viewport`);
     await page.screenshot({
       path: `${designScreenshotDir}/review-projects-tour-${breakpoint.suffix}.png`,
       fullPage: true,
