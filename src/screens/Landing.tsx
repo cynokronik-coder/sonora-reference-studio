@@ -167,10 +167,10 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
             </span>
           </a>
           <nav className="hidden items-center gap-7 md:flex">
-            <a href="#capabilities" className="text-xs text-ink-400 transition hover:text-white">Capabilities</a>
-            <a href="#workflow" className="text-xs text-ink-400 transition hover:text-white">How it works</a>
-            <a href="#difference" className="text-xs text-ink-400 transition hover:text-white">Why Sonora</a>
-            <a href="#faq" className="text-xs text-ink-400 transition hover:text-white">FAQ</a>
+            <a href="#capabilities" className="inline-flex min-h-11 items-center px-1 text-xs text-ink-400 transition hover:text-white">Capabilities</a>
+            <a href="#workflow" className="inline-flex min-h-11 items-center px-1 text-xs text-ink-400 transition hover:text-white">How it works</a>
+            <a href="#difference" className="inline-flex min-h-11 items-center px-1 text-xs text-ink-400 transition hover:text-white">Why Sonora</a>
+            <a href="#faq" className="inline-flex min-h-11 items-center px-1 text-xs text-ink-400 transition hover:text-white">FAQ</a>
           </nav>
           <div className="flex items-center gap-2">
             <button type="button" onClick={onOpenAccount} className="min-h-11 rounded-lg border border-white/[.12] px-4 py-2.5 text-xs font-medium text-ink-300 transition hover:border-accent/30 hover:text-white">Account</button>
@@ -361,7 +361,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
             <span className="text-[10px] text-ink-600">Reference Studio</span>
           </div>
           <p className="text-[10px] leading-relaxed text-ink-600">Local-first audio workspace · Mixing · Reference matching · Mastering</p>
-          <button type="button" onClick={onEnterStudio} className="text-left text-[10px] text-ink-400 transition hover:text-accent">Enter the studio ↗</button>
+          <button type="button" onClick={onEnterStudio} className="inline-flex min-h-11 items-center py-2 text-left text-xs text-ink-400 transition hover:text-accent">Enter the studio ↗</button>
         </div>
       </footer>
     </div>
