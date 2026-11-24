@@ -190,7 +190,8 @@ try {
   // test track are local to this CI browser context and are never uploaded.
   await page.goto(`${baseUrl}#projects`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: 'Projects' }).waitFor({ state: 'visible' });
-  await page.getByRole('button', { name: 'New project' }).click();
+  await page.getByRole('button', { name: 'Import a song', exact: true }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'Create blank project', exact: true }).click();
   await page.waitForURL('**/#studio');
   await page.getByRole('button', { name: 'Add audio', exact: true }).waitFor({ state: 'visible' });
 
