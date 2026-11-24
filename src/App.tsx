@@ -20,19 +20,19 @@ import { AssistantPanel } from './ui/Mixer';
 import { CommandPalette } from './ui/CommandPalette';
 import { realtimeHost } from './audio/engine/realtime';
 
-const NAV: { screen: Screen; label: string; glyph: string; requiresProject?: boolean }[] = [
-  { screen: 'dashboard', label: 'Dashboard', glyph: '◫' },
-  { screen: 'projects', label: 'Projects', glyph: '▤' },
-  { screen: 'plans', label: 'Plans & Add-ons', glyph: '✦' },
-  { screen: 'account', label: 'Account', glyph: '◉' },
-  { screen: 'studio', label: 'Mixing Studio', glyph: '⌁', requiresProject: true },
-  { screen: 'reference', label: 'Reference Match', glyph: '◎', requiresProject: true },
-  { screen: 'mastering', label: 'Mastering', glyph: '▮', requiresProject: true },
-  { screen: 'presets', label: 'Preset Library', glyph: '♪', requiresProject: true },
-  { screen: 'analysis', label: 'Audio Analysis', glyph: '∿', requiresProject: true },
-  { screen: 'export', label: 'Export Center', glyph: '⤓', requiresProject: true },
-  { screen: 'learn', label: 'Learn & Help', glyph: '✳' },
-  { screen: 'settings', label: 'Settings', glyph: '⚙' },
+const NAV: { screen: Screen; requiresProject?: boolean }[] = [
+  { screen: 'dashboard' },
+  { screen: 'projects' },
+  { screen: 'plans' },
+  { screen: 'account' },
+  { screen: 'studio', requiresProject: true },
+  { screen: 'reference', requiresProject: true },
+  { screen: 'mastering', requiresProject: true },
+  { screen: 'presets', requiresProject: true },
+  { screen: 'analysis', requiresProject: true },
+  { screen: 'export', requiresProject: true },
+  { screen: 'learn' },
+  { screen: 'settings' },
 ];
 
 
