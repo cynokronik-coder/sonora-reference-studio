@@ -24,3 +24,11 @@ For every next resource integration, record:
 - Any incompatibility or remaining blocker.
 
 Do not record a repository as implemented merely because it was inventoried.
+
+
+| 2026-11-24 | Sonic Skills `audio-performance-debug`, `audio-dsp-review`, `audio-numerics-review` | Shared ProjectRenderer | Reused processor automation parameter maps and volume/pan scratch values; removed temporary bus-as-track objects and per-block audible callback; mutated pre-created channel-peak objects rather than allocating new ones per render block | `322b1b9`; GitHub CI run `45316617378` passed |
+| 2026-11-24 | Sonic Skills + existing audio test suite | Bus automation | Added a regression test proving bus Dynamic EQ parameter automation still produces expected gain reduction and release behavior | `d19337d`; CI run `45316754885` passed |
+| 2026-11-24 | Hallmark truthfulness floor; Unslop anti-pattern review | Dashboard MiniSpectrum | Changed static decorative spectrum label from `LIVE ANALYSIS` to `SPECTRUM PREVIEW` so illustrative bars are not represented as live measurements | Commit `03105b2`; CI status to be confirmed |
+| 2026-11-24 | Owl-Listener `feedback-patterns`; UI UX Pro Max accessibility/feedback guidance | App toast | Added polite live-region status semantics, atomic announcement, and an explicit accessible dismiss name | Commit `f269961`; CI status to be confirmed |
+| 2026-11-24 | Owl-Listener `icon-system`; Awesome Design Skills `clean`; UI UX Pro Max SVG guidance; AI Design Components assembly principle | Dashboard production cards | Replaced three Unicode workflow symbols with existing typed Sonora SVG icons | Commit `4f7c24f`; CI status to be confirmed |
+| 2026-11-24 | Mercury React patterns / maintainability review | App navigation metadata | Removed unused glyph/label metadata from the route-validation array; navigation's actual presentation remains owned by TopNavigation | Commit `33b09aa`; CI status to be confirmed |
