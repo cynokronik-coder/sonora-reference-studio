@@ -53,7 +53,7 @@ export default function TopNavigation({
 }: TopNavigationProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreMenuId = useId();
-  const primaryNavRef = useRef<HTMLElement | null>(null);
+  const primaryNavRef = useRef<HTMLDivElement | null>(null);
   const moreRef = useRef<HTMLDivElement | null>(null);
   const moreTriggerRef = useRef<HTMLButtonElement | null>(null);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
