@@ -468,12 +468,12 @@ export function AssistantPanel({ onClose, onExpand, draggable = false }: { onClo
 
   return (
     <div className="flex h-full min-h-0 min-w-0 w-full flex-col overflow-hidden">
-      <div data-assistant-drag-handle={draggable ? '' : undefined} className={`flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-3 border-b border-white/[.07] px-4 py-3 sm:flex-nowrap sm:items-center sm:px-5 sm:py-4 ${draggable ? 'cursor-grab touch-none select-none active:cursor-grabbing' : ''}`}>
+      <div data-assistant-drag-handle={draggable ? '' : undefined} className={`flex min-w-0 flex-wrap items-start justify-between gap-y-3 border-b border-white/[.07] sm:flex-nowrap sm:items-center ${draggable ? 'gap-x-2 px-3 py-3 sm:px-3 sm:py-3' : 'gap-x-4 px-4 py-3 sm:px-5 sm:py-4'} ${draggable ? 'cursor-grab touch-none select-none active:cursor-grabbing' : ''}`}>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2 text-base font-semibold tracking-[-.02em] text-ink-100 sm:text-lg">
             {draggable && <span aria-hidden="true" className="text-xs tracking-[-.2em] text-ink-500">⠿</span>}
             <Icon name="sparkles" size={15} className="shrink-0 text-[#A77AFF]" />
-            <span className="truncate">Sonora AI</span>
+            <span className={draggable ? 'whitespace-nowrap' : 'truncate'}>Sonora AI</span>
           </div>
           
           {track && (
@@ -483,16 +483,27 @@ export function AssistantPanel({ onClose, onExpand, draggable = false }: { onClo
             </div>
           )}
         </div>
-        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-1 sm:w-auto sm:shrink-0">
+        <div className={`flex min-w-0 flex-wrap items-center justify-end gap-1 ${draggable ? 'w-auto shrink-0' : 'w-full sm:w-auto sm:shrink-0'}`}>
           {aiStatus?.configured ? (
-            <Badge tone="accent">AI online</Badge>
+            <Badge tone="accent">{draggable ? 'Online' : 'AI online'}</Badge>
           ) : (
-            <Badge tone="neutral">Offline mode</Badge>
+            <Badge tone="neutral">{draggable ? 'Offline' : 'Offline mode'}</Badge>
           )}
           <HelpTip title="How Sonora AI works" steps={['The AI receives project metadata and measured analysis, not the raw audio file.', 'It can request local audio analysis when a report is missing.', 'It proposes real processors and parameter changes from the DSP registry.', 'Nothing is changed until you accept the proposal.']}>
             The connected model reasons about your project. If the API is not configured, Sonora uses its built-in offline command interpreter.
           </HelpTip>
-          {onExpand && <button type="button" onClick={onExpand} title="Open AI Assistant full screen" aria-label="Open AI Assistant full screen" className="focus-ring flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-2.5 text-xs font-semibold text-[#C4A2FF] transition-colors hover:bg-[#8957FF]/15">⤢ <span className="hidden md:inline">Full screen</span></button>}
+          {onExpand && (
+            <button
+              type="button"
+              onClick={onExpand}
+              title="Open AI Assistant full screen"
+              aria-label="Open AI Assistant full screen"
+              className={`focus-ring flex h-9 shrink-0 items-center justify-center rounded-xl border border-[#A77AFF]/25 bg-[#8957FF]/[.08] text-xs font-semibold text-[#C4A2FF] transition-colors hover:bg-[#8957FF]/15 ${draggable ? 'w-9 px-0' : 'gap-1.5 px-2.5'}`}
+            >
+              <Icon name="expand" size={14} />
+              {!draggable && <span>Full screen</span>}
+            </button>
+          )}
           <button type="button" onClick={() => { if (onClose) onClose(); else useApp.getState().toggleAssistant(); }} aria-label="Close assistant" className="focus-ring flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base text-ink-500 transition-colors hover:bg-white/[.05] hover:text-ink-100">×</button>
         </div>
       </div>
