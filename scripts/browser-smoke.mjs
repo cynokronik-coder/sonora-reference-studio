@@ -81,6 +81,10 @@ try {
   assert.match(await page.title(), /Sonora/i);
   assert.match(await page.getByRole('heading', { level: 1 }).innerText(), /sound you/i);
   await page.locator('header').getByRole('button', { name: /Open the studio/ }).waitFor({ state: 'visible' });
+  const landingBodyCopy = page.locator('#capabilities p.text-sm.leading-6').first();
+  await landingBodyCopy.waitFor({ state: 'visible' });
+  const landingBodyFontSize = await landingBodyCopy.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
+  assert.ok(landingBodyFontSize >= 14, `Landing explanatory copy is ${landingBodyFontSize}px; expected at least 14px`);
   await checkNoHorizontalOverflow(page, 1440);
   await page.screenshot({ path: `${artifactDir}/landing-desktop.png`, fullPage: true });
 
