@@ -1,6 +1,7 @@
 import { useApp } from '../state/store';
 import { AUDIO_ACCEPT, Badge, Button, EmptyState, HelpTip, InfoRow, Panel, useFilePicker } from '../ui/Primitives';
 import { formatTime } from '../audio/dsp/util';
+import { Icon, type SonoraIconName } from '../ui/Icon';
 
 const FLOW = [
   {
@@ -34,9 +35,9 @@ const FLOW = [
 ];
 
 const FEATURES = [
-  { icon: '⌁', title: 'Mix', subtitle: 'Shape tracks, stems and buses', screen: 'studio' as const, accent: 'from-cyan-400/20' },
-  { icon: '◎', title: 'Reference match', subtitle: 'Learn the tonal character of a release', screen: 'reference' as const, accent: 'from-lime-300/20' },
-  { icon: '◒', title: 'Master', subtitle: 'Control dynamics, loudness and peaks', screen: 'mastering' as const, accent: 'from-violet-400/20' },
+  { icon: 'headphones' as SonoraIconName, title: 'Mix', subtitle: 'Shape tracks, stems and buses', screen: 'studio' as const, accent: 'from-cyan-400/20' },
+  { icon: 'audio-lines' as SonoraIconName, title: 'Reference match', subtitle: 'Learn the tonal character of a release', screen: 'reference' as const, accent: 'from-lime-300/20' },
+  { icon: 'equalizer' as SonoraIconName, title: 'Master', subtitle: 'Control dynamics, loudness and peaks', screen: 'mastering' as const, accent: 'from-violet-400/20' },
 ];
 
 function MiniSpectrum() {
@@ -226,7 +227,7 @@ export default function Dashboard() {
                 onClick={() => go(feature.screen)}
                 className={`group rounded-xl border border-ink-700 bg-gradient-to-br ${feature.accent} to-ink-900 p-4 text-left transition-all hover:-translate-y-0.5 hover:border-ink-500 disabled:cursor-not-allowed disabled:opacity-50`}
               >
-                <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-black/20 text-lg text-accent">{feature.icon}</span>
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-black/20 text-accent"><Icon name={feature.icon} size={18} /></span>
                 <span className="mt-4 block text-sm font-semibold text-ink-100">{feature.title}</span>
                 <span className="mt-1 block text-2xs leading-relaxed text-ink-500">{feature.subtitle}</span>
                 <span className="mt-4 block text-2xs text-ink-300 group-hover:text-accent">{project ? 'Open workspace ↗' : 'Create a project first'}</span>
