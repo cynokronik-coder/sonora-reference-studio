@@ -112,13 +112,13 @@ try {
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
   await page.getByRole('heading', { level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
   assert.match(await page.title(), /Sonora/i);
-  assert.match(await page.getByRole('heading', { level: 1 }).innerText(), /sound you/i);
+  assert.match(await page.getByRole('heading', { level: 1 }).innerText(), /Mix with a reference/i);
   await page.locator('header').getByRole('button', { name: /Open the studio/ }).waitFor({ state: 'visible' });
   const landingBodyCopy = page.locator('#capabilities p.text-sm.leading-6').first();
   await landingBodyCopy.waitFor({ state: 'visible' });
   const landingBodyFontSize = await landingBodyCopy.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
   assert.ok(landingBodyFontSize >= 14, `Landing explanatory copy is ${landingBodyFontSize}px; expected at least 14px`);
-  assert.equal((await page.getByRole('heading', { level: 1 }).innerText()).replace(/\\s+/g, ' ').trim(), 'Mix with a reference. Keep every decision yours.');
+  assert.equal((await page.getByRole('heading', { level: 1 }).innerText()).replace(/\s+/g, ' ').trim(), 'Mix with a reference. Keep every decision yours.');
   assert.equal(await page.locator('#capabilities article').count(), 5, 'The landing page should group related analysis and reference features into five clear capabilities');
   await page.getByText('Free plan includes local audio tools, analysis and exports. No payment required.', { exact: true }).waitFor({ state: 'visible' });
   await page.getByText('16 BUILT-IN PROCESSORS', { exact: true }).waitFor({ state: 'visible' });
