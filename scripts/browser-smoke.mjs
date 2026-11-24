@@ -149,6 +149,71 @@ try {
   }
   await page.getByRole('link', { name: 'Capabilities' }).waitFor({ state: 'visible' });
 
+  // Exercise the real Studio in an isolated browser profile. The project and
+  // test track are local to this CI browser context and are never uploaded.
+  await page.goto(`${baseUrl}#projects`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('heading', { name: 'Projects' }).waitFor({ state: 'visible' });
+  await page.getByRole('button', { name: 'New project' }).click();
+  await page.waitForURL('**/#studio');
+  await page.getByRole('button', { name: 'Add audio', exact: true }).waitFor({ state: 'visible' });
+  await page.screenshot({ path: `${artifactDir}/studio-empty-project.png`, fullPage: true });
+
+  // The transport popover must move focus inside on open and restore it on Escape.
+  const transportTools = page.getByRole('button', { name: /More tools/ });
+  await transportTools.click();
+  const transportDialog = page.getByRole('dialog', { name: 'More playback tools' });
+  await transportDialog.waitFor({ state: 'visible' });
+  assert.equal(
+    await transportDialog.evaluate((element) => element.contains(document.activeElement)),
+    true,
+    'Opening playback tools should move focus inside the popover',
+  );
+  await page.keyboard.press('Escape');
+  await transportDialog.waitFor({ state: 'detached' });
+  assert.equal(
+    await transportTools.evaluate((element) => element === document.activeElement),
+    true,
+    'Escape should return focus to the playback-tools trigger',
+  );
+
+  // Add a harmless, empty audio track so the contextual track-settings flyout
+  // becomes available; no source audio or DSP parameters are changed.
+  await page.getByRole('button', { name: 'Add audio', exact: true }).click();
+  const addDialog = page.getByRole('dialog', { name: 'Add to session' });
+  await addDialog.waitFor({ state: 'visible' });
+  await addDialog.getByRole('button', { name: '＋ Track' }).click();
+  const tracksDialog = page.getByRole('dialog', { name: 'Session tracks' });
+  await tracksDialog.waitFor({ state: 'visible' });
+  await tracksDialog.getByRole('button', { name: 'Close' }).click();
+  await tracksDialog.waitFor({ state: 'detached' });
+
+  const trackSettingsTrigger = page.locator('[data-tour="studio-tracks"] button[aria-haspopup="dialog"]').first();
+  await trackSettingsTrigger.waitFor({ state: 'visible' });
+  const trackSettingsSize = await trackSettingsTrigger.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { width: bounds.width, height: bounds.height };
+  });
+  assert.ok(trackSettingsSize.height >= 40, `Desktop track settings target is ${trackSettingsSize.height}px; expected at least 40px`);
+  assert.ok(trackSettingsSize.width >= 40, `Desktop track settings target is ${trackSettingsSize.width}px; expected at least 40px`);
+
+  await trackSettingsTrigger.click();
+  const trackSettingsDialog = page.getByRole('dialog', { name: /settings$/ });
+  await trackSettingsDialog.waitFor({ state: 'visible' });
+  assert.equal(
+    await trackSettingsDialog.evaluate((element) => element.contains(document.activeElement)),
+    true,
+    'Opening track settings should move focus into the contextual flyout',
+  );
+  await page.keyboard.press('Escape');
+  await trackSettingsDialog.waitFor({ state: 'detached' });
+  assert.equal(
+    await trackSettingsTrigger.evaluate((element) => element === document.activeElement),
+    true,
+    'Escape should return focus to the track settings trigger',
+  );
+
+  await page.screenshot({ path: `${artifactDir}/studio-track-settings.png`, fullPage: true });
+
   assert.deepEqual(pageErrors, [], `Browser page errors: ${pageErrors.join('; ')}`);
   assert.deepEqual(consoleErrors, [], `Browser console errors: ${consoleErrors.join('; ')}`);
   assert.deepEqual(failedRequests, [], `Failed browser requests: ${JSON.stringify(failedRequests)}`);
