@@ -83,7 +83,7 @@ export function TransportBar() {
             aria-expanded={toolsOpen}
             aria-controls="transport-more-tools"
             onClick={() => setToolsOpen((open) => !open)}
-            className={`focus-ring inline-flex min-h-11 items-center gap-2 rounded-control border px-4 text-sm font-semibold transition-all ${toolsOpen ? 'border-[#A77AFF]/40 bg-[#8957FF]/[.12] text-[#C4A2FF]' : 'border-white/[.07] bg-transparent text-ink-300 hover:border-white/[.14] hover:bg-white/[.045] hover:text-white'}`}
+            className={`focus-ring inline-flex min-h-11 items-center gap-2 rounded-control border px-4 text-sm font-semibold transition-colors ${toolsOpen ? 'border-[#A77AFF]/40 bg-[#8957FF]/[.12] text-[#C4A2FF]' : 'border-white/[.07] bg-transparent text-ink-300 hover:border-white/[.14] hover:bg-white/[.045] hover:text-white'}`}
           >
             <Icon name="sliders" size={16} /> More tools <Icon name="chevron-down" size={14} className={`transition-transform ${toolsOpen ? 'rotate-180' : ''}`} />
           </button>
@@ -209,7 +209,7 @@ function StripShell({
     <div
       onClick={onSelect}
       style={{ width, borderTopColor: accent }}
-      className={`flex shrink-0 cursor-pointer flex-col gap-2 rounded-xl border border-t-2 bg-[#171727]/90 p-2.5 shadow-panel transition-all duration-180 ${
+      className={`flex shrink-0 cursor-pointer flex-col gap-2 rounded-xl border border-t-2 bg-[#171727]/90 p-2.5 shadow-panel transition-[background-color,border-color,box-shadow] duration-180 ${
         selected ? 'border-[#A77AFF]/55 ring-1 ring-inset ring-[#8957FF]/20 shadow-violet-soft' : 'border-white/[.07] hover:border-white/[.12]'
       }`}
     >
