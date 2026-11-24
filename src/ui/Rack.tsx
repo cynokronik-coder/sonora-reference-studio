@@ -123,7 +123,7 @@ export function Rack({
                 if (dragIndex !== null) moveProcessor(scope, trackId, dragIndex, index);
                 setDragIndex(null);
               }}
-              className={`mb-2 overflow-hidden rounded-xl border transition-all duration-180 ${
+              className={`mb-2 overflow-hidden rounded-xl border transition-[background-color,border-color,box-shadow] duration-180 ${
                 isSelected ? 'border-[#A77AFF]/45 bg-[#8957FF]/[.09] shadow-violet-soft' : 'border-white/[.07] bg-[#171727]/75 hover:border-white/[.14] hover:bg-[#1D1D30]'
               }`}
             >
@@ -355,7 +355,7 @@ export function Rack({
                         addProcessor(scope, trackId, def.type);
                         setAddOpen(false);
                       }}
-                      className="focus-ring rounded-xl border border-white/[.08] bg-[#171727] p-3 text-left transition-all duration-180 hover:border-[#A77AFF]/40 hover:bg-[#1D1D30]"
+                      className="focus-ring rounded-xl border border-white/[.08] bg-[#171727] p-3 text-left transition-colors duration-180 hover:border-[#A77AFF]/40 hover:bg-[#1D1D30]"
                     >
                       <div className="flex items-center justify-between">
                         <span className="text-xs text-ink-100">{def.name}</span>
