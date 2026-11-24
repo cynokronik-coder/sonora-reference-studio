@@ -22,6 +22,10 @@ Latest validation: Sonora CI PASS (`45435569990`); Playwright browser smoke PASS
 Created from `main@44700bbb30ac1bba03140cdd656acf83c8e5a42b`.
 
 Latest known transformation commits:
+- `2807ada7264df1e9a8f230d1e3862d7589887716` — first-run Projects tour adapts to whether any project exists.
+- `590c8dab1abfa135037b7685d52aabe5dcfc9478` — spotlight the import/blank-project actions in the empty state.
+- `ccb85444c63dff7a52f349c2d89e2f7dce1960a1` — Playwright coverage for the first-run tour and touch target.
+- `fa7a5e6f5ec0931581afa127fb23f0bd9fb13fde` — normalize the tour progress assertion; final browser smoke passes.
 - `322b1b97b16ef4182f139e86861886bc1102363a` — renderer allocation reduction.
 - `d19337d5966af99e84bcaa96bdfcbb475c505e99` — bus processor automation regression test.
 - `03105b2312388d4534ed0256a1fc1ff4e68727dd` — truthfully label static dashboard spectrum.
@@ -39,12 +43,14 @@ Latest known transformation commits:
 - Route-validation metadata no longer contains unused glyph/label presentation data.
 - Renderer reduces avoidable per-block allocations by reusing automation parameter/value scratch and channel-peak objects, eliminating a temporary bus-as-track object and per-block audible callback.
 - Added bus Dynamic EQ automation regression coverage.
+- Applied Owl-Listener `onboarding-design` to the Projects first-run tour: one first-value step for empty accounts, a spotlight on Import/Create actions, and the existing management tour for returning users. Playwright verifies the step count, spotlight target, and successful finish.
 
 CI:
 - Renderer optimization `322b1b9`: PASS, run https://github.com/cynokronik-coder/sonora-reference-studio/actions/runs/45316617378
 - Bus automation test `d19337d`: PASS, run https://github.com/cynokronik-coder/sonora-reference-studio/actions/runs/45316754885
 - Earlier Button/navigation/landing/motion-document commits also passed CI.
 - Latest project onboarding and Playwright test changes passed both CI and browser smoke; see `45435569990` and `45435569837`. No production deployment or merge was performed.
+- Owl first-run tour integration: CI PASS `45439773596`; Playwright PASS `45439773410`; screenshot artifact `14942458232` (includes `projects-first-run-tour.png`).
 
 ## Additional implementation since the previous update
 
@@ -64,7 +70,7 @@ CI:
 ## Next actions
 
 1. Confirm CI for the latest Dashboard/App commits.
-2. Continue repository-by-repository skill application and record evidence.
+2. Continue with repository 6: `julianoczkowski/designer-skills`; use one repository at a time and record exact skill/file/test evidence.
 3. Continue the source-level UI/accessibility/design audit in the absence of browser access.
 4. Request a connected browser/Playwright session or authorization for a non-production preview once visual validation is the next required gate.
 
