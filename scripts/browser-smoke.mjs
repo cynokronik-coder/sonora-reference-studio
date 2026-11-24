@@ -258,6 +258,19 @@ try {
   await tracksDialog.getByRole('button', { name: 'Close' }).click();
   await tracksDialog.waitFor({ state: 'detached' });
 
+  const soloTrack = page.getByRole('button', { name: 'Solo Audio 1', exact: true });
+  const muteTrack = page.getByRole('button', { name: 'Mute Audio 1', exact: true });
+  for (const control of [soloTrack, muteTrack]) {
+    const bounds = await control.boundingBox();
+    assert.ok(bounds && bounds.width >= 32 && bounds.height >= 32,
+      `Track control hit area is ${bounds?.width ?? 0}×${bounds?.height ?? 0}px; expected at least 32×32px`);
+    assert.equal(await control.getAttribute('aria-pressed'), 'false');
+    await control.click();
+    assert.equal(await control.getAttribute('aria-pressed'), 'true', 'Track control should expose its active state');
+    await control.click();
+    assert.equal(await control.getAttribute('aria-pressed'), 'false', 'Track control should return to its inactive state');
+  }
+
   const trackSettingsTrigger = page.locator('[data-tour="studio-tracks"] button[aria-haspopup="dialog"]').first();
   await trackSettingsTrigger.waitFor({ state: 'visible' });
   const trackSettingsSize = await trackSettingsTrigger.evaluate((element) => {
