@@ -89,13 +89,17 @@ export function FlyoutMenu({
     }
     setPinned(true);
     setOpen(true);
-    window.requestAnimationFrame(() => {
-      const firstControl = panelRef.current?.querySelector<HTMLElement>(
-        'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-      );
-      (firstControl ?? panelRef.current)?.focus();
-    });
   };
+
+  // Focus immediately after the portal commits, but only for click-pinned
+  // flyouts. Hover previews must never move a keyboard user's focus.
+  useLayoutEffect(() => {
+    if (!open || !pinned) return;
+    const firstControl = panelRef.current?.querySelector<HTMLElement>(
+      'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    );
+    (firstControl ?? panelRef.current)?.focus();
+  }, [open, pinned]);
 
   useLayoutEffect(() => {
     if (!open) return;
