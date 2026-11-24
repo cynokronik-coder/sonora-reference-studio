@@ -6,6 +6,7 @@ import { chromium } from 'playwright';
 
 const baseUrl = process.env.SONORA_BASE_URL || 'http://127.0.0.1:3000';
 const artifactDir = process.env.SONORA_BROWSER_ARTIFACT_DIR || 'artifacts/browser';
+const designScreenshotDir = '.design/projects-onboarding/screenshots';
 const server = spawn(process.execPath, ['scripts/dev.mjs'], {
   stdio: 'inherit',
   env: {
@@ -58,6 +59,7 @@ async function checkNoHorizontalOverflow(page, width) {
 try {
   await waitForServer();
   await mkdir(artifactDir, { recursive: true });
+  await mkdir(designScreenshotDir, { recursive: true });
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 
@@ -205,6 +207,33 @@ try {
   await page.screenshot({ path: `${artifactDir}/projects-first-run-tour.png`, fullPage: true });
   await firstRunTour.getByRole('button', { name: 'Finish', exact: true }).click();
   await firstRunTour.waitFor({ state: 'detached' });
+
+  // Design-review evidence: capture the empty Projects state and its first-run
+  // tour at the required mobile, tablet, and desktop breakpoints.
+  const onboardingReviewBreakpoints = [
+    { width: 375, height: 812, suffix: 'mobile-375' },
+    { width: 768, height: 1024, suffix: 'tablet-768' },
+    { width: 1280, height: 800, suffix: 'desktop-1280' },
+  ];
+  for (const breakpoint of onboardingReviewBreakpoints) {
+    await page.setViewportSize({ width: breakpoint.width, height: breakpoint.height });
+    await checkNoHorizontalOverflow(page, breakpoint.width);
+    await page.screenshot({
+      path: `${designScreenshotDir}/review-projects-empty-${breakpoint.suffix}.png`,
+      fullPage: true,
+    });
+    await firstRunTourTrigger.click();
+    const responsiveTour = page.getByRole('dialog');
+    await responsiveTour.getByRole('heading', { name: 'Start your first project', exact: true }).waitFor({ state: 'visible' });
+    await page.screenshot({
+      path: `${designScreenshotDir}/review-projects-tour-${breakpoint.suffix}.png`,
+      fullPage: true,
+    });
+    await responsiveTour.getByRole('button', { name: 'Finish', exact: true }).click();
+    await responsiveTour.waitFor({ state: 'detached' });
+  }
+
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.getByRole('button', { name: 'Create blank project', exact: true }).click();
   await page.waitForURL('**/#studio');
   await page.getByRole('button', { name: 'Add audio', exact: true }).waitFor({ state: 'visible' });
