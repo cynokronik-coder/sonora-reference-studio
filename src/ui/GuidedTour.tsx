@@ -154,11 +154,14 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
       setRect(nextRect);
 
       const tooltipWidth = Math.min(360, window.innerWidth - 32);
-      const estimatedHeight = 190;
-      const below = bounds.bottom + 20 + estimatedHeight <= window.innerHeight - 16;
+      // Measure the rendered dialog instead of guessing its height. Copy wraps
+      // to more lines on mobile, so a fixed estimate can place the tour over
+      // the very controls it is meant to explain.
+      const tooltipHeight = dialogRef.current?.getBoundingClientRect().height ?? 240;
+      const below = bounds.bottom + 20 + tooltipHeight <= window.innerHeight - 16;
       const top = below
-        ? Math.min(window.innerHeight - estimatedHeight - 16, bounds.bottom + 18)
-        : Math.max(16, bounds.top - estimatedHeight - 18);
+        ? Math.min(window.innerHeight - tooltipHeight - 16, bounds.bottom + 18)
+        : Math.max(16, bounds.top - tooltipHeight - 18);
       const left = Math.max(16, Math.min(bounds.left, window.innerWidth - tooltipWidth - 16));
       setTooltip({ top, left });
     };
