@@ -132,7 +132,7 @@ export default function Settings() {
                 type="button"
                 onClick={() => setMode('beginner')}
                 aria-pressed={mode === 'beginner'}
-                className={`focus-ring rounded-xl border p-3 text-left transition-all duration-180 ${mode === 'beginner' ? 'border-[#A77AFF]/45 bg-[#8957FF]/[.10] shadow-violet-soft' : 'border-white/[.07] bg-[#0D0D1B]/65 hover:border-white/[.14]'}`}
+                className={`focus-ring rounded-xl border p-3 text-left transition-[background-color,border-color,box-shadow] duration-180 ${mode === 'beginner' ? 'border-[#A77AFF]/45 bg-[#8957FF]/[.10] shadow-violet-soft' : 'border-white/[.07] bg-[#0D0D1B]/65 hover:border-white/[.14]'}`}
               >
                 <span className="block text-xs font-semibold text-ink-100">Beginner</span>
                 <span className="mt-1 block text-2xs leading-relaxed text-ink-500">Hides advanced processor controls and keeps the signal chain legible.</span>
