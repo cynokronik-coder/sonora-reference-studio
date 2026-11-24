@@ -194,7 +194,7 @@ try {
   await assistantToggle.waitFor({ state: 'visible' });
   assert.equal(await assistantToggle.getAttribute('aria-pressed'), 'false',
     'The AI Assistant should start collapsed in a new Studio session');
-  const assistantIntro = page.locator('aside').getByRole('heading', { name: 'What would you like to improve?', exact: true });
+  const assistantIntro = page.locator('[data-tour="studio-assistant"]').getByRole('heading', { name: 'What would you like to improve?', exact: true });
   assert.equal(await assistantIntro.count(), 0, 'The assistant panel should not cover the initial workspace');
   await assistantToggle.click();
   await assistantIntro.waitFor({ state: 'visible' });
