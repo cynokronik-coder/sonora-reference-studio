@@ -48,3 +48,15 @@ When access is available, capture screenshots at 1440, 1280, 1024, 768, 390, and
 - Project import, Reference Match, Studio playback, Mastering, Render, and Export without modifying audio processing behavior.
 
 Save screenshots and update this report with actual results; do not infer browser results from CI.
+
+
+## Additional implementation awaiting browser validation
+
+Since the report was first created, the working branch also includes:
+- More-menu keyboard/focus handling.
+- Dashboard/landing SVG icon normalization.
+- Toast polite live-region semantics and a named dismiss button.
+- Dashboard static-spectrum truthfulness label.
+- Shared button motion refinement.
+
+These changes have passed GitHub CI except for the newest small App/Dashboard commits, whose runs were still in progress when this report was updated. They have not been visually inspected in a browser. Keep the rendered screenshot and keyboard/touch checks open.
