@@ -161,7 +161,7 @@ export default function Mastering() {
                       type="button"
                       onClick={() => setSelectedStyle(preset.id)}
                       aria-pressed={active}
-                      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-all duration-180 ${active ? 'border-[#A77AFF]/45 bg-[#8957FF]/[.12] shadow-violet-soft' : 'border-white/[.07] bg-[#0D0D1B]/55 hover:border-white/[.15] hover:bg-white/[.035]'}`}
+                      className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition-[background-color,border-color,box-shadow] duration-180 ${active ? 'border-[#A77AFF]/45 bg-[#8957FF]/[.12] shadow-violet-soft' : 'border-white/[.07] bg-[#0D0D1B]/55 hover:border-white/[.15] hover:bg-white/[.035]'}`}
                     >
                       <span className="flex h-10 w-12 shrink-0 items-center justify-center rounded-lg border border-white/[.06] bg-black/20 text-[#C4A2FF]">
                         <Icon name="audio-lines" size={22} />
