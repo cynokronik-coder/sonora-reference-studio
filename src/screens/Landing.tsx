@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Icon, type SonoraIconName } from '../ui/Icon';
 
 type LandingProps = {
   onEnterStudio: () => void;
@@ -11,42 +12,42 @@ const BAR_HEIGHTS = [18, 28, 21, 35, 30, 43, 27, 50, 38, 57, 44, 65, 50, 73, 54,
 const FEATURES = [
   {
     number: '01',
-    symbol: '◎',
+    icon: 'activity' as SonoraIconName,
     title: 'Understand the difference',
     description: 'Go beyond “it sounds a bit dull”. Sonora measures loudness, true peak, frequency balance, dynamics, stereo behaviour and rhythm so you can make decisions with context.',
     tags: ['LUFS & true peak', '31-band spectrum', 'Stereo & dynamics'],
   },
   {
     number: '02',
-    symbol: '⌁',
+    icon: 'headphones' as SonoraIconName,
     title: 'Match a reference — your way',
     description: 'Compare your mix with the records you admire. Explore tonal, dynamic, stereo and punch differences, then build a suggested chain you can inspect and edit.',
     tags: ['Multiple references', 'Per-category control', 'Editable suggestions'],
   },
   {
     number: '03',
-    symbol: '▤',
+    icon: 'waveform' as SonoraIconName,
     title: 'Shape the whole mix',
     description: 'Arrange multitrack sessions, move and trim clips, work with tracks and buses, and shape each part with a real-time processing chain.',
     tags: ['Multitrack timeline', 'Tracks & buses', 'Clip gain & fades'],
   },
   {
     number: '04',
-    symbol: '◒',
+    icon: 'equalizer' as SonoraIconName,
     title: 'Use real processing tools',
     description: 'Build your sound with an implemented DSP engine: EQ, compression, multiband dynamics, de-essing, saturation, stereo tools, reverb, delay and more.',
     tags: ['16 processor types', 'Reorder & bypass', 'Detailed parameters'],
   },
   {
     number: '05',
-    symbol: '↗',
+    icon: 'download' as SonoraIconName,
     title: 'Render, compare, verify',
     description: 'Render offline through the same processing graph used for playback. Check the result again, compare versions, and make informed final adjustments.',
     tags: ['A/B comparisons', 'Offline rendering', 'Post-render analysis'],
   },
   {
     number: '06',
-    symbol: '✳',
+    icon: 'sparkles' as SonoraIconName,
     title: 'Get a second opinion from AI',
     description: 'The optional connected assistant can inspect project context and measured results, request analysis, and prepare processor changes for your approval. Nothing is applied automatically.',
     tags: ['Natural-language guidance', 'Preview before applying', 'You stay in control'],
@@ -266,7 +267,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
               {FEATURES.map((feature) => (
                 <article key={feature.number} className="group rounded-2xl border border-white/[.08] bg-white/[.025] p-5 transition duration-300 hover:-translate-y-1 hover:border-accent/25 hover:bg-white/[.04]">
                   <div className="flex items-center justify-between">
-                    <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-accent/20 bg-accent/[.07] text-lg text-accent">{feature.symbol}</span>
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-accent/20 bg-accent/[.07] text-accent"><Icon name={feature.icon} size={20} /></span>
                     <span className="font-mono text-[10px] text-ink-600">{feature.number}</span>
                   </div>
                   <h3 className="mt-5 text-base font-semibold text-white">{feature.title}</h3>
