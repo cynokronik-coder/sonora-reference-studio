@@ -14,6 +14,13 @@ export function TransportBar() {
   const [loopEnd, setLoopEnd] = useState(transport.loopEnd);
   const [toolsOpen, setToolsOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement | null>(null);
+  const toolsTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const toolsPanelRef = useRef<HTMLDivElement | null>(null);
+
+  const closeTools = () => {
+    setToolsOpen(false);
+    window.requestAnimationFrame(() => toolsTriggerRef.current?.focus());
+  };
   useEffect(() => setLoopStart(transport.loopStart), [transport.loopStart]);
   useEffect(() => setLoopEnd(transport.loopEnd), [transport.loopEnd]);
   useEffect(() => {
@@ -22,7 +29,10 @@ export function TransportBar() {
       if (moreRef.current && event.target instanceof Node && !moreRef.current.contains(event.target)) setToolsOpen(false);
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setToolsOpen(false);
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeTools();
+      }
     };
     document.addEventListener('pointerdown', handlePointerDown);
     document.addEventListener('keydown', handleKeyDown);
@@ -31,6 +41,17 @@ export function TransportBar() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [toolsOpen]);
+
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const frame = window.requestAnimationFrame(() => {
+      toolsPanelRef.current
+        ?.querySelector<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])')
+        ?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [toolsOpen]);
+
   const duration = transport.duration || 0;
 
   return (
@@ -56,6 +77,7 @@ export function TransportBar() {
         <IconButton title="Redo (Ctrl/Cmd+Shift+Z)" onClick={redo}><Icon name="redo" size={16} /></IconButton>
         <div className="relative" ref={moreRef}>
           <button
+            ref={toolsTriggerRef}
             type="button"
             aria-haspopup="dialog"
             aria-expanded={toolsOpen}
@@ -66,10 +88,10 @@ export function TransportBar() {
             <Icon name="sliders" size={16} /> More tools <Icon name="chevron-down" size={14} className={`transition-transform ${toolsOpen ? 'rotate-180' : ''}`} />
           </button>
           {toolsOpen && (
-            <div id="transport-more-tools" role="dialog" aria-label="More playback tools" className="absolute right-0 top-full z-50 mt-2 w-[min(360px,calc(100vw-24px))] rounded-2xl border border-white/[.10] bg-[#151426]/[.98] p-4 text-left shadow-floating backdrop-blur-xl">
+            <div ref={toolsPanelRef} id="transport-more-tools" role="dialog" aria-label="More playback tools" tabIndex={-1} className="absolute right-0 top-full z-50 mt-2 w-[min(360px,calc(100vw-24px))] rounded-2xl border border-white/[.10] bg-[#151426]/[.98] p-4 text-left shadow-floating backdrop-blur-xl">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-ink-100">More playback tools</p>
-                <button type="button" onClick={() => setToolsOpen(false)} className="rounded px-1 text-ink-500 hover:text-ink-100" aria-label="Close playback tools">×</button>
+                <button type="button" onClick={closeTools} className="focus-ring rounded px-1 text-ink-500 hover:text-ink-100" aria-label="Close playback tools">×</button>
               </div>
               <div className="mt-3">
                 <div className="flex items-center justify-between gap-2">
