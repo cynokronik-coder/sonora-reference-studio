@@ -225,7 +225,7 @@ export default function Dashboard() {
                 type="button"
                 disabled={!project}
                 onClick={() => go(feature.screen)}
-                className={`group rounded-xl border border-ink-700 bg-gradient-to-br ${feature.accent} to-ink-900 p-4 text-left transition-all hover:-translate-y-0.5 hover:border-ink-500 disabled:cursor-not-allowed disabled:opacity-50`}
+                className={`group rounded-xl border border-ink-700 bg-gradient-to-br ${feature.accent} to-ink-900 p-4 text-left transition-[background-color,border-color,transform] hover:-translate-y-0.5 hover:border-ink-500 disabled:cursor-not-allowed disabled:opacity-50`}
               >
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-black/20 text-accent"><Icon name={feature.icon} size={18} /></span>
                 <span className="mt-4 block text-sm font-semibold text-ink-100">{feature.title}</span>
@@ -311,7 +311,7 @@ export default function Dashboard() {
             <span className="font-mono text-2xs text-ink-500">{completed}/4 milestones</span>
           </div>
           <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-ink-700">
-            <div className="h-full rounded-full bg-gradient-to-r from-accent to-signal-cyan transition-all" style={{ width: `${completed * 25}%` }} />
+            <div className="h-full rounded-full bg-gradient-to-r from-accent to-signal-cyan transition-[width]" style={{ width: `${completed * 25}%` }} />
           </div>
           <div className="mt-3 grid grid-cols-4 gap-1 text-center">
             {[
