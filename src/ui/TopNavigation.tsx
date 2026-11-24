@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { Screen, Mode } from '../state/store';
 import { Icon } from './Icon';
 import { HelpTip } from './Primitives';
@@ -52,7 +52,10 @@ export default function TopNavigation({
   onStartTour,
 }: TopNavigationProps) {
   const [moreOpen, setMoreOpen] = useState(false);
+  const moreMenuId = useId();
   const moreRef = useRef<HTMLDivElement | null>(null);
+  const moreTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -62,7 +65,10 @@ export default function TopNavigation({
       }
     };
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMoreOpen(false);
+      if (event.key === 'Escape') {
+        setMoreOpen(false);
+        moreTriggerRef.current?.focus();
+      }
     };
     document.addEventListener('pointerdown', onPointerDown);
     document.addEventListener('keydown', onKeyDown);
@@ -78,6 +84,40 @@ export default function TopNavigation({
   const navigate = (destination: Screen) => {
     onNavigate(destination);
     setMoreOpen(false);
+  };
+
+  const openMoreMenu = () => {
+    setMoreOpen(true);
+    window.requestAnimationFrame(() => {
+      moreMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus();
+    });
+  };
+
+  const handleMoreMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const items = Array.from(moreMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
+    if (items.length === 0) return;
+
+    const activeIndex = items.indexOf(document.activeElement as HTMLButtonElement);
+    let nextIndex: number | null = null;
+
+    if (event.key === 'ArrowDown') nextIndex = activeIndex < 0 ? 0 : (activeIndex + 1) % items.length;
+    else if (event.key === 'ArrowUp') nextIndex = activeIndex < 0 ? items.length - 1 : (activeIndex - 1 + items.length) % items.length;
+    else if (event.key === 'Home') nextIndex = 0;
+    else if (event.key === 'End') nextIndex = items.length - 1;
+    else if (event.key === 'Escape') {
+      event.preventDefault();
+      setMoreOpen(false);
+      moreTriggerRef.current?.focus();
+      return;
+    } else if (event.key === 'Tab') {
+      setMoreOpen(false);
+      return;
+    }
+
+    if (nextIndex !== null) {
+      event.preventDefault();
+      items[nextIndex]?.focus();
+    }
   };
 
   return (
@@ -128,10 +168,12 @@ export default function TopNavigation({
 
         <div className="relative shrink-0" ref={moreRef}>
           <button
+            ref={moreTriggerRef}
             type="button"
             aria-haspopup="menu"
             aria-expanded={moreOpen}
-            onClick={() => setMoreOpen((open) => !open)}
+            aria-controls={moreMenuId}
+            onClick={() => { if (moreOpen) setMoreOpen(false); else openMoreMenu(); }}
             className={`flex h-11 items-center gap-2 rounded-xl px-4 text-xs font-semibold transition-colors sm:px-5 sm:text-sm ${
               moreOpen ? 'bg-white/[.06] text-white' : 'text-ink-400 hover:bg-white/[.04] hover:text-ink-100'
             }`}
@@ -139,7 +181,7 @@ export default function TopNavigation({
             More <Icon name="chevron-down" size={14} />
           </button>
           {moreOpen && (
-            <div role="menu" className="absolute right-0 top-[calc(100%+12px)] z-50 w-72 rounded-2xl border border-white/[.10] bg-[#151426]/95 p-3 shadow-floating backdrop-blur-xl">
+            <div id={moreMenuId} ref={moreMenuRef} role="menu" aria-label="More workspace navigation" onKeyDown={handleMoreMenuKeyDown} className="absolute right-0 top-[calc(100%+12px)] z-50 w-72 rounded-2xl border border-white/[.10] bg-[#151426]/95 p-3 shadow-floating backdrop-blur-xl">
               <div className="px-3 pb-2 pt-2.5 text-[10px] font-semibold uppercase tracking-[.16em] text-ink-500">Workspace</div>
               {SECONDARY_LINKS.map((item) => {
                 const disabled = Boolean(item.disabledWithoutProject && !projectOpen);
@@ -148,6 +190,8 @@ export default function TopNavigation({
                     key={item.screen}
                     type="button"
                     role="menuitem"
+                    tabIndex={-1}
+                    aria-current={screen === item.screen ? 'page' : undefined}
                     disabled={disabled}
                     onClick={() => navigate(item.screen)}
                     className={`flex w-full items-center rounded-xl px-3 py-3 text-left text-xs font-medium transition-colors sm:px-4 sm:text-sm disabled:cursor-not-allowed disabled:opacity-35 ${
