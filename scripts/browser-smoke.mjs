@@ -319,6 +319,22 @@ try {
   assert.equal(await helpTrigger.evaluate((element) => element === document.activeElement), true,
     'Escape should return focus to the HelpTip trigger');
 
+  // Capture the remaining core product screens at a consistent desktop width.
+  // These checks catch route-level rendering errors and horizontal overflow.
+  const screenAudit = [
+    { route: 'mastering', heading: 'Mastering', artifact: 'mastering-desktop.png' },
+    { route: 'analysis', heading: 'Audio analysis', artifact: 'analysis-desktop.png' },
+    { route: 'export', heading: 'Export', artifact: 'export-desktop.png' },
+    { route: 'settings', heading: 'Settings', artifact: 'settings-desktop.png' },
+    { route: 'projects', heading: 'Projects', artifact: 'projects-desktop.png' },
+  ];
+  for (const item of screenAudit) {
+    await page.goto(`${baseUrl}#${item.route}`, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { name: item.heading, exact: true, level: 1 }).waitFor({ state: 'visible' });
+    await checkNoHorizontalOverflow(page, 1440);
+    await page.screenshot({ path: `${artifactDir}/${item.artifact}`, fullPage: true });
+  }
+
   // Exercise pointer:coarse sizing at a tablet-width viewport. This catches
   // breakpoint-only sizing that accidentally shrinks controls on touch tablets.
   const touchPage = await browser.newPage({
