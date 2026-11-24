@@ -258,8 +258,8 @@ try {
   await tracksDialog.getByRole('button', { name: 'Close' }).click();
   await tracksDialog.waitFor({ state: 'detached' });
 
-  const soloTrack = page.getByRole('button', { name: 'Solo Audio 1', exact: true });
-  const muteTrack = page.getByRole('button', { name: 'Mute Audio 1', exact: true });
+  const soloTrack = page.getByRole('button', { name: /^(Solo|Unsolo) Audio 1$/ });
+  const muteTrack = page.getByRole('button', { name: /^(Mute|Unmute) Audio 1$/ });
   for (const control of [soloTrack, muteTrack]) {
     const bounds = await control.boundingBox();
     assert.ok(bounds && bounds.width >= 32 && bounds.height >= 32,
