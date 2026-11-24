@@ -44,6 +44,13 @@ CI:
 - Earlier Button/navigation/landing/motion-document commits also passed CI.
 - Latest App/Dashboard small refinements require their final CI runs to complete.
 
+## Additional implementation since the previous update
+
+- Landing header now switches to a native mobile disclosure below 1024px; Pricing and Account remain available, and the Studio CTA stays visible.
+- Landing primary/secondary controls and navigation hit areas meet the 44px target.
+- Pricing section switches have 44px hit areas and expose selected state with `aria-pressed`.
+- A project-local Playwright smoke script and separate GitHub Actions workflow have been added. First attempt failed before browser installation because the runner image was Ubuntu 26.04; workflow now pins Ubuntu 24.04 and needs a successful rerun.
+
 ## Active blockers
 
 1. No connected browser tab / Playwright MCP session in this execution environment.
