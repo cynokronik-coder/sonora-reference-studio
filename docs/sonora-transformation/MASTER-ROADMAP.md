@@ -25,7 +25,7 @@ The order prioritizes safety and validation foundations first, then design found
 | 2 | ComposioHQ/awesome-claude-skills | Discover browser testing and skill-quality workflows early | Browser QA and skill discovery | Catalogue enumerated; relevant skills identified; browser runtime unavailable |
 | 3 | borghei/Claude-Skills | Add focused Playwright, QA, and design-system review guidance | UI regression and review workflow | Catalogue enumerated; selected skills inspected; license caveat |
 | 4 | nextlevelbuilder/ui-ux-pro-max-skill | Establish high-priority UX constraints before detailed design work | Design-system and interface audit | Inspected; principles applied in menu/button refinements |
-| 5 | Owl-Listener/designer-skills | Deep design-system, icon, motion, onboarding, and accessibility foundations | Tokens, navigation, onboarding, component quality | Catalogue enumerated; selected skills inspected and applied |
+| 5 | Owl-Listener/designer-skills | Deep design-system, icon, motion, onboarding, and accessibility foundations | Tokens, navigation, onboarding, component quality | `onboarding-design` applied to first-run Projects tour; CI and Playwright pass |
 | 6 | julianoczkowski/designer-skills | Formalize brief-to-review discipline after foundational criteria | Existing design brief and design QA | Catalogue enumerated; design-review skill inspected; screenshots blocked |
 | 7 | elayadesign/ai-design-skills | Refine landing/business presentation using a focused existing-site design mindset | Landing page and public-facing communication | Two skills enumerated; landing skill inspected; deeper visual review pending |
 | 8 | bergside/awesome-design-skills | Cross-check design-style variants without allowing style drift | Minimalism and visual hierarchy | Catalogue enumerated; clean-design skill inspected |
@@ -63,6 +63,7 @@ This is the planned sequence. Actual completion depends on evidence and validati
 
 ### Batch C — Core product usability
 - [x] Review and improve the Projects first-project empty state: direct audio import or blank project, accessible search, and larger search target. Browser coverage passes.
+- [x] Align the Projects tour with first-run state: spotlight import/blank-project actions and omit returning-user session-management guidance until a project exists. Playwright coverage passes.
 - [ ] Review dashboard and the transition into Studio.
 - [ ] Review dashboard and the transition into Studio.
 - [ ] Review Studio timeline, mixer, processor flyouts, and assistant interaction.
