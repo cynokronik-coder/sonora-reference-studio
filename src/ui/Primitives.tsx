@@ -98,7 +98,7 @@ export function IconButton({
       aria-label={title}
       onClick={onClick}
       disabled={disabled}
-      className={`focus-ring inline-flex h-10 min-w-10 items-center justify-center rounded-xl border px-2 text-xs font-semibold transition-all duration-180 disabled:opacity-40 ${
+      className={`focus-ring inline-flex h-10 min-w-10 items-center justify-center rounded-xl border px-2 text-xs font-semibold transition-[color,background-color,border-color,box-shadow] duration-180 disabled:opacity-40 ${
         active
           ? 'border-[#A77AFF]/55 bg-[#8957FF]/15 text-[#C4A2FF] shadow-violet-soft'
           : 'border-white/[.08] bg-[#171727] text-ink-300 hover:border-white/[.16] hover:bg-[#252538] hover:text-ink-100'
@@ -497,7 +497,7 @@ export function Tabs<T extends string>({
           type="button"
           aria-pressed={value === tab.value}
           onClick={() => onChange(tab.value)}
-          className={`focus-ring whitespace-nowrap rounded-xl px-4 py-2 text-xs font-semibold transition-all duration-180 ${
+          className={`focus-ring whitespace-nowrap rounded-xl px-4 py-2 text-xs font-semibold transition-[color,background-color,border-color,box-shadow] duration-180 ${
             value === tab.value
               ? 'border border-[#A77AFF]/25 bg-[#8957FF]/15 text-[#C4A2FF] shadow-violet-soft'
               : 'border border-transparent text-ink-400 hover:bg-white/[.04] hover:text-ink-200'
@@ -577,7 +577,7 @@ export function HelpTip({
         aria-expanded={open}
         aria-controls={id}
         onClick={() => setOpen((value) => !value)}
-        className="focus-ring inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/[.12] bg-[#171727] text-[10px] font-semibold text-ink-300 transition-all duration-180 hover:border-[#A77AFF]/55 hover:bg-[#8957FF]/10 hover:text-[#C4A2FF]"
+        className="focus-ring inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/[.12] bg-[#171727] text-[10px] font-semibold text-ink-300 transition-colors duration-180 hover:border-[#A77AFF]/55 hover:bg-[#8957FF]/10 hover:text-[#C4A2FF]"
       >
         ?
       </button>
