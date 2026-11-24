@@ -98,7 +98,7 @@ export function IconButton({
       aria-label={title}
       onClick={onClick}
       disabled={disabled}
-      className={`focus-ring inline-flex h-10 min-w-10 items-center justify-center rounded-xl border px-2 text-xs font-semibold transition-[color,background-color,border-color,box-shadow] duration-180 disabled:opacity-40 ${
+      className={`sonora-icon-button focus-ring inline-flex h-10 min-w-10 items-center justify-center rounded-xl border px-2 text-xs font-semibold transition-[color,background-color,border-color,box-shadow] duration-180 disabled:opacity-40 ${
         active
           ? 'border-[#A77AFF]/55 bg-[#8957FF]/15 text-[#C4A2FF] shadow-violet-soft'
           : 'border-white/[.08] bg-[#171727] text-ink-300 hover:border-white/[.16] hover:bg-[#252538] hover:text-ink-100'
