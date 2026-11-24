@@ -1,6 +1,6 @@
 # 001 — Make command palette result selection instantaneous
 
-- **Status**: TODO
+- **Status**: IMPLEMENTED IN MAIN; CI PASSING; BROWSER CHECK PENDING
 - **Commit**: 4293922
 - **Severity**: HIGH
 - **Category**: Purpose & frequency
