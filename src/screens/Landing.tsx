@@ -236,7 +236,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
             ].map(([eyebrow, detail]) => (
               <div key={eyebrow} className="flex items-start gap-3 sm:justify-center">
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_12px_rgba(200,241,105,.8)]" />
-                <div><p className="font-mono text-[9px] tracking-[.16em] text-accent/75">{eyebrow}</p><p className="mt-1 text-xs text-ink-300">{detail}</p></div>
+                <div><p className="font-mono text-[9px] tracking-[.16em] text-accent/75">{eyebrow}</p><p className="mt-1 text-sm leading-6 text-ink-300">{detail}</p></div>
               </div>
             ))}
           </div>
@@ -254,7 +254,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
             <div className="rounded-2xl border border-white/[.08] bg-white/[.025] p-5">
               <p className="font-mono text-[9px] uppercase tracking-[.17em] text-ink-500">The Sonora approach</p>
               <h3 className="mt-3 text-lg font-semibold text-white">See the process. Shape the result.</h3>
-              <ul className="mt-5 space-y-3 text-xs leading-6 text-ink-300">
+              <ul className="mt-5 space-y-3 text-sm leading-6 text-ink-300">
                 <li className="flex gap-2"><span className="text-accent">✓</span><span>Measured analysis instead of vague “good / bad” scores.</span></li>
                 <li className="flex gap-2"><span className="text-accent">✓</span><span>Reference-informed suggestions with editable parameters.</span></li>
                 <li className="flex gap-2"><span className="text-accent">✓</span><span>A real mix and master chain you can inspect, reorder or bypass.</span></li>
@@ -264,7 +264,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
             <div className="rounded-2xl border border-accent/20 bg-gradient-to-br from-accent/[.08] to-transparent p-5">
               <p className="font-mono text-[9px] uppercase tracking-[.17em] text-accent/80">Built for creative control</p>
               <h3 className="mt-3 text-lg font-semibold text-white">Guidance when you need it. Detail when you want it.</h3>
-              <p className="mt-4 text-xs leading-6 text-ink-300">Start in Beginner mode and follow the guided workflow. Switch to Engineer mode when you want full processor parameters, routing and deeper control.</p>
+              <p className="mt-4 text-sm leading-6 text-ink-300">Start in Beginner mode and follow the guided workflow. Switch to Engineer mode when you want full processor parameters, routing and deeper control.</p>
               <div className="mt-6 flex items-center gap-2">
                 <span className="rounded-md border border-white/10 bg-black/20 px-3 py-2 font-mono text-[9px] text-ink-300">BEGINNER</span>
                 <span className="text-accent">↔</span>
@@ -289,7 +289,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
                     <span className="font-mono text-[10px] text-ink-600">{feature.number}</span>
                   </div>
                   <h3 className="mt-5 text-base font-semibold text-white">{feature.title}</h3>
-                  <p className="mt-3 min-h-[88px] text-xs leading-6 text-ink-400">{feature.description}</p>
+                  <p className="mt-3 min-h-[88px] text-sm leading-6 text-ink-400">{feature.description}</p>
                   <div className="mt-4 flex flex-wrap gap-1.5">
                     {feature.tags.map((tag) => <span key={tag} className="rounded-full border border-white/[.08] bg-black/20 px-2.5 py-1 font-mono text-[8px] text-ink-400">{tag}</span>)}
                   </div>
@@ -311,7 +311,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
               {STEPS.map(([number, title, description]) => (
                 <div key={number} className="grid gap-3 rounded-xl border border-white/[.08] bg-white/[.025] p-4 sm:grid-cols-[52px_1fr] sm:gap-5 sm:p-5">
                   <span className="font-mono text-sm text-accent">{number}</span>
-                  <div><h3 className="text-sm font-semibold text-white">{title}</h3><p className="mt-2 text-xs leading-6 text-ink-400">{description}</p></div>
+                  <div><h3 className="text-sm font-semibold text-white">{title}</h3><p className="mt-2 text-sm leading-6 text-ink-400">{description}</p></div>
                 </div>
               ))}
             </div>
@@ -327,7 +327,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
             ].map(([title, detail]) => (
               <div key={title} className="border-l border-accent/35 pl-4">
                 <h3 className="text-sm font-semibold text-white">{title}</h3>
-                <p className="mt-2 text-xs leading-6 text-ink-400">{detail}</p>
+                <p className="mt-2 text-sm leading-6 text-ink-400">{detail}</p>
               </div>
             ))}
           </div>
@@ -352,7 +352,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
                   {question}
                   <span className="text-xl font-light text-accent transition-transform group-open:rotate-45">+</span>
                 </summary>
-                <p className="max-w-3xl pt-3 text-xs leading-6 text-ink-400">{answer}</p>
+                <p className="max-w-3xl pt-3 text-sm leading-6 text-ink-400">{answer}</p>
               </details>
             ))}
           </div>
