@@ -264,7 +264,7 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
                   </>
                 ) : <p className="text-2xs text-ink-500">Select a track to edit its secondary channel settings.</p>}
               </FlyoutMenu>
-              <button type="button" title="Add audio or track" onClick={() => setAddOpen(true)} className="focus-ring flex h-8 w-8 items-center justify-center rounded-lg border border-[#A77AFF]/30 bg-[#8957FF]/15 text-[#C4A2FF] transition-all hover:bg-[#8957FF]/25">
+              <button type="button" title="Add audio or track" onClick={() => setAddOpen(true)} className="focus-ring flex h-8 w-8 items-center justify-center rounded-lg border border-[#A77AFF]/30 bg-[#8957FF]/15 text-[#C4A2FF] transition-colors hover:bg-[#8957FF]/25">
                 <Icon name="plus" size={16} />
               </button>
             </div>
