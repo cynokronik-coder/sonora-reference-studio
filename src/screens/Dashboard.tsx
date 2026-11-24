@@ -110,7 +110,7 @@ export default function Dashboard() {
               Start with smart suggestions, then shape every detail yourself.
             </p>
             <div data-tour="dashboard-import" className="mt-5 flex flex-wrap gap-2">
-              <Button variant="primary" onClick={importTarget}>＋ Import your song</Button>
+              <Button variant="primary" onClick={importTarget}><Icon name="upload" size={15} /> Import your song</Button>
               <Button onClick={() => void createProject()}>Create blank project</Button>
               {project && <Button variant="ghost" onClick={() => go('studio')}>Continue session →</Button>}
             </div>
