@@ -204,6 +204,19 @@ try {
     true,
     'Opening track settings should move focus into the contextual flyout',
   );
+
+  const polaritySwitch = trackSettingsDialog.getByRole('switch', { name: 'Invert polarity' });
+  const switchBounds = await polaritySwitch.boundingBox();
+  assert.ok(switchBounds && switchBounds.width >= 44 && switchBounds.height >= 44,
+    `Track toggle hit area is ${switchBounds?.width ?? 0}×${switchBounds?.height ?? 0}px; expected at least 44×44px`);
+  const initialPolarity = await polaritySwitch.getAttribute('aria-checked');
+  await polaritySwitch.click();
+  assert.notEqual(await polaritySwitch.getAttribute('aria-checked'), initialPolarity,
+    'Activating a switch should update its aria-checked state');
+  await polaritySwitch.click();
+  assert.equal(await polaritySwitch.getAttribute('aria-checked'), initialPolarity,
+    'The isolated test track switch should be reversible');
+
   await page.keyboard.press('Escape');
   await trackSettingsDialog.waitFor({ state: 'detached' });
   assert.equal(
