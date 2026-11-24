@@ -10,6 +10,7 @@ export type SonoraIconName =
   | 'clock'
   | 'download'
   | 'equalizer'
+  | 'expand'
   | 'folder'
   | 'guitar'
   | 'headphones'
@@ -50,6 +51,7 @@ const ICON_PATHS: Record<SonoraIconName, string[]> = {
   clock: ['M12 8v4l3 2', 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z'],
   download: ['M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4', 'm7 10 5 5 5-5', 'M12 15V3'],
   equalizer: ['M4 21v-7', 'M4 10V3', 'M12 21v-9', 'M12 8V3', 'M20 21v-5', 'M20 12V3', 'M2 14h4', 'M10 8h4', 'M18 16h4'],
+  expand: ['M8 3H5a2 2 0 0 0-2 2v3', 'M16 3h3a2 2 0 0 1 2 2v3', 'M21 16v3a2 2 0 0 1-2 2h-3', 'M8 21H5a2 2 0 0 1-2-2v-3'],
   folder: ['M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z'],
   guitar: ['m11 3 2 2-3 3-2-2 3-3Z', 'm8 8-5 5a2 2 0 0 0 3 3l5-5', 'm13 5 6 6', 'M16 8l2-2 3 3-2 2'],
   headphones: ['M3 14v-3a9 9 0 0 1 18 0v3', 'M3 14h4v7H5a2 2 0 0 1-2-2Z', 'M21 14h-4v7h2a2 2 0 0 0 2-2Z'],
