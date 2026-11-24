@@ -253,6 +253,11 @@ try {
     });
     await responsiveTour.getByRole('button', { name: 'Finish', exact: true }).click();
     await responsiveTour.waitFor({ state: 'detached' });
+    if (breakpoint.width === 375) {
+      const moreTrigger = page.getByRole('button', { name: 'More', exact: true });
+      assert.equal(await moreTrigger.evaluate((element) => element === document.activeElement), true,
+        'Closing the mobile guided tour should restore focus to the More trigger');
+    }
   }
 
   await page.setViewportSize({ width: 1440, height: 1000 });
