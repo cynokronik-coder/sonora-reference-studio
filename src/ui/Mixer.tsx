@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import type { BusState, TrackState } from '../audio/model/types';
 import { useApp } from '../state/store';
 import { assistantSuggestions } from '../state/store';
@@ -44,14 +44,9 @@ export function TransportBar() {
     };
   }, [toolsOpen]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!toolsOpen) return;
-    const frame = window.requestAnimationFrame(() => {
-      toolsPanelRef.current
-        ?.querySelector<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])')
-        ?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
+    toolsPanelRef.current?.focus();
   }, [toolsOpen]);
 
   const duration = transport.duration || 0;
