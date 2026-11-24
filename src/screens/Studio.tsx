@@ -245,7 +245,7 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
                 description="Secondary channel controls. The main level, mute and solo controls stay visible beside the timeline."
                 placement="bottom-start"
                 width="md"
-                triggerClassName="!h-11 !min-h-11 !w-11 !min-w-11 !px-0 !py-0 sm:!h-10 sm:!min-h-10 sm:!w-10 sm:!min-w-10"
+                triggerClassName="sonora-flyout-icon-trigger"
                 disabled={!activeTrack}
               >
                 {activeTrack ? (
