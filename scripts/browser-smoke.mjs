@@ -89,6 +89,11 @@ try {
   await page.getByRole('heading', { level: 1 }).waitFor({ state: 'visible' });
   await checkNoHorizontalOverflow(page, 390);
 
+  await page.setViewportSize({ width: 360, height: 780 });
+  await checkNoHorizontalOverflow(page, 360);
+  await page.screenshot({ path: `${artifactDir}/landing-mobile-360.png`, fullPage: true });
+
+  await page.setViewportSize({ width: 390, height: 844 });
   const mobileMenu = page.locator('header details');
   const menuSummary = mobileMenu.locator('summary');
   await menuSummary.waitFor({ state: 'visible' });
@@ -113,10 +118,27 @@ try {
   await page.waitForURL('**/#studio');
   assert.equal(new URL(page.url()).hash, '#studio');
 
-  await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+  const moreButton = page.getByRole('button', { name: 'More' });
+  await moreButton.waitFor({ state: 'visible', timeout: 15_000 });
+  await moreButton.click();
+  const moreMenu = page.getByRole('menu', { name: 'More workspace navigation' });
+  await moreMenu.waitFor({ state: 'visible' });
+  const menuItems = moreMenu.locator('[role^="menuitem"]:not(:disabled)');
+  assert.ok(await menuItems.count() > 1, 'More menu should contain multiple keyboard-accessible items');
+  await page.keyboard.press('ArrowDown');
+  const focusedRole = await page.evaluate(() => document.activeElement?.getAttribute('role'));
+  assert.ok(focusedRole?.startsWith('menuitem'), `Expected a focused menu item after ArrowDown; got ${focusedRole}`);
+  await page.keyboard.press('Escape');
+  await moreMenu.waitFor({ state: 'detached' });
+  assert.equal(await moreButton.evaluate((element) => element === document.activeElement), true, 'Escape should restore focus to the More trigger');
+
+  for (const width of [768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { level: 1 }).waitFor({ state: 'visible' });
+    await checkNoHorizontalOverflow(page, width);
+  }
   await page.getByRole('link', { name: 'Capabilities' }).waitFor({ state: 'visible' });
-  await checkNoHorizontalOverflow(page, 1440);
 
   assert.deepEqual(pageErrors, [], `Browser page errors: ${pageErrors.join('; ')}`);
   assert.deepEqual(consoleErrors, [], `Browser console errors: ${consoleErrors.join('; ')}`);
