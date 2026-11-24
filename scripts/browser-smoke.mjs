@@ -80,7 +80,7 @@ try {
   await page.getByRole('heading', { level: 1 }).waitFor({ state: 'visible', timeout: 15_000 });
   assert.match(await page.title(), /Sonora/i);
   assert.match(await page.getByRole('heading', { level: 1 }).innerText(), /sound you/i);
-  await page.getByRole('button', { name: 'Open the studio' }).waitFor({ state: 'visible' });
+  await page.locator('header').getByRole('button', { name: /Open the studio/ }).waitFor({ state: 'visible' });
   await checkNoHorizontalOverflow(page, 1440);
   await page.screenshot({ path: `${artifactDir}/landing-desktop.png`, fullPage: true });
 
