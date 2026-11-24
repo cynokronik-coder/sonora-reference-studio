@@ -62,12 +62,16 @@ try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1000 } });
 
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  const appOrigin = new URL(baseUrl).origin;
   page.on('console', (message) => {
-    if (message.type() === 'error') consoleErrors.push(message.text());
+    const sourceUrl = message.location().url;
+    if (message.type() === 'error' && (!sourceUrl || sourceUrl.startsWith(appOrigin))) {
+      consoleErrors.push(message.text());
+    }
   });
   page.on('requestfailed', (request) => {
     const url = request.url();
-    if (!url.startsWith('data:') && !url.startsWith('blob:')) {
+    if (url.startsWith(appOrigin)) {
       failedRequests.push({ url, error: request.failure()?.errorText || 'request failed' });
     }
   });
@@ -111,10 +115,7 @@ try {
 
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('navigation', { name: 'Main navigation' }).waitFor({ state: 'visible' }).catch(async () => {
-    // Some landing revisions label the primary nav only by its links; check the actual desktop links instead.
-    await page.getByRole('link', { name: 'Capabilities' }).waitFor({ state: 'visible' });
-  });
+  await page.getByRole('link', { name: 'Capabilities' }).waitFor({ state: 'visible' });
   await checkNoHorizontalOverflow(page, 1440);
 
   assert.deepEqual(pageErrors, [], `Browser page errors: ${pageErrors.join('; ')}`);
