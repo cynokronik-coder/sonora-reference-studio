@@ -281,12 +281,15 @@ input[type='range']:focus-visible::-moz-range-thumb {
 }
 
 .sonora-button-motion {
-  transition: color 150ms var(--sonora-ease),
+  transition:
+    color 150ms var(--sonora-ease),
     background-color 150ms var(--sonora-ease),
     border-color 150ms var(--sonora-ease),
-    box-shadow 150ms var(--sonora-ease),
-    filter 150ms var(--sonora-ease),
     transform 160ms var(--sonora-ease-out);
+}
+
+.sonora-button-motion:active {
+  transform: scale(0.97);
 }
 
 @keyframes sonora-tour-pop {
