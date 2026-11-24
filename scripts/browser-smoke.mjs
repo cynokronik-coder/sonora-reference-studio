@@ -191,6 +191,20 @@ try {
   await page.goto(`${baseUrl}#projects`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: 'Projects' }).waitFor({ state: 'visible' });
   await page.getByRole('button', { name: 'Import a song', exact: true }).waitFor({ state: 'visible' });
+  const firstRunTourTrigger = page.getByRole('button', { name: 'Start guided tour', exact: true });
+  await firstRunTourTrigger.click();
+  const firstRunTour = page.getByRole('dialog');
+  await firstRunTour.getByRole('heading', { name: 'Start your first project', exact: true }).waitFor({ state: 'visible' });
+  assert.match(await firstRunTour.innerText(), /Step 1 \/ 1/,
+    'An empty Projects workspace should show only the first-value onboarding step');
+  assert.equal(
+    await page.locator('[data-tour="projects-create"]').getByRole('button', { name: 'Import a song', exact: true }).count(),
+    1,
+    'The first-run spotlight target should contain the primary Import a song action',
+  );
+  await page.screenshot({ path: `${artifactDir}/projects-first-run-tour.png`, fullPage: true });
+  await firstRunTour.getByRole('button', { name: 'Finish', exact: true }).click();
+  await firstRunTour.waitFor({ state: 'detached' });
   await page.getByRole('button', { name: 'Create blank project', exact: true }).click();
   await page.waitForURL('**/#studio');
   await page.getByRole('button', { name: 'Add audio', exact: true }).waitFor({ state: 'visible' });
@@ -416,7 +430,7 @@ try {
   await touchPage.screenshot({ path: `${artifactDir}/projects-touch-before-create.png`, fullPage: true });
   assert.equal(touchCreateDiagnostics.createContainerCount, 1,
     `Expected the Projects create container in the touch viewport. Diagnostics: ${JSON.stringify(touchCreateDiagnostics)}`);
-  const touchCreateButton = touchPage.locator('[data-tour="projects-create"]').getByRole('button', { name: 'New project' });
+  const touchCreateButton = touchPage.locator('[data-tour="projects-create"]').getByRole('button', { name: 'Create blank project' });
   await touchCreateButton.click();
   await touchPage.waitForURL('**/#studio');
   await touchPage.getByRole('button', { name: 'Add audio', exact: true }).click();
