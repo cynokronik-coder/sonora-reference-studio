@@ -123,7 +123,15 @@ try {
   // Dashboard at a desktop width before exercising the global "More" menu.
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${baseUrl}#dashboard`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('navigation', { name: 'Primary navigation' }).waitFor({ state: 'visible' });
+  const primaryNavigation = page.getByRole('navigation', { name: 'Primary navigation' });
+  await primaryNavigation.waitFor({ state: 'visible' });
+  const primaryNavBounds = await primaryNavigation.boundingBox();
+  const firstPrimaryLink = primaryNavigation.locator('button').first();
+  const firstPrimaryLinkBounds = await firstPrimaryLink.boundingBox();
+  assert.ok(primaryNavBounds && firstPrimaryLinkBounds &&
+    firstPrimaryLinkBounds.left >= primaryNavBounds.left - 1 &&
+    firstPrimaryLinkBounds.right <= primaryNavBounds.right + 1,
+    'The first primary navigation item should be fully visible rather than clipped by horizontal centering');
   await checkNoHorizontalOverflow(page, 1440);
   await page.screenshot({ path: `${artifactDir}/dashboard-desktop.png`, fullPage: true });
 
