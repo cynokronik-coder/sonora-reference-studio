@@ -132,12 +132,21 @@ try {
   const primaryNavBounds = await primaryNavigation.boundingBox();
   const firstPrimaryLink = primaryNavigation.locator('button').first();
   const firstPrimaryLinkBounds = await firstPrimaryLink.boundingBox();
+  await page.screenshot({ path: `${artifactDir}/dashboard-desktop.png`, fullPage: true });
+  console.log('Primary navigation geometry:', JSON.stringify({
+    viewport: await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight })),
+    header: await page.locator('header').first().boundingBox(),
+    nav: primaryNavBounds,
+    firstItem: firstPrimaryLinkBounds,
+    scrollLeft: await primaryNavigation.evaluate((element) => element.scrollLeft),
+    scrollWidth: await primaryNavigation.evaluate((element) => element.scrollWidth),
+    clientWidth: await primaryNavigation.evaluate((element) => element.clientWidth),
+  }));
   assert.ok(primaryNavBounds && firstPrimaryLinkBounds &&
     firstPrimaryLinkBounds.left >= primaryNavBounds.left - 1 &&
     firstPrimaryLinkBounds.right <= primaryNavBounds.right + 1,
     'The first primary navigation item should be fully visible rather than clipped by horizontal centering');
   await checkNoHorizontalOverflow(page, 1440);
-  await page.screenshot({ path: `${artifactDir}/dashboard-desktop.png`, fullPage: true });
 
   const moreButton = page.getByRole('button', { name: 'More', exact: true });
   await moreButton.waitFor({ state: 'visible', timeout: 15_000 });
