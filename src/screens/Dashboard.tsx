@@ -46,7 +46,7 @@ function MiniSpectrum() {
       <div className="pointer-events-none absolute inset-0 opacity-60" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.04) 1px, transparent 1px)', backgroundSize: '100% 25%, 9% 100%' }} />
       <div className="absolute inset-x-4 top-4 flex items-center justify-between">
         <span className="font-mono text-[9px] uppercase tracking-[.2em] text-white/45">Spectral signature</span>
-        <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 font-mono text-[9px] text-accent">LIVE ANALYSIS</span>
+        <span className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 font-mono text-[9px] text-accent">SPECTRUM PREVIEW</span>
       </div>
       {heights.map((height, index) => (
         <span
