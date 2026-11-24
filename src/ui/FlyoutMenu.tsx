@@ -91,14 +91,13 @@ export function FlyoutMenu({
     setOpen(true);
   };
 
-  // Focus immediately after the portal commits, but only for click-pinned
-  // flyouts. Hover previews must never move a keyboard user's focus.
+  // Focus the dialog container after a deliberate click-pinned open.
+  // Starting on the dialog itself avoids moving straight into a slider or
+  // switch and gives keyboard users a predictable place to begin.
+  // Hover previews must never steal focus.
   useLayoutEffect(() => {
     if (!open || !pinned) return;
-    const firstControl = panelRef.current?.querySelector<HTMLElement>(
-      'input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), [tabindex]:not([tabindex="-1"])',
-    );
-    (firstControl ?? panelRef.current)?.focus();
+    panelRef.current?.focus();
   }, [open, pinned]);
 
   useLayoutEffect(() => {
