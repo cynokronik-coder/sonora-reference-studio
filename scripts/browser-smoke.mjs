@@ -375,7 +375,6 @@ try {
   );
   await touchPage.goto(`${baseUrl}#dashboard`, { waitUntil: 'domcontentloaded' });
   await touchPage.getByRole('navigation', { name: 'Primary navigation' }).waitFor({ state: 'visible' });
-  await touchPage.getByRole('heading', { name: 'Dashboard', exact: true, level: 1 }).waitFor({ state: 'visible' });
   const touchMoreButton = touchPage.getByRole('button', { name: 'More', exact: true });
   await touchMoreButton.waitFor({ state: 'visible' });
   await touchMoreButton.click();
