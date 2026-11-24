@@ -58,7 +58,7 @@ async function checkNoHorizontalOverflow(page, width) {
 }
 
 async function revealLandingTagline(page) {
-  await page.locator('#difference').scrollIntoViewIfNeeded();
+  await page.locator('#difference h2').scrollIntoViewIfNeeded();
   await page.waitForFunction(() => {
     const words = Array.from(document.querySelectorAll('#difference [data-tagline-word]'));
     return words.length > 0 && words.every((word) => word.classList.contains('is-visible'));
@@ -118,7 +118,7 @@ try {
   await landingBodyCopy.waitFor({ state: 'visible' });
   const landingBodyFontSize = await landingBodyCopy.evaluate((element) => Number.parseFloat(getComputedStyle(element).fontSize));
   assert.ok(landingBodyFontSize >= 14, `Landing explanatory copy is ${landingBodyFontSize}px; expected at least 14px`);
-  assert.equal((await page.getByRole('heading', { level: 1 }).innerText()).replace(/\s+/g, ' ').trim(), 'Mix with a reference. Keep every decision yours.');
+  assert.equal((await page.getByRole('heading', { level: 1 }).innerText()).replace(/\s+/g, ' ').trim(), 'Mix with a reference. Stay in control.');
   assert.equal(await page.locator('#capabilities article').count(), 5, 'The landing page should group related analysis and reference features into five clear capabilities');
   await page.getByText('Free plan includes local audio tools, analysis and exports. No payment required.', { exact: true }).waitFor({ state: 'visible' });
   await page.getByText('16 BUILT-IN PROCESSORS', { exact: true }).waitFor({ state: 'visible' });
@@ -130,7 +130,7 @@ try {
 
   const reducedMotionPage = await browser.newPage({ viewport: { width: 1280, height: 800 }, reducedMotion: 'reduce' });
   await reducedMotionPage.goto(baseUrl, { waitUntil: 'domcontentloaded' });
-  await reducedMotionPage.locator('#difference').scrollIntoViewIfNeeded();
+  await reducedMotionPage.locator('#difference h2').scrollIntoViewIfNeeded();
   await reducedMotionPage.waitForFunction(() => {
     const words = Array.from(document.querySelectorAll('#difference [data-tagline-word]'));
     return words.length > 0 && words.every((word) => word.classList.contains('is-visible'));

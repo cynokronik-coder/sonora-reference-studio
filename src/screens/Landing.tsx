@@ -240,11 +240,11 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
       </header>
 
       <main id="top" className="relative z-[1]">
-        <section className="mx-auto grid max-w-7xl items-center gap-12 px-5 pb-20 pt-16 sm:px-8 lg:grid-cols-[.92fr_1.08fr] lg:gap-10 lg:pb-28 lg:pt-24">
-          <div className="max-w-xl">
+        <section className="mx-auto grid max-w-7xl items-center gap-12 px-5 pb-20 pt-16 sm:px-8 lg:grid-cols-[1.08fr_.92fr] lg:gap-10 lg:pb-28 lg:pt-24">
+          <div className="max-w-2xl">
             <SectionLabel>Mixing · Reference matching · Mastering</SectionLabel>
-            <h1 className="mt-6 text-[clamp(2.7rem,6vw,5.3rem)] font-semibold leading-[.98] tracking-[-.065em] text-white">
-              Mix with a reference. <span className="text-accent">Keep every decision yours.</span>
+            <h1 className="mt-6 text-[clamp(2.7rem,5vw,4.5rem)] font-semibold leading-[.98] tracking-[-.065em] text-white">
+              Mix with a reference. <span className="text-accent">Stay in control.</span>
             </h1>
             <p className="mt-7 max-w-lg text-sm leading-7 text-ink-300 sm:text-base sm:leading-8">
               Sonora brings mixing, mastering and reference matching into your browser for independent artists and producers. Compare your mix, inspect measured differences, and shape every processing decision yourself.
@@ -273,7 +273,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
             ].map(([eyebrow, detail]) => (
               <div key={eyebrow} className="flex items-start gap-3 sm:justify-center">
                 <span className="mt-1 h-1.5 w-1.5 rounded-full bg-accent shadow-[0_0_12px_rgba(200,241,105,.8)]" />
-                <div><p className="font-mono text-[9px] tracking-[.16em] text-accent/75">{eyebrow}</p><p className="mt-1 text-sm leading-6 text-ink-300">{detail}</p></div>
+                <div><p className="font-mono text-xs tracking-[.12em] text-accent/75">{eyebrow}</p><p className="mt-1 text-sm leading-6 text-ink-300">{detail}</p></div>
               </div>
             ))}
           </div>
