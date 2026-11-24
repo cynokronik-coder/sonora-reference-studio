@@ -18,20 +18,22 @@ export default function Projects() {
           <h1 className="mt-1 text-2xl font-semibold text-ink-100">Projects</h1>
           <p className="mt-1 text-sm text-ink-400">Stored locally in this browser, including the original audio files.</p>
         </div>
-        <div data-tour={projects.length > 0 ? "projects-create" : undefined} className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
-          <label className="sr-only" htmlFor="project-search">Search projects</label>
-          <input
-            id="project-search"
-            type="search"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search projects…"
-            className="focus-ring min-h-11 min-w-0 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-3 text-sm text-ink-100 placeholder:text-ink-500 sm:w-56 sm:flex-none"
-          />
-          <Button variant="primary" onClick={() => void createProject()}>
-            New project
-          </Button>
-        </div>
+        {projects.length > 0 && (
+          <div data-tour="projects-create" className="flex w-full flex-wrap gap-2 sm:w-auto sm:flex-nowrap">
+            <label className="sr-only" htmlFor="project-search">Search projects</label>
+            <input
+              id="project-search"
+              type="search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search projects…"
+              className="focus-ring min-h-11 min-w-0 flex-1 rounded-xl border border-ink-600 bg-ink-900 px-3 text-sm text-ink-100 placeholder:text-ink-500 sm:w-56 sm:flex-none"
+            />
+            <Button variant="primary" onClick={() => void createProject()}>
+              New project
+            </Button>
+          </div>
+        )}
       </header>
 
       <Panel dataTour="projects-list">
