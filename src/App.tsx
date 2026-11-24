@@ -269,9 +269,9 @@ export default function App() {
       )}
 
       {toast && (
-        <div className="fixed bottom-4 left-1/2 z-50 max-w-xl -translate-x-1/2 rounded-xl border border-white/[.10] bg-[#151426]/95 px-4 py-2.5 text-xs text-ink-100 shadow-floating backdrop-blur-xl">
+        <div role="status" aria-live="polite" aria-atomic="true" className="fixed bottom-4 left-1/2 z-50 max-w-xl -translate-x-1/2 rounded-xl border border-white/[.10] bg-[#151426]/95 px-4 py-2.5 text-xs text-ink-100 shadow-floating backdrop-blur-xl">
           {toast}
-          <button type="button" className="ml-3 text-ink-500 hover:text-ink-100" onClick={() => setToast(null)}>×</button>
+          <button type="button" aria-label="Dismiss notification" className="ml-3 text-ink-500 hover:text-ink-100" onClick={() => setToast(null)}>×</button>
         </div>
       )}
     </div>
