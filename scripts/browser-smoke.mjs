@@ -373,8 +373,14 @@ try {
     true,
     'Touch test context should expose a coarse pointer',
   );
-  await touchPage.goto(`${baseUrl}#projects`, { waitUntil: 'domcontentloaded' });
-  await touchPage.getByRole('heading', { name: 'Projects' }).waitFor({ state: 'visible' });
+  await touchPage.goto(baseUrl, { waitUntil: 'domcontentloaded' });
+  await touchPage.getByRole('heading', { level: 1 }).waitFor({ state: 'visible' });
+  const touchMoreButton = touchPage.getByRole('button', { name: 'More', exact: true });
+  await touchMoreButton.waitFor({ state: 'visible' });
+  await touchMoreButton.click();
+  const touchMoreMenu = touchPage.getByRole('menu', { name: 'More workspace navigation' });
+  await touchMoreMenu.getByRole('menuitem', { name: 'Projects', exact: true }).click();
+  await touchPage.getByRole('heading', { name: 'Projects', exact: true, level: 1 }).waitFor({ state: 'visible' });
   const touchCreateDiagnostics = await touchPage.evaluate(() => {
     const element = document.querySelector('[data-tour="projects-create"]');
     const rect = element?.getBoundingClientRect();
