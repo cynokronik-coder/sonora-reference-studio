@@ -170,6 +170,10 @@ try {
   );
   await page.keyboard.press('Escape');
   await transportDialog.waitFor({ state: 'detached' });
+  await page.waitForFunction(
+    () => document.activeElement?.getAttribute('aria-controls') === 'transport-more-tools',
+    { timeout: 3_000 },
+  );
   assert.equal(
     await transportTools.evaluate((element) => element === document.activeElement),
     true,
