@@ -181,7 +181,7 @@ export default function TopNavigation({
               disabled={disabled}
               onClick={() => { if (item.label === 'AI Assistant') { onOpenAssistant(); setMoreOpen(false); } else navigate(item.screen); }}
               aria-current={selected ? 'page' : undefined}
-              className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-xs font-semibold transition-colors duration-180 disabled:cursor-not-allowed disabled:opacity-35 sm:px-5 sm:text-sm ${
+              className={`relative flex h-11 shrink-0 items-center gap-2 rounded-xl px-3 text-xs font-semibold transition-colors duration-180 disabled:cursor-not-allowed disabled:opacity-35 sm:px-3 sm:text-sm ${
                 selected
                   ? 'bg-[#8957FF]/15 text-white shadow-[0_4px_18px_rgba(117,69,234,.12)]'
                   : 'text-ink-400 hover:bg-white/[.04] hover:text-ink-100'
@@ -266,8 +266,8 @@ export default function TopNavigation({
       <div className="flex shrink-0 items-center gap-1.5">
         <button type="button" onClick={onOpenCommandPalette} title="Search Sonora (⌘K / Ctrl+K)" aria-label="Search Sonora" className="focus-ring inline-flex h-10 min-w-10 items-center justify-center gap-2 rounded-xl border border-white/[.08] bg-white/[.025] px-2.5 text-ink-300 transition-colors hover:border-[#A77AFF]/35 hover:bg-[#8957FF]/[.08] hover:text-[#C4A2FF] sm:px-3">
           <Icon name="search" size={17} />
-          <span className="hidden text-xs font-medium xl:inline">Search</span>
-          <kbd className="hidden rounded border border-white/[.1] px-1.5 py-0.5 font-mono text-[9px] text-ink-500 xl:inline">⌘K</kbd>
+          <span className="hidden text-xs font-medium 2xl:inline">Search</span>
+          <kbd className="hidden rounded border border-white/[.1] px-1.5 py-0.5 font-mono text-[9px] text-ink-500 2xl:inline">⌘K</kbd>
         </button>
         {projectName && (
           <div className="hidden max-w-[170px] items-center gap-2 rounded-lg border border-white/[.07] bg-white/[.025] px-2.5 py-1.5 xl:flex">
