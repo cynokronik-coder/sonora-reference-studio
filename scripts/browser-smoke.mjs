@@ -375,7 +375,6 @@ try {
   );
   await touchPage.goto(`${baseUrl}#projects`, { waitUntil: 'domcontentloaded' });
   await touchPage.getByRole('heading', { name: 'Projects' }).waitFor({ state: 'visible' });
-  await touchPage.waitForFunction(() => document.querySelector('main')?.innerText.includes('Projects'));
   const touchCreateDiagnostics = await touchPage.evaluate(() => {
     const element = document.querySelector('[data-tour="projects-create"]');
     const rect = element?.getBoundingClientRect();
