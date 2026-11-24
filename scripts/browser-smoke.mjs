@@ -137,6 +137,11 @@ try {
   await moreControl.waitFor({ state: 'visible' });
   const moreControlBounds = await moreControl.boundingBox();
   const fullNavigationBounds = await primaryNavigation.boundingBox();
+  const primaryNavMetrics = await scrollableLinks.evaluate((element) => ({
+    scrollLeft: element.scrollLeft,
+    scrollWidth: element.scrollWidth,
+    clientWidth: element.clientWidth,
+  }));
   await page.screenshot({ path: `${artifactDir}/dashboard-desktop.png`, fullPage: true });
   console.log('Primary navigation geometry:', JSON.stringify({
     viewport: await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight })),
@@ -145,14 +150,14 @@ try {
     scrollableLinks: primaryNavBounds,
     firstItem: firstPrimaryLinkBounds,
     moreControl: moreControlBounds,
-    scrollLeft: await scrollableLinks.evaluate((element) => element.scrollLeft),
-    scrollWidth: await scrollableLinks.evaluate((element) => element.scrollWidth),
-    clientWidth: await scrollableLinks.evaluate((element) => element.clientWidth),
+    ...primaryNavMetrics,
   }));
   assert.ok(primaryNavBounds && firstPrimaryLinkBounds &&
     firstPrimaryLinkBounds.x >= primaryNavBounds.x - 1 &&
     firstPrimaryLinkBounds.x + firstPrimaryLinkBounds.width <= primaryNavBounds.x + primaryNavBounds.width + 1,
     'The first primary navigation item should be fully visible inside its scroll viewport');
+  assert.ok(primaryNavMetrics.scrollWidth <= primaryNavMetrics.clientWidth + 1,
+    'All primary navigation items should fit at the 1440px desktop viewport without clipping or hidden horizontal scrolling');
   assert.ok(fullNavigationBounds && moreControlBounds &&
     moreControlBounds.x >= fullNavigationBounds.x - 1 &&
     moreControlBounds.x + moreControlBounds.width <= fullNavigationBounds.x + fullNavigationBounds.width + 1,
