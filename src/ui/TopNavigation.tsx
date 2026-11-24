@@ -262,7 +262,7 @@ export default function TopNavigation({
           <span className="sr-only">Sonora quick guide</span>
           Sonora keeps primary actions visible and advanced controls available when needed.
         </HelpTip>
-        <button type="button" onClick={() => navigate('settings')} title="Settings" aria-label="Settings" className={`focus-ring flex h-10 w-10 items-center justify-center rounded-full border transition-all ${
+        <button type="button" onClick={() => navigate('settings')} title="Settings" aria-label="Settings" className={`focus-ring flex h-10 w-10 items-center justify-center rounded-full border transition-colors ${
           screen === 'settings' ? 'border-[#A77AFF]/60 bg-[#8957FF]/20 text-[#C4A2FF]' : 'border-white/[.10] bg-[#1D1D30] text-ink-300 hover:border-white/[.2] hover:text-white'
         }`}>
           <Icon name="sliders" size={17} />
