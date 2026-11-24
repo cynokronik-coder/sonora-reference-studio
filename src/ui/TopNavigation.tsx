@@ -89,12 +89,12 @@ export default function TopNavigation({
   const openMoreMenu = () => {
     setMoreOpen(true);
     window.requestAnimationFrame(() => {
-      moreMenuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')?.focus();
+      moreMenuRef.current?.querySelector<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)')?.focus();
     });
   };
 
   const handleMoreMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    const items = Array.from(moreMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]:not(:disabled)') ?? []);
+    const items = Array.from(moreMenuRef.current?.querySelectorAll<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)') ?? []);
     if (items.length === 0) return;
 
     const activeIndex = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -205,11 +205,14 @@ export default function TopNavigation({
               })}
               <div className="mt-1 border-t border-white/[.07] px-2.5 pb-1 pt-2">
                 <div className="mb-2 text-[9px] font-semibold uppercase tracking-[.16em] text-ink-500">Interface mode</div>
-                <div className="flex rounded-lg border border-white/[.08] bg-black/20 p-1">
+                <div role="group" aria-label="Interface mode" className="flex rounded-lg border border-white/[.08] bg-black/20 p-1">
                   {(['beginner', 'advanced'] as const).map((option) => (
                     <button
                       key={option}
                       type="button"
+                      role="menuitemradio"
+                      aria-checked={mode === option}
+                      tabIndex={-1}
                       onClick={() => onModeChange(option)}
                       className={`flex-1 rounded-md px-3 py-2 text-xs capitalize transition-colors ${
                         mode === option ? 'bg-[#8957FF]/20 text-[#C4A2FF]' : 'text-ink-500 hover:text-ink-200'
