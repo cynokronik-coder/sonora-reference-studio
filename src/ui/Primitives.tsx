@@ -603,7 +603,7 @@ export function HelpTip({
           if (open) closeHelp();
           else setOpen(true);
         }}
-        className="sonora-help-trigger focus-ring inline-flex shrink-0 items-center justify-center rounded-full transition-colors duration-180 hover:bg-[#8957FF]/10"
+        className="sonora-help-trigger group focus-ring inline-flex shrink-0 items-center justify-center rounded-full transition-colors duration-180 hover:bg-[#8957FF]/10"
       >
         <span aria-hidden="true" className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/[.12] bg-[#171727] text-[10px] font-semibold text-ink-300 transition-colors duration-180 group-hover:border-[#A77AFF]/55">
           ?
@@ -616,7 +616,7 @@ export function HelpTip({
           role="dialog"
           aria-label={title}
           tabIndex={-1}
-          className="absolute right-0 top-9 z-50 block w-[min(300px,85vw)] rounded-xl border border-white/[.10] bg-[#151426]/95 p-3 text-left shadow-floating backdrop-blur-xl"
+          className="sonora-help-popover absolute right-0 top-9 z-50 block w-[min(300px,85vw)] rounded-xl border border-white/[.10] bg-[#151426]/95 p-3 text-left shadow-floating backdrop-blur-xl"
         >
           <span className="flex items-start justify-between gap-3">
             <span className="text-xs font-semibold text-ink-100">{title}</span>
