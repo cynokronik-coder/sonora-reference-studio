@@ -168,6 +168,18 @@ try {
   await assistantIntro.waitFor({ state: 'visible' });
   assert.equal(await assistantToggle.getAttribute('aria-pressed'), 'true',
     'The AI Assistant should open when explicitly requested');
+
+  const floatingAssistantTitle = page.locator('[data-assistant-drag-handle] .whitespace-nowrap').first();
+  await floatingAssistantTitle.waitFor({ state: 'visible' });
+  assert.equal(await floatingAssistantTitle.textContent(), 'Sonora AI',
+    'The compact floating assistant should retain its full product name');
+  assert.equal(
+    await floatingAssistantTitle.evaluate((element) => element.scrollWidth > element.clientWidth),
+    false,
+    'The floating assistant title should not be visually clipped',
+  );
+  await page.screenshot({ path: `${artifactDir}/studio-assistant-header.png`, fullPage: true });
+
   await assistantToggle.click();
   await assistantIntro.waitFor({ state: 'detached' });
   assert.equal(await assistantToggle.getAttribute('aria-pressed'), 'false',
