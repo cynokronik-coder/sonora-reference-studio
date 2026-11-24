@@ -44,7 +44,7 @@ CI:
 - Renderer optimization `322b1b9`: PASS, run https://github.com/cynokronik-coder/sonora-reference-studio/actions/runs/45316617378
 - Bus automation test `d19337d`: PASS, run https://github.com/cynokronik-coder/sonora-reference-studio/actions/runs/45316754885
 - Earlier Button/navigation/landing/motion-document commits also passed CI.
-- Latest App/Dashboard small refinements require their final CI runs to complete.
+- Latest project onboarding and Playwright test changes passed both CI and browser smoke; see `45435569990` and `45435569837`. No production deployment or merge was performed.
 
 ## Additional implementation since the previous update
 
