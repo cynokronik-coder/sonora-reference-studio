@@ -41,7 +41,7 @@ export default function Studio({ onStartTour, onExpandAssistant, onOpenAccount, 
   const [workspace, setWorkspace] = useState<Workspace>('arrangement');
   const [tracksOpen, setTracksOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [assistantOpen, setAssistantOpen] = useState(() => typeof window !== 'undefined' && window.matchMedia('(min-width: 1280px)').matches);
+  const [assistantOpen, setAssistantOpen] = useState(false);
   const assistantStageRef = useRef<HTMLDivElement | null>(null);
   const assistantPointerRef = useRef<AssistantPointer | null>(null);
   const [assistantWindowRect, setAssistantWindowRect] = useState<AssistantWindowRect | null>(null);
