@@ -5,10 +5,10 @@ Last updated: 2026-11-24
 ## Current state
 
 - [x] Phase 0: repository and project baseline inspected.
-- [ ] Phase 1: live application baseline and browser access. **Blocked:** no connected browser session or local Playwright runtime; Render preview follows `main`, not the working branch.
+- [ ] Phase 1: live application baseline and browser access. **Partially advanced:** the project-local Playwright CI runner now starts the app and captures screenshots, but the first interaction run exposed a test navigation-state error. The test was corrected to return to Dashboard before testing the global More menu; successful rerun is pending. No connected interactive browser tab is available in this chat.
 - [x] Phase 2: all 19 recursive GitHub repository trees enumerated; file/skill/command/script counts recorded; Sonora-relevant resources inspected.
 - [x] Phase 3: implementation sequence, dependencies, and validation gates documented.
-- [ ] Phase 4: sequential implementation. **In progress**, with several code improvements completed and validated. Continue through all repositories in roadmap order.
+- [ ] Phase 4: sequential implementation. **In progress:** existing transformations remain intact; this session corrected the Playwright navigation test and enlarged contextual flyout trigger targets (44px touch / 40px desktop). Continue through remaining repository stages and screen audits.
 - [ ] Phase 5: final design polish. Not complete; requires rendered application review.
 - [ ] Phase 6: full browser QA and regression. **Blocked** pending browser/preview access.
 - [ ] Phase 7: final report. Not ready.
@@ -65,3 +65,10 @@ CI:
 2. Continue repository-by-repository skill application and record evidence.
 3. Continue the source-level UI/accessibility/design audit in the absence of browser access.
 4. Request a connected browser/Playwright session or authorization for a non-production preview once visual validation is the next required gate.
+
+
+## Work performed in this session
+
+- Corrected `scripts/browser-smoke.mjs` so it tests the global navigation from Dashboard rather than the dedicated Studio route, which intentionally hides the global header (`aa06257`).
+- Increased `FlyoutMenu` trigger hit areas to 44px on compact/touch layouts and 40px at `sm` and above; improved trigger label/icon sizing and limited transitions to colour properties (`7004c17`).
+- The regular Sonora CI passed on the earlier test-fix commit `aa06257`; the latest code/Playwright reruns must be checked before treating this batch as fully validated.

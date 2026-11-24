@@ -68,3 +68,8 @@ These changes have passed GitHub CI except for the newest small App/Dashboard co
 - `.github/workflows/browser-smoke.yml` installs Playwright in the CI runner only (not in Sonora's production dependencies), installs Chromium, executes the smoke script, and uploads desktop/mobile screenshots as a short-lived artifact.
 - The first attempt failed during Playwright browser installation because `ubuntu-latest` was resolved to Ubuntu 26.04, which Playwright 1.56.1 did not support. The workflow has been pinned to `ubuntu-24.04`; this rerun is pending. No application assertion ran in the first attempt.
 - The harness initially tests only the public landing route and responsive header interactions. It does not yet represent full audio Studio/Reference/Master/Export e2e coverage.
+
+
+## Follow-up: Studio/global navigation test-flow correction
+
+The initial Playwright run on `9ce54db` failed because the script expected the global `More` navigation button after navigating to `#studio`. This is not a missing control: `TopNavigation` intentionally returns `null` in the dedicated Studio workspace, which has its own workspace header. The test now returns to `#dashboard` at 1440px, confirms primary navigation is visible, captures a dashboard screenshot, and then exercises More-menu keyboard behavior. The corrected script is committed as `aa06257`. A subsequent small commit adds a desktop-width assertion/capture before global navigation testing. CI on `aa06257` passed; its browser smoke run was cancelled by a later push before completion. The latest smoke rerun on `7004c17` is pending/in progress and must be checked. No visual QA against Render is claimed.

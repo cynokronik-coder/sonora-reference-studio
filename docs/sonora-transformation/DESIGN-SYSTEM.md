@@ -67,3 +67,11 @@ Sonora should remain a focused, premium audio workstation. The default experienc
 - On narrow mobile widths, the brand subtitle hides and the primary action label becomes compact so the header has room to breathe. This is source-implemented and must be visually validated at 390px and 360px.
 - Primary/secondary actions and in-page navigation targets use at least a 44px hit area. Dense Studio mixer controls are not globally enlarged without rendered QA.
 - Pricing section switches use `aria-pressed` and a minimum 44px target. Pricing amounts and billing configuration are unchanged.
+
+
+## Contextual flyout trigger sizing
+
+- Shared `FlyoutMenu` triggers use a minimum 44px height by default so touch users can reliably open advanced controls.
+- At the `sm` breakpoint and above, the compact desktop trigger retains a minimum 40px height.
+- Trigger labels use 11px text with a little more horizontal padding and 15px icons for improved legibility without changing any processor parameter layout or behavior.
+- Flyout trigger transitions are limited to colour-related properties; avoid broad transition-all behavior.
