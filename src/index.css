@@ -347,3 +347,16 @@ textarea {
 /* Stable Studio workspace: switching Mix / Effects / EQ / Dynamics never changes the frame geometry. */
 .studio-fixed-frame { min-height: 0; min-width: 0; overflow: hidden; }
 .studio-workspace-title { flex: 0 0 240px; text-align: right; white-space: nowrap; }
+
+/* Inline help stays visually quiet while keeping a dependable interaction target. */
+.sonora-help-trigger {
+  width: 36px;
+  height: 36px;
+}
+
+@media (pointer: coarse) {
+  .sonora-help-trigger {
+    width: 44px;
+    height: 44px;
+  }
+}
