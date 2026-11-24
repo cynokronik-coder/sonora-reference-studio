@@ -556,11 +556,21 @@ export function HelpTip({
   const [open, setOpen] = useState(false);
   const id = useId();
   const rootRef = useRef<HTMLSpanElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLSpanElement | null>(null);
+
+  const closeHelp = () => {
+    setOpen(false);
+    triggerRef.current?.focus();
+  };
 
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setOpen(false);
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        closeHelp();
+      }
     };
     const onPointerDown = (event: PointerEvent) => {
       if (rootRef.current && event.target instanceof Node && !rootRef.current.contains(event.target)) setOpen(false);
@@ -573,32 +583,48 @@ export function HelpTip({
     };
   }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => {
+      popoverRef.current?.querySelector<HTMLElement>('button:not([disabled])')?.focus();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
+
   return (
     <span ref={rootRef} className="relative inline-flex align-middle">
       <button
+        ref={triggerRef}
         type="button"
         aria-label={label}
         aria-expanded={open}
         aria-controls={id}
-        onClick={() => setOpen((value) => !value)}
-        className="focus-ring inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/[.12] bg-[#171727] text-[10px] font-semibold text-ink-300 transition-colors duration-180 hover:border-[#A77AFF]/55 hover:bg-[#8957FF]/10 hover:text-[#C4A2FF]"
+        onClick={() => {
+          if (open) closeHelp();
+          else setOpen(true);
+        }}
+        className="sonora-help-trigger focus-ring inline-flex shrink-0 items-center justify-center rounded-full transition-colors duration-180 hover:bg-[#8957FF]/10"
       >
-        ?
+        <span aria-hidden="true" className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/[.12] bg-[#171727] text-[10px] font-semibold text-ink-300 transition-colors duration-180 group-hover:border-[#A77AFF]/55">
+          ?
+        </span>
       </button>
       {open && (
         <span
+          ref={popoverRef}
           id={id}
           role="dialog"
           aria-label={title}
-          className="absolute right-0 top-7 z-50 block w-[min(300px,85vw)] rounded-xl border border-white/[.10] bg-[#151426]/95 p-3 text-left shadow-floating backdrop-blur-xl"
+          tabIndex={-1}
+          className="absolute right-0 top-9 z-50 block w-[min(300px,85vw)] rounded-xl border border-white/[.10] bg-[#151426]/95 p-3 text-left shadow-floating backdrop-blur-xl"
         >
           <span className="flex items-start justify-between gap-3">
             <span className="text-xs font-semibold text-ink-100">{title}</span>
             <button
               type="button"
               aria-label="Close explanation"
-              onClick={() => setOpen(false)}
-              className="rounded-md px-1 text-ink-500 transition-colors hover:bg-white/[.05] hover:text-ink-100"
+              onClick={closeHelp}
+              className="focus-ring rounded-md px-1 text-ink-500 transition-colors hover:bg-white/[.05] hover:text-ink-100"
             >
               ×
             </button>
