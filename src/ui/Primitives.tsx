@@ -136,16 +136,20 @@ export function Toggle({
         aria-describedby={description ? descriptionId : undefined}
         disabled={disabled}
         onClick={() => onChange(!checked)}
-        className={`focus-ring relative mt-0.5 h-5 w-10 shrink-0 rounded-full border transition-colors duration-180 ${
-          checked ? 'border-[#A77AFF]/65 bg-[#8957FF]' : 'border-white/[.12] bg-[#303047]'
-        }`}
+        className="focus-ring relative inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span
           aria-hidden="true"
-          className={`absolute top-[2px] h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-180 ${
-            checked ? 'translate-x-[19px]' : 'translate-x-[2px]'
+          className={`relative block h-5 w-10 rounded-full border transition-colors duration-180 ${
+            checked ? 'border-[#A77AFF]/65 bg-[#8957FF]' : 'border-white/[.12] bg-[#303047]'
           }`}
-        />
+        >
+          <span
+            className={`absolute top-[2px] h-3 w-3 rounded-full bg-white shadow-sm transition-transform duration-180 ${
+              checked ? 'translate-x-[19px]' : 'translate-x-[2px]'
+            }`}
+          />
+        </span>
       </button>
       {(label || description) && (
         <span className="min-w-0">
