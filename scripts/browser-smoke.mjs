@@ -100,7 +100,7 @@ try {
   const menuHeight = await menuSummary.evaluate((element) => element.getBoundingClientRect().height);
   assert.ok(menuHeight >= 44, `Mobile menu target is ${menuHeight}px; expected at least 44px`);
 
-  const studioCta = page.getByRole('button', { name: 'Studio' });
+  const studioCta = page.locator('header').getByRole('button', { name: 'Studio', exact: true });
   await studioCta.waitFor({ state: 'visible' });
   const ctaHeight = await studioCta.evaluate((element) => element.getBoundingClientRect().height);
   assert.ok(ctaHeight >= 44, `Mobile Studio CTA is ${ctaHeight}px; expected at least 44px`);
