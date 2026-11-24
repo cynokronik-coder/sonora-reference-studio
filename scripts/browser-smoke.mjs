@@ -143,8 +143,8 @@ try {
     clientWidth: await primaryNavigation.evaluate((element) => element.clientWidth),
   }));
   assert.ok(primaryNavBounds && firstPrimaryLinkBounds &&
-    firstPrimaryLinkBounds.left >= primaryNavBounds.left - 1 &&
-    firstPrimaryLinkBounds.right <= primaryNavBounds.right + 1,
+    firstPrimaryLinkBounds.x >= primaryNavBounds.x - 1 &&
+    firstPrimaryLinkBounds.x + firstPrimaryLinkBounds.width <= primaryNavBounds.x + primaryNavBounds.width + 1,
     'The first primary navigation item should be fully visible rather than clipped by horizontal centering');
   await checkNoHorizontalOverflow(page, 1440);
 
