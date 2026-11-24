@@ -299,7 +299,7 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
           <span className="rounded-full border border-[#A77AFF]/25 bg-[#8957FF]/10 px-2 py-1 font-mono text-[9px] font-medium uppercase tracking-[.12em] text-[#C4A2FF]">
             Step {index + 1} / {steps.length}
           </span>
-          <button type="button" aria-label="Close tour" onClick={skip} className="focus-ring inline-flex h-10 min-w-10 items-center justify-center rounded-md px-2 py-1 text-ink-500 transition-colors hover:bg-white/[.05] hover:text-white">
+          <button type="button" aria-label="Close tour" onClick={skip} className="focus-ring inline-flex h-10 min-w-10 items-center justify-center rounded-md px-2 py-1 text-ink-300 transition-colors hover:bg-white/[.05] hover:text-white">
             <Icon name="x" size={15} />
           </button>
         </div>
@@ -309,7 +309,7 @@ export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
           <ProgressBar value={(index + 1) / steps.length} />
         </div>
         <div className="mt-3 flex items-center justify-between gap-2">
-          <button type="button" onClick={skip} className="focus-ring inline-flex min-h-11 items-center rounded-md px-3 py-2 text-xs font-medium text-ink-500 transition-colors hover:bg-white/[.04] hover:text-ink-200">
+          <button type="button" onClick={skip} className="focus-ring inline-flex min-h-11 items-center rounded-md px-3 py-2 text-xs font-medium text-ink-300 transition-colors hover:bg-white/[.04] hover:text-white">
             Skip
           </button>
           <div className="flex items-center gap-1.5">
