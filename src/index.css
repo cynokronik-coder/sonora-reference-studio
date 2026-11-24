@@ -354,9 +354,17 @@ textarea {
   height: 36px;
 }
 
+.sonora-help-popover {
+  top: 36px;
+}
+
 @media (pointer: coarse) {
   .sonora-help-trigger {
     width: 44px;
     height: 44px;
+  }
+
+  .sonora-help-popover {
+    top: 44px;
   }
 }
