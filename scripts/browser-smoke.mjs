@@ -172,6 +172,7 @@ try {
   await transportDialog.waitFor({ state: 'detached' });
   await page.waitForFunction(
     () => document.activeElement?.getAttribute('aria-controls') === 'transport-more-tools',
+    undefined,
     { timeout: 3_000 },
   );
   assert.equal(
@@ -209,6 +210,7 @@ try {
         .find((element) => /settings$/i.test(element.getAttribute('aria-label') ?? ''));
       return Boolean(dialog && dialog.contains(document.activeElement));
     },
+    undefined,
     { timeout: 3_000 },
   );
   assert.equal(
@@ -257,6 +259,7 @@ try {
       const dialog = document.querySelector('[role="dialog"][aria-label="What is reference matching?"]');
       return Boolean(dialog && dialog.contains(document.activeElement));
     },
+    undefined,
     { timeout: 3_000 },
   );
   assert.equal(await helpDialog.evaluate((element) => element.contains(document.activeElement)), true,
