@@ -195,7 +195,7 @@ try {
   await firstRunTourTrigger.click();
   const firstRunTour = page.getByRole('dialog');
   await firstRunTour.getByRole('heading', { name: 'Start your first project', exact: true }).waitFor({ state: 'visible' });
-  assert.match(await firstRunTour.innerText(), /Step 1 \/ 1/,
+  assert.match(await firstRunTour.innerText(), /Step 1 \/ 1/i,
     'An empty Projects workspace should show only the first-value onboarding step');
   assert.equal(
     await page.locator('[data-tour="projects-create"]').getByRole('button', { name: 'Import a song', exact: true }).count(),
