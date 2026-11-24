@@ -18,11 +18,12 @@ Help a self-producing artist take the first meaningful step in Sonora without le
 
 1. Keep the first-run tour to one focused step while no projects exist.
 2. Spotlight the two real first actions: `Import a song` and `Create blank project`.
-3. Do not show session-management guidance until a project exists.
-4. Preserve the existing returning-user project tour.
-5. Keep the tour dismissible and keyboard operable; restore focus after closing.
-6. Avoid obscuring the highlighted actions or making the overlay itself the primary visual focus.
-7. Verify the empty state and tour at 375×812, 768×1024, and 1280×800.
+3. Hide project search and the duplicate header `New project` action while no projects exist; keep those controls when the project list is available.
+4. Do not show session-management guidance until a project exists.
+5. Preserve the existing returning-user project tour.
+6. Keep the tour dismissible and keyboard operable; restore focus after closing.
+7. Avoid obscuring the highlighted actions or making the overlay itself the primary visual focus.
+8. Verify the empty state and tour at 375×812, 768×1024, and 1280×800.
 
 ## Visual direction
 
