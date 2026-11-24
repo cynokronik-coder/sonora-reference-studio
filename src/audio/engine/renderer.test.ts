@@ -110,6 +110,62 @@ describe('ProjectRenderer external sidechain routing', () => {
     expect(releasedReduction).toBeLessThan(0.5);
   });
 
+  it('applies processor parameter automation to bus processors without changing the signal path', () => {
+    const sampleRate = 48000;
+    const blockSize = 128;
+    const assetLength = 32768;
+    const asset = sineAsset('bus-automation-dyn-eq', 0.8, sampleRate, assetLength);
+    const project = createProject('Bus Dynamic EQ automation test', sampleRate);
+    const track = createTrack('audio', 'Bus automation source', 0);
+    const bus = createBus('Automated bus', 0);
+    track.output = bus.id;
+    track.clips.push(createClip(asset.id, assetLength / sampleRate));
+
+    const dynamicEq = createProcessorNode('dynamicEq', {
+      b0_on: 1,
+      b0_freq: 1_000,
+      b0_q: 8,
+      b0_threshold: -20,
+      b0_ratio: 20,
+      b0_knee: 0,
+      b0_range: 18,
+      b0_attack: 0.1,
+      b0_release: 10,
+      b0_link: 100,
+      b0_mode: 0,
+    });
+    bus.processors.push(dynamicEq);
+    bus.automation.push({
+      id: 'bus-dynamic-eq-threshold',
+      target: 'send',
+      processorId: dynamicEq.id,
+      param: 'b0_threshold',
+      points: [
+        { time: 0, value: -20, curve: 0 },
+        { time: 0.04, value: 0, curve: 0 },
+      ],
+      enabled: true,
+    });
+    project.tracks = [track];
+    project.buses = [bus];
+
+    const renderer = new ProjectRenderer();
+    renderer.configure(project, [asset], sampleRate, blockSize);
+    const outL = new Float32Array(blockSize);
+    const outR = new Float32Array(blockSize);
+    let activeReduction = 0;
+    for (let block = 0; block < 8; block++) {
+      renderer.renderBlock(block * blockSize, blockSize, outL, outR);
+      activeReduction = renderer.meterSnapshot()[bus.id]?.[dynamicEq.id]?.reduction ?? 0;
+    }
+    for (let block = 8; block < 48; block++) {
+      renderer.renderBlock(block * blockSize, blockSize, outL, outR);
+    }
+    const releasedReduction = renderer.meterSnapshot()[bus.id]?.[dynamicEq.id]?.reduction ?? 0;
+    expect(activeReduction).toBeGreaterThan(3);
+    expect(releasedReduction).toBeLessThan(0.5);
+  });
+
   it('splits a routed external key into the matching multiband detector', () => {
     const sampleRate = 48000;
     const blockSize = 128;
