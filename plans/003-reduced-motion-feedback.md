@@ -1,6 +1,6 @@
 # 003 — Preserve feedback while reducing motion
 
-- **Status**: TODO
+- **Status**: IMPLEMENTED IN MAIN; CI PASSING; BROWSER CHECK PENDING
 - **Commit**: 4293922
 - **Severity**: MEDIUM
 - **Category**: Accessibility
