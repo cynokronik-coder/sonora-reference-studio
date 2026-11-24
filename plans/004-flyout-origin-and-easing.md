@@ -1,6 +1,6 @@
 # 004 — Make contextual flyouts grow from their trigger
 
-- **Status**: TODO
+- **Status**: IMPLEMENTED IN MAIN; CI PASSING; BROWSER CHECK PENDING
 - **Commit**: 4293922
 - **Severity**: MEDIUM
 - **Category**: Physicality & origin
