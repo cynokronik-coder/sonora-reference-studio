@@ -60,3 +60,11 @@ Since the report was first created, the working branch also includes:
 - Shared button motion refinement.
 
 These changes have passed GitHub CI except for the newest small App/Dashboard commits, whose runs were still in progress when this report was updated. They have not been visually inspected in a browser. Keep the rendered screenshot and keyboard/touch checks open.
+
+
+## Automated Playwright smoke harness added
+
+- `scripts/browser-smoke.mjs` starts the actual development entrypoint `scripts/dev.mjs`, then checks the landing page at desktop/mobile widths, title and hero content, no horizontal overflow, mobile target heights, disclosure navigation, in-page anchor navigation, and the Studio route action.
+- `.github/workflows/browser-smoke.yml` installs Playwright in the CI runner only (not in Sonora's production dependencies), installs Chromium, executes the smoke script, and uploads desktop/mobile screenshots as a short-lived artifact.
+- The first attempt failed during Playwright browser installation because `ubuntu-latest` was resolved to Ubuntu 26.04, which Playwright 1.56.1 did not support. The workflow has been pinned to `ubuntu-24.04`; this rerun is pending. No application assertion ran in the first attempt.
+- The harness initially tests only the public landing route and responsive header interactions. It does not yet represent full audio Studio/Reference/Master/Export e2e coverage.
