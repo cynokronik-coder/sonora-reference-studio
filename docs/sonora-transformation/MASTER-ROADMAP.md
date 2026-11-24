@@ -62,7 +62,8 @@ This is the planned sequence. Actual completion depends on evidence and validati
 - [ ] Make a single shared-token change only when justified by broad usage and screenshots.
 
 ### Batch C — Core product usability
-- [ ] Review first-project flow and empty states.
+- [x] Review and improve the Projects first-project empty state: direct audio import or blank project, accessible search, and larger search target. Browser coverage passes.
+- [ ] Review dashboard and the transition into Studio.
 - [ ] Review dashboard and the transition into Studio.
 - [ ] Review Studio timeline, mixer, processor flyouts, and assistant interaction.
 - [ ] Review Reference Match explanation and result states.
