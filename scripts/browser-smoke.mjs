@@ -203,6 +203,14 @@ try {
   await trackSettingsTrigger.click();
   const trackSettingsDialog = page.getByRole('dialog', { name: /settings$/ });
   await trackSettingsDialog.waitFor({ state: 'visible' });
+  await page.waitForFunction(
+    () => {
+      const dialog = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]'))
+        .find((element) => /settings$/i.test(element.getAttribute('aria-label') ?? ''));
+      return Boolean(dialog && dialog.contains(document.activeElement));
+    },
+    { timeout: 3_000 },
+  );
   assert.equal(
     await trackSettingsDialog.evaluate((element) => element.contains(document.activeElement)),
     true,
