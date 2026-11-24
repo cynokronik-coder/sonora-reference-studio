@@ -118,7 +118,13 @@ try {
   await page.waitForURL('**/#studio');
   assert.equal(new URL(page.url()).hash, '#studio');
 
-  const moreButton = page.getByRole('button', { name: 'More' });
+  // The dedicated Studio workspace intentionally owns its own header and hides
+  // the global TopNavigation. Verify the Studio route above, then return to the
+  // Dashboard before exercising the global "More" menu.
+  await page.goto(`${baseUrl}#dashboard`, { waitUntil: 'domcontentloaded' });
+  await page.getByRole('navigation', { name: 'Primary navigation' }).waitFor({ state: 'visible' });
+
+  const moreButton = page.getByRole('button', { name: 'More', exact: true });
   await moreButton.waitFor({ state: 'visible', timeout: 15_000 });
   await moreButton.click();
   const moreMenu = page.getByRole('menu', { name: 'More workspace navigation' });
