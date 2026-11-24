@@ -129,23 +129,34 @@ try {
   await page.goto(`${baseUrl}#dashboard`, { waitUntil: 'domcontentloaded' });
   const primaryNavigation = page.getByRole('navigation', { name: 'Primary navigation' });
   await primaryNavigation.waitFor({ state: 'visible' });
-  const primaryNavBounds = await primaryNavigation.boundingBox();
-  const firstPrimaryLink = primaryNavigation.locator('button').first();
+  const scrollableLinks = primaryNavigation.locator('.sonora-primary-nav');
+  const primaryNavBounds = await scrollableLinks.boundingBox();
+  const firstPrimaryLink = scrollableLinks.locator('button').first();
   const firstPrimaryLinkBounds = await firstPrimaryLink.boundingBox();
+  const moreControl = primaryNavigation.getByRole('button', { name: 'More', exact: true });
+  await moreControl.waitFor({ state: 'visible' });
+  const moreControlBounds = await moreControl.boundingBox();
+  const fullNavigationBounds = await primaryNavigation.boundingBox();
   await page.screenshot({ path: `${artifactDir}/dashboard-desktop.png`, fullPage: true });
   console.log('Primary navigation geometry:', JSON.stringify({
     viewport: await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight })),
     header: await page.locator('header').first().boundingBox(),
-    nav: primaryNavBounds,
+    fullNavigation: fullNavigationBounds,
+    scrollableLinks: primaryNavBounds,
     firstItem: firstPrimaryLinkBounds,
-    scrollLeft: await primaryNavigation.evaluate((element) => element.scrollLeft),
-    scrollWidth: await primaryNavigation.evaluate((element) => element.scrollWidth),
-    clientWidth: await primaryNavigation.evaluate((element) => element.clientWidth),
+    moreControl: moreControlBounds,
+    scrollLeft: await scrollableLinks.evaluate((element) => element.scrollLeft),
+    scrollWidth: await scrollableLinks.evaluate((element) => element.scrollWidth),
+    clientWidth: await scrollableLinks.evaluate((element) => element.clientWidth),
   }));
   assert.ok(primaryNavBounds && firstPrimaryLinkBounds &&
     firstPrimaryLinkBounds.x >= primaryNavBounds.x - 1 &&
     firstPrimaryLinkBounds.x + firstPrimaryLinkBounds.width <= primaryNavBounds.x + primaryNavBounds.width + 1,
-    'The first primary navigation item should be fully visible rather than clipped by horizontal centering');
+    'The first primary navigation item should be fully visible inside its scroll viewport');
+  assert.ok(fullNavigationBounds && moreControlBounds &&
+    moreControlBounds.x >= fullNavigationBounds.x - 1 &&
+    moreControlBounds.x + moreControlBounds.width <= fullNavigationBounds.x + fullNavigationBounds.width + 1,
+    'The More navigation control should remain fully visible outside the scrollable links');
   await checkNoHorizontalOverflow(page, 1440);
 
   const moreButton = page.getByRole('button', { name: 'More', exact: true });
