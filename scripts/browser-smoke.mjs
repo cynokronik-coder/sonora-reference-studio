@@ -375,19 +375,30 @@ try {
   );
   await touchPage.goto(`${baseUrl}#projects`, { waitUntil: 'domcontentloaded' });
   await touchPage.getByRole('heading', { name: 'Projects' }).waitFor({ state: 'visible' });
-  await touchPage.locator('[data-tour="projects-create"]').waitFor({ state: 'visible' });
-  const touchCreateDiagnostics = await touchPage.locator('[data-tour="projects-create"]').evaluate((element) => ({
-    viewport: { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight },
-    container: (() => { const rect = element.getBoundingClientRect(); return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }; })(),
-    buttons: Array.from(element.querySelectorAll('button')).map((button) => {
-      const rect = button.getBoundingClientRect();
-      return { text: button.innerText, ariaLabel: button.getAttribute('aria-label'), disabled: button.disabled, visible: rect.width > 0 && rect.height > 0, rect: { x: rect.x, y: rect.y, width: rect.width, height: rect.height }, outerHTML: button.outerHTML.slice(0, 500) };
-    }),
-    activeDialogs: Array.from(document.querySelectorAll('[role="dialog"], [aria-modal="true"]')).map((dialog) => ({ label: dialog.getAttribute('aria-label'), text: dialog.textContent?.slice(0, 120) })),
-  }));
+  await touchPage.waitForFunction(() => document.querySelector('main')?.innerText.includes('Projects'));
+  const touchCreateDiagnostics = await touchPage.evaluate(() => {
+    const element = document.querySelector('[data-tour="projects-create"]');
+    const rect = element?.getBoundingClientRect();
+    return {
+      url: location.href,
+      viewport: { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight },
+      bodyText: document.body.innerText.slice(0, 2_000),
+      mainHtml: document.querySelector('main')?.outerHTML.slice(0, 8_000),
+      createContainerCount: document.querySelectorAll('[data-tour="projects-create"]').length,
+      container: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
+      buttons: Array.from(element?.querySelectorAll('button') ?? []).map((button) => {
+        const bounds = button.getBoundingClientRect();
+        return { text: button.innerText, ariaLabel: button.getAttribute('aria-label'), disabled: button.disabled, visible: bounds.width > 0 && bounds.height > 0, rect: { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }, outerHTML: button.outerHTML.slice(0, 500) };
+      }),
+      dialogs: Array.from(document.querySelectorAll('[role="dialog"], [aria-modal="true"]')).map((dialog) => ({ label: dialog.getAttribute('aria-label'), text: dialog.textContent?.slice(0, 120) })),
+    };
+  });
   console.log('Touch Projects create diagnostics:', JSON.stringify(touchCreateDiagnostics));
   await touchPage.screenshot({ path: `${artifactDir}/projects-touch-before-create.png`, fullPage: true });
-  await touchPage.getByRole('button', { name: 'New project' }).click();
+  assert.equal(touchCreateDiagnostics.createContainerCount, 1,
+    `Expected the Projects create container in the touch viewport. Diagnostics: ${JSON.stringify(touchCreateDiagnostics)}`);
+  const touchCreateButton = touchPage.locator('[data-tour="projects-create"]').getByRole('button', { name: 'New project' });
+  await touchCreateButton.click();
   await touchPage.waitForURL('**/#studio');
   await touchPage.getByRole('button', { name: 'Add audio', exact: true }).click();
   const touchAddDialog = touchPage.getByRole('dialog', { name: 'Add to session' });
