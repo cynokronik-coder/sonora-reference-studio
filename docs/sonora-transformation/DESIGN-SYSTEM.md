@@ -50,3 +50,11 @@ Sonora should remain a focused, premium audio workstation. The default experienc
 - Small-screen behavior must be intentional, not a compressed desktop layout.
 - Hover must never be the only way to reveal or operate an essential function.
 - Live screenshots must be inspected before claiming visual QA is complete.
+
+
+## Additional accessibility and truthfulness refinements
+
+- Dashboard's static spectrum visualization is labelled `SPECTRUM PREVIEW`, not `LIVE ANALYSIS`. Never label static/illustrative data as a live measurement.
+- Toast notifications use a polite, atomic status live region and a named dismiss control. Keep transient confirmations non-modal; do not steal focus for routine status feedback.
+- Dashboard production-space cards reuse the typed Sonora SVG icon family. Do not introduce ad hoc Unicode or emoji icons where a semantic icon already exists.
+- Route validation metadata should not duplicate visual navigation content. Keep navigation presentation in the navigation component and route guards in the app shell.
