@@ -258,6 +258,11 @@ export default function TopNavigation({
               <button type="button" role="menuitem" onClick={() => { onOpenLanding(); setMoreOpen(false); }} className="flex w-full items-center rounded-lg px-2.5 py-2 text-left text-xs text-ink-400 transition-colors hover:bg-white/[.05] hover:text-ink-100">
                 About Sonora
               </button>
+              <div className="mt-1 border-t border-white/[.07] pt-1 sm:hidden">
+                <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); onStartTour(); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-xs font-medium text-[#C4A2FF] transition-colors hover:bg-[#8957FF]/[.08]">
+                  <Icon name="sparkles" size={15} /> Start guided tour
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -286,7 +291,7 @@ export default function TopNavigation({
           onClick={onStartTour}
           title="Start guided tour"
           aria-label="Start guided tour"
-          className="focus-ring inline-flex h-10 items-center gap-2 rounded-xl border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-3.5 text-xs font-semibold text-[#C4A2FF] transition-colors hover:border-[#A77AFF]/45 hover:bg-[#8957FF]/15"
+          className="focus-ring hidden h-10 items-center gap-2 rounded-xl border border-[#A77AFF]/25 bg-[#8957FF]/[.08] px-3.5 text-xs font-semibold text-[#C4A2FF] transition-colors hover:border-[#A77AFF]/45 hover:bg-[#8957FF]/15 sm:inline-flex"
         >
           <Icon name="sparkles" size={16} /> <span className="hidden sm:inline">Tour</span>
         </button>
