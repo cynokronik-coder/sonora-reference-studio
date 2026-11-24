@@ -18,8 +18,10 @@ export function TransportBar() {
   const toolsPanelRef = useRef<HTMLDivElement | null>(null);
 
   const closeTools = () => {
+    // The trigger remains mounted when the non-modal popover closes, so restore
+    // focus synchronously before React removes the panel from the DOM.
     setToolsOpen(false);
-    window.requestAnimationFrame(() => toolsTriggerRef.current?.focus());
+    toolsTriggerRef.current?.focus();
   };
   useEffect(() => setLoopStart(transport.loopStart), [transport.loopStart]);
   useEffect(() => setLoopEnd(transport.loopEnd), [transport.loopEnd]);
