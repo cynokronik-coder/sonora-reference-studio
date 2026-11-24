@@ -50,14 +50,14 @@ This is the planned sequence. Actual completion depends on evidence and validati
 - [x] Centralize shared button press transform in the Sonora motion class.
 - [x] Add keyboard navigation and focus handling to the More menu.
 - [x] Replace inconsistent landing feature glyphs with shared SVG icons.
-- [ ] Run CI on all current branch commits.
-- [ ] Add browser tests for menu focus, keyboard movement, Escape, and touch.
-- [ ] Perform a WebAudio realtime/numerics review before changing any DSP.
+- [x] Run CI for the renderer optimization, bus automation test, menu/accessibility refinements, and earlier UI commits; latest two UI/doc commits are pending final CI at time of update.
+- [ ] Add/run browser tests for menu focus, keyboard movement, Escape, and touch (blocked by unavailable browser runtime).
+- [x] Perform a WebAudio realtime/numerics review; no DSP formulas, signal routing, or parameters changed.
 
 ### Batch B — Design-system reconciliation
-- [ ] Reconcile `plans/README.md` and plans 001–005 with current source.
+- [x] Reconcile `plans/README.md` and plans 001–005 with current source.
 - [ ] Audit token usage for hard-coded colors, radii, spacing, and motion values.
-- [ ] Audit icon usage for inconsistent glyphs and missing accessible labels.
+- [x] Audit and replace the landing/dashboard feature-card glyphs with the shared typed SVG icon system.
 - [ ] Review page typography and density against the existing MASTER design system.
 - [ ] Make a single shared-token change only when justified by broad usage and screenshots.
 
@@ -76,7 +76,7 @@ This is the planned sequence. Actual completion depends on evidence and validati
 - [ ] Improve conversion copy only where it is truthful and supported.
 
 ### Batch E — Visual/motion and final QA
-- [ ] Run Hallmark/Unslop-style visual quality gates.
+- [ ] Run Hallmark/Unslop screenshot-based visual quality gates (source-level truthfulness and icon consistency changes made; screenshots blocked).
 - [ ] Validate every key screen in a real browser at 1440, 1024, 768, 390, and 360 CSS pixels.
 - [ ] Validate keyboard and reduced-motion behavior.
 - [ ] Validate error/loading/empty/success states.
