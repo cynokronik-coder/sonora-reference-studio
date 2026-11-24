@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import type { Screen, Mode } from '../state/store';
 import { Icon } from './Icon';
 import { HelpTip } from './Primitives';
@@ -80,6 +80,13 @@ export default function TopNavigation({
     }
   }, [screen]);
 
+  useLayoutEffect(() => {
+    if (!moreOpen) return;
+    moreMenuRef.current
+      ?.querySelector<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)')
+      ?.focus();
+  }, [moreOpen]);
+
   useEffect(() => {
     if (!moreOpen) return;
     const onPointerDown = (event: PointerEvent) => {
@@ -111,9 +118,6 @@ export default function TopNavigation({
 
   const openMoreMenu = () => {
     setMoreOpen(true);
-    window.requestAnimationFrame(() => {
-      moreMenuRef.current?.querySelector<HTMLButtonElement>('[role^="menuitem"]:not(:disabled)')?.focus();
-    });
   };
 
   const handleMoreMenuKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
