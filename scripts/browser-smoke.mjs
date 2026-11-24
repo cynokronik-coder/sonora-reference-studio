@@ -248,13 +248,26 @@ try {
   const helpBounds = await helpTrigger.boundingBox();
   assert.ok(helpBounds && helpBounds.width >= 36 && helpBounds.height >= 36,
     `Help trigger is ${helpBounds?.width ?? 0}×${helpBounds?.height ?? 0}px; expected at least 36×36px on desktop`);
+  const helpControlId = await helpTrigger.getAttribute('aria-controls');
   await helpTrigger.click();
   const helpDialog = page.getByRole('dialog', { name: 'What is reference matching?' });
   await helpDialog.waitFor({ state: 'visible' });
+  await page.waitForFunction(
+    () => {
+      const dialog = document.querySelector('[role="dialog"][aria-label="What is reference matching?"]');
+      return Boolean(dialog && dialog.contains(document.activeElement));
+    },
+    { timeout: 3_000 },
+  );
   assert.equal(await helpDialog.evaluate((element) => element.contains(document.activeElement)), true,
     'Opening a HelpTip should move focus into its explanation');
   await page.keyboard.press('Escape');
   await helpDialog.waitFor({ state: 'detached' });
+  await page.waitForFunction(
+    (controlId) => document.activeElement?.getAttribute('aria-controls') === controlId,
+    helpControlId,
+    { timeout: 3_000 },
+  );
   assert.equal(await helpTrigger.evaluate((element) => element === document.activeElement), true,
     'Escape should return focus to the HelpTip trigger');
 
