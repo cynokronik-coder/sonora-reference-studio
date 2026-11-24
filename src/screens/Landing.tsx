@@ -158,25 +158,43 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
     <div className="min-h-screen overflow-hidden bg-[#080a0d] text-ink-100">
       <div className="pointer-events-none fixed inset-0 opacity-[.18]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.025) 1px, transparent 1px)', backgroundSize: '72px 72px' }} />
       <header className="relative z-10 border-b border-white/[.07] bg-[#090c10]/85 backdrop-blur-xl">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
-          <a href="#top" className="flex items-center gap-3" aria-label="Sonora home">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-accent/30 bg-accent/[.08] font-mono text-xl text-accent shadow-[0_0_28px_rgba(200,241,105,.08)]">≋</span>
-            <span>
-              <span className="block text-sm font-semibold tracking-[.18em] text-white">SONORA</span>
-              <span className="mt-0.5 block font-mono text-[8px] uppercase tracking-[.22em] text-ink-500">Reference Studio</span>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-5 py-4 sm:gap-4 sm:px-8">
+          <a href="#top" className="flex min-w-0 items-center gap-2 sm:gap-3" aria-label="Sonora home">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-accent/30 bg-accent/[.08] font-mono text-xl text-accent shadow-[0_0_28px_rgba(200,241,105,.08)] sm:h-10 sm:w-10">≋</span>
+            <span className="min-w-0">
+              <span className="block text-xs font-semibold tracking-[.18em] text-white sm:text-sm">SONORA</span>
+              <span className="mt-0.5 hidden font-mono text-[8px] uppercase tracking-[.22em] text-ink-500 sm:block">Reference Studio</span>
             </span>
           </a>
-          <nav className="hidden items-center gap-7 md:flex">
+          <nav className="hidden items-center gap-7 lg:flex">
             <a href="#capabilities" className="inline-flex min-h-11 items-center px-1 text-xs text-ink-400 transition hover:text-white">Capabilities</a>
             <a href="#workflow" className="inline-flex min-h-11 items-center px-1 text-xs text-ink-400 transition hover:text-white">How it works</a>
             <a href="#difference" className="inline-flex min-h-11 items-center px-1 text-xs text-ink-400 transition hover:text-white">Why Sonora</a>
             <a href="#faq" className="inline-flex min-h-11 items-center px-1 text-xs text-ink-400 transition hover:text-white">FAQ</a>
           </nav>
-          <div className="flex items-center gap-2">
-            <button type="button" onClick={onOpenAccount} className="min-h-11 rounded-lg border border-white/[.12] px-4 py-2.5 text-xs font-medium text-ink-300 transition hover:border-accent/30 hover:text-white">Account</button>
-            <button type="button" onClick={onOpenPricing} className="rounded-lg border border-white/[.12] px-4 py-2.5 text-[11px] font-medium text-ink-300 transition hover:border-accent/30 hover:text-white">Pricing</button>
-            <button type="button" onClick={onEnterStudio} className="group min-h-11 rounded-lg border border-accent/40 bg-accent px-4 py-2.5 text-xs font-semibold text-[#10150a] shadow-[0_0_28px_rgba(200,241,105,.12)] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">
-              Open the studio <ArrowMark />
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <button type="button" onClick={onOpenAccount} className="hidden min-h-11 rounded-lg border border-white/[.12] px-4 py-2.5 text-xs font-medium text-ink-300 transition hover:border-accent/30 hover:text-white lg:inline-flex lg:items-center">Account</button>
+            <button type="button" onClick={onOpenPricing} className="hidden min-h-11 rounded-lg border border-white/[.12] px-4 py-2.5 text-xs font-medium text-ink-300 transition hover:border-accent/30 hover:text-white lg:inline-flex lg:items-center">Pricing</button>
+            <details className="relative lg:hidden">
+              <summary className="inline-flex min-h-11 cursor-pointer list-none items-center rounded-lg border border-white/[.12] px-3 text-xs font-medium text-ink-300 transition hover:border-white/25 hover:text-white [&::-webkit-details-marker]:hidden">
+                Menu
+              </summary>
+              <div className="absolute right-0 top-[calc(100%+8px)] z-50 w-56 rounded-xl border border-white/[.10] bg-[#151426]/98 p-2 shadow-floating backdrop-blur-xl">
+                <nav aria-label="Website navigation" className="grid gap-0.5">
+                  <a href="#capabilities" onClick={(event) => event.currentTarget.closest('details')?.removeAttribute('open')} className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs text-ink-300 transition hover:bg-white/[.05] hover:text-white">Capabilities</a>
+                  <a href="#workflow" onClick={(event) => event.currentTarget.closest('details')?.removeAttribute('open')} className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs text-ink-300 transition hover:bg-white/[.05] hover:text-white">How it works</a>
+                  <a href="#difference" onClick={(event) => event.currentTarget.closest('details')?.removeAttribute('open')} className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs text-ink-300 transition hover:bg-white/[.05] hover:text-white">Why Sonora</a>
+                  <a href="#faq" onClick={(event) => event.currentTarget.closest('details')?.removeAttribute('open')} className="inline-flex min-h-11 items-center rounded-lg px-3 text-xs text-ink-300 transition hover:bg-white/[.05] hover:text-white">FAQ</a>
+                </nav>
+                <div className="my-1 border-t border-white/[.08]" />
+                <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onOpenPricing(); }} className="inline-flex min-h-11 w-full items-center rounded-lg px-3 text-left text-xs text-ink-300 transition hover:bg-white/[.05] hover:text-white">Pricing</button>
+                <button type="button" onClick={(event) => { event.currentTarget.closest('details')?.removeAttribute('open'); onOpenAccount(); }} className="inline-flex min-h-11 w-full items-center rounded-lg px-3 text-left text-xs text-ink-300 transition hover:bg-white/[.05] hover:text-white">Account</button>
+              </div>
+            </details>
+            <button type="button" onClick={onEnterStudio} className="group inline-flex min-h-11 items-center rounded-lg border border-accent/40 bg-accent px-3 py-2.5 text-xs font-semibold text-[#10150a] shadow-[0_0_28px_rgba(200,241,105,.12)] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a] sm:px-4">
+              <span className="sm:hidden">Studio</span>
+              <span className="hidden sm:inline">Open the studio</span>
+              <ArrowMark />
             </button>
           </div>
         </div>
