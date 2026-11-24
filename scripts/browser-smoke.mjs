@@ -307,6 +307,44 @@ try {
   assert.equal(await helpTrigger.evaluate((element) => element === document.activeElement), true,
     'Escape should return focus to the HelpTip trigger');
 
+  // Exercise pointer:coarse sizing at a tablet-width viewport. This catches
+  // breakpoint-only sizing that accidentally shrinks controls on touch tablets.
+  const touchPage = await browser.newPage({
+    viewport: { width: 1024, height: 900 },
+    deviceScaleFactor: 1,
+    isMobile: true,
+    hasTouch: true,
+  });
+  assert.equal(
+    await touchPage.evaluate(() => window.matchMedia('(pointer: coarse)').matches),
+    true,
+    'Touch test context should expose a coarse pointer',
+  );
+  await touchPage.goto(`${baseUrl}#projects`, { waitUntil: 'domcontentloaded' });
+  await touchPage.getByRole('heading', { name: 'Projects' }).waitFor({ state: 'visible' });
+  await touchPage.getByRole('button', { name: 'New project' }).click();
+  await touchPage.waitForURL('**/#studio');
+  await touchPage.getByRole('button', { name: 'Add audio', exact: true }).click();
+  const touchAddDialog = touchPage.getByRole('dialog', { name: 'Add to session' });
+  await touchAddDialog.waitFor({ state: 'visible' });
+  await touchAddDialog.getByRole('button', { name: '＋ Track' }).click();
+  const touchTracksDialog = touchPage.getByRole('dialog', { name: 'Session tracks' });
+  await touchTracksDialog.waitFor({ state: 'visible' });
+  await touchTracksDialog.getByRole('button', { name: 'Close' }).click();
+  await touchTracksDialog.waitFor({ state: 'detached' });
+  const touchTrackSettings = touchPage.locator('[data-tour="studio-tracks"] button[aria-haspopup="dialog"]').first();
+  await touchTrackSettings.waitFor({ state: 'visible' });
+  const touchTrackSettingsSize = await touchTrackSettings.evaluate((element) => {
+    const bounds = element.getBoundingClientRect();
+    return { width: bounds.width, height: bounds.height };
+  });
+  assert.ok(touchTrackSettingsSize.height >= 44,
+    `Touch tablet track-settings target is ${touchTrackSettingsSize.height}px; expected at least 44px`);
+  assert.ok(touchTrackSettingsSize.width >= 44,
+    `Touch tablet track-settings target is ${touchTrackSettingsSize.width}px; expected at least 44px`);
+  await touchPage.screenshot({ path: `${artifactDir}/studio-touch-tablet.png`, fullPage: true });
+  await touchPage.close();
+
   assert.deepEqual(pageErrors, [], `Browser page errors: ${pageErrors.join('; ')}`);
   assert.deepEqual(consoleErrors, [], `Browser console errors: ${consoleErrors.join('; ')}`);
   assert.deepEqual(failedRequests, [], `Failed browser requests: ${JSON.stringify(failedRequests)}`);
