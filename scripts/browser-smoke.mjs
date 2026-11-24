@@ -245,8 +245,12 @@ try {
   // and the non-modal dialog's keyboard focus lifecycle on a real product page.
   await page.goto(`${baseUrl}#reference`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('heading', { name: 'Reference Match', exact: true, level: 1 }).waitFor({ state: 'visible' });
-  const helpTrigger = page.getByRole('button', { name: 'Explain this' }).first();
+  const referenceHeader = page.locator('main header').filter({
+    has: page.getByRole('heading', { name: 'Reference Match', exact: true, level: 1 }),
+  });
+  const helpTrigger = referenceHeader.getByRole('button', { name: 'Explain this' });
   await helpTrigger.waitFor({ state: 'visible' });
+  await page.screenshot({ path: `${artifactDir}/reference-match.png`, fullPage: true });
   const helpBounds = await helpTrigger.boundingBox();
   assert.ok(helpBounds && helpBounds.width >= 36 && helpBounds.height >= 36,
     `Help trigger is ${helpBounds?.width ?? 0}×${helpBounds?.height ?? 0}px; expected at least 36×36px on desktop`);
@@ -254,6 +258,7 @@ try {
   await helpTrigger.click();
   const helpDialog = page.getByRole('dialog', { name: 'What is reference matching?' });
   await helpDialog.waitFor({ state: 'visible' });
+  await page.screenshot({ path: `${artifactDir}/reference-help.png`, fullPage: true });
   await page.waitForFunction(
     () => {
       const dialog = document.querySelector('[role="dialog"][aria-label="What is reference matching?"]');
