@@ -53,9 +53,32 @@ export default function TopNavigation({
 }: TopNavigationProps) {
   const [moreOpen, setMoreOpen] = useState(false);
   const moreMenuId = useId();
+  const primaryNavRef = useRef<HTMLElement | null>(null);
   const moreRef = useRef<HTMLDivElement | null>(null);
   const moreTriggerRef = useRef<HTMLButtonElement | null>(null);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const nav = primaryNavRef.current;
+    if (!nav) return;
+
+    const selected = nav.querySelector<HTMLButtonElement>('[aria-current="page"]');
+    if (!selected) {
+      // Secondary destinations live in More; when returning to them, keep
+      // the primary navigation's first action visible instead of preserving
+      // an old horizontal scroll position from another route.
+      nav.scrollLeft = 0;
+      return;
+    }
+
+    const navBounds = nav.getBoundingClientRect();
+    const selectedBounds = selected.getBoundingClientRect();
+    if (selectedBounds.left < navBounds.left) {
+      nav.scrollLeft -= navBounds.left - selectedBounds.left;
+    } else if (selectedBounds.right > navBounds.right) {
+      nav.scrollLeft += selectedBounds.right - navBounds.right;
+    }
+  }, [screen]);
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -139,7 +162,7 @@ export default function TopNavigation({
         </button>
       </div>
 
-      <nav aria-label="Primary navigation" className="sonora-primary-nav no-scrollbar flex min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto px-1">
+      <nav ref={primaryNavRef} aria-label="Primary navigation" className="sonora-primary-nav no-scrollbar flex min-w-0 flex-1 items-center justify-start gap-0.5 overflow-x-auto px-1">
         {PRIMARY_LINKS.map((item, index) => {
           const disabled = Boolean(item.disabledWithoutProject && !projectOpen);
           const selected = item.label !== 'AI Assistant' && item.screen === screen;
