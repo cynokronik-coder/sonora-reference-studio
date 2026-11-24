@@ -225,6 +225,10 @@ try {
     1,
     'The first-run spotlight target should contain the primary Import a song action',
   );
+  assert.equal(await page.getByRole('searchbox', { name: 'Search projects' }).count(), 0,
+    'An empty Projects workspace should not show a search field with no projects to search');
+  assert.equal(await page.getByRole('button', { name: 'New project', exact: true }).count(), 0,
+    'An empty Projects workspace should not duplicate Create blank project with a header New project action');
   await page.screenshot({ path: `${artifactDir}/projects-first-run-tour.png`, fullPage: true });
   await firstRunTour.getByRole('button', { name: 'Finish', exact: true }).click();
   await firstRunTour.waitFor({ state: 'detached' });
