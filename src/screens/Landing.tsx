@@ -173,9 +173,9 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
             <a href="#faq" className="text-xs text-ink-400 transition hover:text-white">FAQ</a>
           </nav>
           <div className="flex items-center gap-2">
-            <button type="button" onClick={onOpenAccount} className="rounded-lg border border-white/[.12] px-4 py-2.5 text-[11px] font-medium text-ink-300 transition hover:border-accent/30 hover:text-white">Account</button>
+            <button type="button" onClick={onOpenAccount} className="min-h-11 rounded-lg border border-white/[.12] px-4 py-2.5 text-xs font-medium text-ink-300 transition hover:border-accent/30 hover:text-white">Account</button>
             <button type="button" onClick={onOpenPricing} className="rounded-lg border border-white/[.12] px-4 py-2.5 text-[11px] font-medium text-ink-300 transition hover:border-accent/30 hover:text-white">Pricing</button>
-            <button type="button" onClick={onEnterStudio} className="group rounded-lg border border-accent/40 bg-accent px-4 py-2.5 text-[11px] font-semibold text-[#10150a] shadow-[0_0_28px_rgba(200,241,105,.12)] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">
+            <button type="button" onClick={onEnterStudio} className="group min-h-11 rounded-lg border border-accent/40 bg-accent px-4 py-2.5 text-xs font-semibold text-[#10150a] shadow-[0_0_28px_rgba(200,241,105,.12)] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">
               Open the studio <ArrowMark />
             </button>
           </div>
@@ -193,10 +193,10 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
               Sonora brings mixing, measured reference matching, detailed audio analysis and mastering into one focused workspace. Build a sound you understand — and keep control of every move.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <button type="button" onClick={onEnterStudio} className="group rounded-lg bg-accent px-5 py-3 text-xs font-semibold text-[#10150a] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">
-                Explore Sonora <ArrowMark />
+              <button type="button" onClick={onEnterStudio} className="group min-h-12 rounded-lg bg-accent px-5 py-3.5 text-sm font-semibold text-[#10150a] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">
+                Open the studio <ArrowMark />
               </button>
-              <a href="#workflow" className="rounded-lg border border-white/10 px-5 py-3 text-xs font-medium text-ink-200 transition hover:border-white/25 hover:bg-white/[.04]">
+              <a href="#workflow" className="min-h-12 rounded-lg border border-white/10 px-5 py-3.5 text-sm font-medium text-ink-200 transition hover:border-white/25 hover:bg-white/[.04]">
                 See how it works <span aria-hidden="true" className="ml-1">↓</span>
               </a>
             </div>
@@ -287,7 +287,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
               <SectionLabel>A clear path from mix to master</SectionLabel>
               <h2 className="mt-5 text-3xl font-semibold leading-tight tracking-[-.04em] text-white sm:text-4xl">Four steps. No mystery chain.</h2>
               <p className="mt-5 text-sm leading-7 text-ink-400">Use Sonora as a guided workflow or dive directly into the tools. You choose how much help you want along the way.</p>
-              <button type="button" onClick={onEnterStudio} className="group mt-7 rounded-lg bg-accent px-5 py-3 text-xs font-semibold text-[#10150a] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">Start with your own track <ArrowMark /></button>
+              <button type="button" onClick={onEnterStudio} className="group mt-7 min-h-12 rounded-lg bg-accent px-5 py-3.5 text-sm font-semibold text-[#10150a] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">Start with your own track <ArrowMark /></button>
             </div>
             <div className="space-y-3">
               {STEPS.map(([number, title, description]) => (
@@ -347,7 +347,7 @@ export default function Landing({ onEnterStudio, onOpenPricing, onOpenAccount }:
               <SectionLabel>Your next mix starts here</SectionLabel>
               <h2 className="mt-5 text-3xl font-semibold tracking-[-.05em] text-white sm:text-5xl">Make decisions you can hear — and understand.</h2>
               <p className="mx-auto mt-5 max-w-xl text-sm leading-7 text-ink-300">Bring in a track, choose a reference, and start shaping your sound with tools that stay in your hands.</p>
-              <button type="button" onClick={onEnterStudio} className="group mt-8 rounded-lg bg-accent px-6 py-3.5 text-xs font-semibold text-[#10150a] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">Open Sonora Studio <ArrowMark /></button>
+              <button type="button" onClick={onEnterStudio} className="group mt-8 min-h-12 rounded-lg bg-accent px-6 py-3.5 text-sm font-semibold text-[#10150a] transition hover:-translate-y-0.5 hover:bg-[#d5fa7a]">Open the studio <ArrowMark /></button>
             </div>
           </div>
         </section>
