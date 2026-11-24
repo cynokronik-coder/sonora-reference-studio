@@ -120,9 +120,12 @@ try {
 
   // The dedicated Studio workspace intentionally owns its own header and hides
   // the global TopNavigation. Verify the Studio route above, then return to the
-  // Dashboard before exercising the global "More" menu.
+  // Dashboard at a desktop width before exercising the global "More" menu.
+  await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`${baseUrl}#dashboard`, { waitUntil: 'domcontentloaded' });
   await page.getByRole('navigation', { name: 'Primary navigation' }).waitFor({ state: 'visible' });
+  await checkNoHorizontalOverflow(page, 1440);
+  await page.screenshot({ path: `${artifactDir}/dashboard-desktop.png`, fullPage: true });
 
   const moreButton = page.getByRole('button', { name: 'More', exact: true });
   await moreButton.waitFor({ state: 'visible', timeout: 15_000 });
