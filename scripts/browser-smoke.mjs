@@ -242,7 +242,7 @@ try {
   // Reference Match uses the shared HelpTip control. Verify the larger target
   // and the non-modal dialog's keyboard focus lifecycle on a real product page.
   await page.goto(`${baseUrl}#reference`, { waitUntil: 'domcontentloaded' });
-  await page.getByRole('heading', { name: 'Reference Match' }).waitFor({ state: 'visible' });
+  await page.getByRole('heading', { name: 'Reference Match', exact: true, level: 1 }).waitFor({ state: 'visible' });
   const helpTrigger = page.getByRole('button', { name: 'Explain this' }).first();
   await helpTrigger.waitFor({ state: 'visible' });
   const helpBounds = await helpTrigger.boundingBox();
