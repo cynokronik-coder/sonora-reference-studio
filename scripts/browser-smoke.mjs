@@ -156,6 +156,22 @@ try {
   await page.getByRole('button', { name: 'New project' }).click();
   await page.waitForURL('**/#studio');
   await page.getByRole('button', { name: 'Add audio', exact: true }).waitFor({ state: 'visible' });
+
+  // A new Studio session should prioritize the arrangement, while keeping the assistant one click away.
+  const assistantToggle = page.getByRole('button', { name: 'AI Assistant', exact: true });
+  await assistantToggle.waitFor({ state: 'visible' });
+  assert.equal(await assistantToggle.getAttribute('aria-pressed'), 'false',
+    'The AI Assistant should start collapsed in a new Studio session');
+  const assistantIntro = page.getByText('What would you like to improve?', { exact: true });
+  assert.equal(await assistantIntro.count(), 0, 'The assistant panel should not cover the initial workspace');
+  await assistantToggle.click();
+  await assistantIntro.waitFor({ state: 'visible' });
+  assert.equal(await assistantToggle.getAttribute('aria-pressed'), 'true',
+    'The AI Assistant should open when explicitly requested');
+  await assistantToggle.click();
+  await assistantIntro.waitFor({ state: 'detached' });
+  assert.equal(await assistantToggle.getAttribute('aria-pressed'), 'false',
+    'The AI Assistant should close again on request');
   await page.screenshot({ path: `${artifactDir}/studio-empty-project.png`, fullPage: true });
 
   // The transport popover must move focus inside on open and restore it on Escape.
