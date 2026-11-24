@@ -259,7 +259,7 @@ export default function TopNavigation({
                 About Sonora
               </button>
               <div className="mt-1 border-t border-white/[.07] pt-1 sm:hidden">
-                <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); onStartTour(); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-xs font-medium text-[#C4A2FF] transition-colors hover:bg-[#8957FF]/[.08]">
+                <button type="button" role="menuitem" onClick={() => { setMoreOpen(false); moreTriggerRef.current?.focus(); onStartTour(); }} className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2.5 text-left text-xs font-medium text-[#C4A2FF] transition-colors hover:bg-[#8957FF]/[.08]">
                   <Icon name="sparkles" size={15} /> Start guided tour
                 </button>
               </div>
