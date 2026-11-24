@@ -114,7 +114,7 @@ try {
   assert.equal(await mobileMenu.getAttribute('open'), null, 'Mobile disclosure should close after in-page navigation');
 
   await page.evaluate(() => window.scrollTo(0, 0));
-  await page.getByRole('button', { name: 'Studio' }).click();
+  await studioCta.click();
   await page.waitForURL('**/#studio');
   assert.equal(new URL(page.url()).hash, '#studio');
 
