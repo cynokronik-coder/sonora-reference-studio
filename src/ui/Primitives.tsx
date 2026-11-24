@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { clamp } from '../audio/dsp/util';
 
 export function Panel({
@@ -583,12 +583,9 @@ export function HelpTip({
     };
   }, [open]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!open) return;
-    const frame = window.requestAnimationFrame(() => {
-      popoverRef.current?.querySelector<HTMLElement>('button:not([disabled])')?.focus();
-    });
-    return () => window.cancelAnimationFrame(frame);
+    popoverRef.current?.querySelector<HTMLElement>('button:not([disabled])')?.focus();
   }, [open]);
 
   return (
