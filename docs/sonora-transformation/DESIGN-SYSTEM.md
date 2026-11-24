@@ -58,3 +58,12 @@ Sonora should remain a focused, premium audio workstation. The default experienc
 - Toast notifications use a polite, atomic status live region and a named dismiss control. Keep transient confirmations non-modal; do not steal focus for routine status feedback.
 - Dashboard production-space cards reuse the typed Sonora SVG icon family. Do not introduce ad hoc Unicode or emoji icons where a semantic icon already exists.
 - Route validation metadata should not duplicate visual navigation content. Keep navigation presentation in the navigation component and route guards in the app shell.
+
+
+## Landing and pricing responsive behavior
+
+- The Landing page uses the full text navigation and Account/Pricing actions at large desktop widths.
+- Below 1024px, the navigation collapses into a native `details/summary` disclosure; all section links, Pricing and Account remain available, and the Studio action remains visible.
+- On narrow mobile widths, the brand subtitle hides and the primary action label becomes compact so the header has room to breathe. This is source-implemented and must be visually validated at 390px and 360px.
+- Primary/secondary actions and in-page navigation targets use at least a 44px hit area. Dense Studio mixer controls are not globally enlarged without rendered QA.
+- Pricing section switches use `aria-pressed` and a minimum 44px target. Pricing amounts and billing configuration are unchanged.
