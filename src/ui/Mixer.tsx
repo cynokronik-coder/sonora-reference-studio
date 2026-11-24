@@ -42,9 +42,9 @@ export function TransportBar() {
           className="focus-ring flex h-11 w-11 items-center justify-center rounded-full border border-[#A77AFF]/55 bg-gradient-to-br from-[#8957FF] to-[#7545EA] text-white shadow-violet hover:brightness-110"
           title={transport.playing ? 'Pause (space)' : 'Play (space)'}
         >
-          {transport.playing ? '❚❚' : '▶'}
+          <Icon name={transport.playing ? 'pause' : 'play'} size={18} />
         </button>
-        <IconButton title="Stop and return to start" onClick={stop}>■</IconButton>
+        <IconButton title="Stop and return to start" onClick={stop} ><Icon name="square" size={13} /></IconButton>
         <div className="ml-2 font-mono text-sm tabular-nums text-ink-100">
           {formatTime(transport.position)}
           <span className="text-ink-500"> / {formatTime(duration)}</span>
@@ -52,8 +52,8 @@ export function TransportBar() {
       </div>
 
       <div className="ml-auto flex items-center gap-1.5">
-        <IconButton title="Undo (Ctrl/Cmd+Z)" onClick={undo}>↶</IconButton>
-        <IconButton title="Redo (Ctrl/Cmd+Shift+Z)" onClick={redo}>↷</IconButton>
+        <IconButton title="Undo (Ctrl/Cmd+Z)" onClick={undo}><Icon name="undo" size={16} /></IconButton>
+        <IconButton title="Redo (Ctrl/Cmd+Shift+Z)" onClick={redo}><Icon name="redo" size={16} /></IconButton>
         <div className="relative" ref={moreRef}>
           <button
             type="button"
