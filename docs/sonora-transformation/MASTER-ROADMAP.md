@@ -51,7 +51,7 @@ This is the planned sequence. Actual completion depends on evidence and validati
 - [x] Add keyboard navigation and focus handling to the More menu.
 - [x] Replace inconsistent landing feature glyphs with shared SVG icons.
 - [x] Run CI for the renderer optimization, bus automation test, menu/accessibility refinements, and earlier UI commits; latest two UI/doc commits are pending final CI at time of update.
-- [ ] Add/run browser tests for menu focus, keyboard movement, Escape, and touch (blocked by unavailable browser runtime).
+- [x] Add/run browser tests for menu focus, keyboard movement, Escape, touch navigation, and first-project empty-state actions. GitHub Playwright browser workflow passes.
 - [x] Perform a WebAudio realtime/numerics review; no DSP formulas, signal routing, or parameters changed.
 
 ### Batch B — Design-system reconciliation
