@@ -26,7 +26,7 @@ The order prioritizes safety and validation foundations first, then design found
 | 3 | borghei/Claude-Skills | Add focused Playwright, QA, and design-system review guidance | UI regression and review workflow | Catalogue enumerated; selected skills inspected; license caveat |
 | 4 | nextlevelbuilder/ui-ux-pro-max-skill | Establish high-priority UX constraints before detailed design work | Design-system and interface audit | Inspected; principles applied in menu/button refinements |
 | 5 | Owl-Listener/designer-skills | Deep design-system, icon, motion, onboarding, and accessibility foundations | Tokens, navigation, onboarding, component quality | `onboarding-design` applied to first-run Projects tour; CI and Playwright pass |
-| 6 | julianoczkowski/designer-skills | Formalize brief-to-review discipline after foundational criteria | Existing design brief and design QA | Catalogue enumerated; design-review skill inspected; screenshots blocked |
+| 6 | julianoczkowski/designer-skills | Formalize brief-to-review discipline after foundational criteria | Existing design brief and design QA | `design-review` completed for Projects onboarding; six responsive screenshots inspected; fixes validated by CI and Playwright |
 | 7 | elayadesign/ai-design-skills | Refine landing/business presentation using a focused existing-site design mindset | Landing page and public-facing communication | Two skills enumerated; landing skill inspected; deeper visual review pending |
 | 8 | bergside/awesome-design-skills | Cross-check design-style variants without allowing style drift | Minimalism and visual hierarchy | Catalogue enumerated; clean-design skill inspected |
 | 9 | ancoleman/ai-design-components | Improve component composition and integration after tokens are stable | Shared React UI primitives | Skills enumerated; component-assembly skill inspected |
@@ -50,7 +50,7 @@ This is the planned sequence. Actual completion depends on evidence and validati
 - [x] Centralize shared button press transform in the Sonora motion class.
 - [x] Add keyboard navigation and focus handling to the More menu.
 - [x] Replace inconsistent landing feature glyphs with shared SVG icons.
-- [x] Run CI for the renderer optimization, bus automation test, menu/accessibility refinements, and earlier UI commits; latest two UI/doc commits are pending final CI at time of update.
+- [x] Run CI for renderer optimization, bus automation, menu/accessibility, onboarding, and responsive design-review changes; latest CI and browser smoke both pass.
 - [x] Add/run browser tests for menu focus, keyboard movement, Escape, touch navigation, and first-project empty-state actions. GitHub Playwright browser workflow passes.
 - [x] Perform a WebAudio realtime/numerics review; no DSP formulas, signal routing, or parameters changed.
 
@@ -64,7 +64,7 @@ This is the planned sequence. Actual completion depends on evidence and validati
 ### Batch C — Core product usability
 - [x] Review and improve the Projects first-project empty state: direct audio import or blank project, accessible search, and larger search target. Browser coverage passes.
 - [x] Align the Projects tour with first-run state: spotlight import/blank-project actions and omit returning-user session-management guidance until a project exists. Playwright coverage passes.
-- [ ] Review dashboard and the transition into Studio.
+- [x] Review Projects onboarding at 375×812, 768×1024, and 1280×800; fix mobile tooltip collision, mobile navigation overlap, duplicate empty-state actions, and dismissal-control targets. CI and Playwright pass.
 - [ ] Review dashboard and the transition into Studio.
 - [ ] Review Studio timeline, mixer, processor flyouts, and assistant interaction.
 - [ ] Review Reference Match explanation and result states.

@@ -50,8 +50,22 @@ Decision: external skills are used as workflows and design references; do not in
 
 Reason: preserve maintainability, product coherence, and existing service boundaries. Large catalogues contain many unrelated SaaS integrations and some licensing differences.
 
-## 2026-11-24 — Browser QA remains an explicit blocker
+## 2026-11-24 — Use responsive Playwright evidence for feature-scoped design reviews
 
-Decision: no visual review is marked complete without actual rendered screenshots.
+Decision: use Sonora's project-local Playwright runner in GitHub Actions when no connected Playwright MCP or interactive browser tab is available; retain the screenshots as workflow artifacts and inspect them before recording a review as complete.
 
-Reason: the available session cannot access a browser tab or execute Playwright against the branch. Source inspection and CI do not substitute for visual evidence.
+Reason: this provides real rendered browser evidence and repeatable viewport checks without adding a new runtime dependency. It is sufficient for a scoped feature review, but does not replace full product QA in a connected browser or a branch-specific Render preview.
+
+Evidence: Projects onboarding review at 375×812, 768×1024, and 1280×800; CI `45443330760` PASS; Playwright `45443330839` PASS; artifact `14944997220`.
+
+## 2026-11-24 — Keep first-run Projects actions to two clear choices
+
+Decision: when no projects exist, hide the project search field and header `New project` button; show only `Import a song` and `Create blank project`. Keep search and `New project` when a project list exists.
+
+Reason: the empty state has nothing to search, and a duplicate header creation action makes the first step less clear. The two remaining actions represent the actual supported first-project paths.
+
+## 2026-11-24 — Place the mobile guided tour inside More navigation
+
+Decision: hide the standalone Tour button below the `sm` breakpoint and expose `Start guided tour` as a More-menu item. Restore focus to the More trigger before opening the dialog.
+
+Reason: at 375px the desktop header controls overlapped and the More button intercepted the Tour button. The mobile menu provides a reachable, non-overlapping entry while preserving focus restoration.
