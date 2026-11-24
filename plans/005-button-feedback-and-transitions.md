@@ -1,6 +1,6 @@
 # 005 — Replace broad button transitions with deliberate feedback
 
-- **Status**: TODO
+- **Status**: IMPLEMENTED ON TRANSFORMATION BRANCH; CI PASSING; BROWSER CHECK PENDING
 - **Commit**: 4293922
 - **Severity**: MEDIUM
 - **Category**: Easing & duration
