@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Screen } from '../state/store';
+import { useApp } from '../state/store';
 import { Icon } from './Icon';
 import { Button, ProgressBar } from './Primitives';
 
@@ -95,7 +96,17 @@ function rememberTour(screen: Screen, state: 'completed' | 'skipped') {
 }
 
 export function GuidedTour({ open, screen, onClose }: GuidedTourProps) {
-  const steps = useMemo(() => TOUR_STEPS[screen] ?? [], [screen]);
+  const hasProjects = useApp((state) => state.projects.length > 0);
+  const steps = useMemo(() => {
+    if (screen === 'projects' && !hasProjects) {
+      return [{
+        target: 'projects-create',
+        title: 'Start your first project',
+        description: 'Import a song to start improving it, or create a blank project and add audio later. Your original audio stays untouched.',
+      }];
+    }
+    return TOUR_STEPS[screen] ?? [];
+  }, [screen, hasProjects]);
   const [index, setIndex] = useState(0);
   const [rect, setRect] = useState<SpotlightRect | null>(null);
   const [tooltip, setTooltip] = useState({ top: 100, left: 24 });
